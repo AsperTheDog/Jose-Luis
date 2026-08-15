@@ -220,3 +220,4 @@ user_stats.db
 logging_config.json
 config.cfg
 /.idea
+bot_data.db

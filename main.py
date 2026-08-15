@@ -9,7 +9,7 @@ load_dotenv()
 
 
 class ScalableBot(commands.Bot):
-    def __init__(self):
+    def __init__(self, twitchClient, twitchSecret):
         intents = discord.Intents.default()
         intents.members = True
         intents.message_content = True
@@ -21,6 +21,8 @@ class ScalableBot(commands.Bot):
         self.config = ConfigManager()
         self.borjaFrases = ListConfig("frases.txt")
         self.chistes = ListConfig("chistes.txt")
+        self.twitchClient = twitchClient
+        self.twitchSecret = twitchSecret
 
     async def setup_hook(self) -> None:
         for filename in os.listdir("./cogs"):
@@ -69,7 +71,9 @@ class ScalableBot(commands.Bot):
 
 
 if __name__ == "__main__":
-    bot = ScalableBot()
+    twitchClient = os.getenv("TWITCH_CLIENT")
+    twitchSecret = os.getenv("TWITCH_SECRET")
+    bot = ScalableBot(twitchClient, twitchSecret)
     token = os.getenv("DISCORD_TOKEN")
 
     if not token:
