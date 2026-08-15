@@ -115,7 +115,7 @@ class ModerationCog(commands.Cog):
 
         owner = await interaction.guild.fetch_member(self.bot.owner_id)
 
-        formatted_list = owner.mention + " (dueño)\n"
+        formatted_list = "• " + owner.mention + " (dueño)\n"
         formatted_list += "\n".join(f"• {op.mention}" for op in users)
 
         embed = discord.Embed(
