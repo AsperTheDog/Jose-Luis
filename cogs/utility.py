@@ -28,7 +28,7 @@ class UtilityCog(commands.Cog):
     @utility_group.command(name="dumpconfig", description="Dumps the contents of config.cfg")
     async def dumpconfig(self, interaction: discord.Interaction):
         if await self.bot.filter_owner(interaction): return
-        
+
         try:
             with open("config.cfg", "r", encoding="utf-8") as f:
                 content = f.read()

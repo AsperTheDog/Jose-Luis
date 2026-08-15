@@ -64,7 +64,7 @@ class ModerationCog(commands.Cog):
     async def addoperator(self, interaction: discord.Interaction, user: discord.Member):
         if await self.bot.filter_owner(interaction): return
 
-        if await self.bot.is_owner(interaction.user) or not self.bot.config.add_to_list("operators", user.id):
+        if await self.bot.is_owner(user) or not self.bot.config.add_to_list("operators", user.id):
             await interaction.response.send_message("Esta persona ya es operadora")
             return
         await interaction.response.send_message(f"Añadido {user.mention} como operador")
@@ -73,7 +73,7 @@ class ModerationCog(commands.Cog):
     async def removeoperator(self, interaction: discord.Interaction, user: discord.Member):
         if await self.bot.filter_owner(interaction): return
 
-        if await self.bot.is_owner(interaction.user):
+        if await self.bot.is_owner(user):
             await interaction.response.send_message("¿Qué haces, payaso? No puedes quitar como operador al dueño del bot ¿Te crees que esto es una democracia?")
             return
 
