@@ -100,6 +100,30 @@ class ModerationCog(commands.Cog):
             return
         await interaction.response.send_message("Ya no estaré activo en este canal")
 
+    @moderation_group.command(name="operadores", description="Da la lista de operadores")
+    async def operators(self, interaction: discord.Interaction):
+        if await self.bot.filter_operators(interaction): return
+
+        operators = [int(userID) for userID in self.bot.config.get_list("operators")]
+        operators.append(self.bot.owner_id)
+
+        users = []
+        for userID in operators:
+            try:
+                users.append(await interaction.guild.fetch_member(userID))
+            except discord.NotFound:
+                pass
+
+        formatted_list = "\n".join(f"• {op.mention}" for op in users)
+
+        embed = discord.Embed(
+            title="Operadores",
+            description=formatted_list,
+            color=discord.Color.blue()
+        )
+
+        await interaction.send(embed=embed)
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot or not message.guild:
