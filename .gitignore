@@ -221,3 +221,4 @@ logging_config.json
 config.cfg
 /.idea
 bot_data.db
+twitch_tokens.json

@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import sqlite3
+import os
 import aiohttp
 import discord
 from discord import app_commands
@@ -27,6 +28,7 @@ class StreamerNotifierCog(commands.Cog):
 
         self.client_id = self.bot.twitchClient
         self.client_secret = self.bot.twitchSecret
+        self.tokens_file = "twitch_tokens.json"
 
         self.access_token: str = ""
         self.session: Optional[aiohttp.ClientSession] = None
@@ -61,21 +63,49 @@ class StreamerNotifierCog(commands.Cog):
         if self.session and not self.session.closed:
             await self.session.close()
 
-    async def _get_app_access_token(self) -> str:
+    async def _get_user_access_token(self) -> str:
+        if not os.path.exists(self.tokens_file):
+            logger.error(f"¡Falta {self.tokens_file}! Ejecuta el script de autorización primero.")
+            return ""
+
+        with open(self.tokens_file, "r") as f:
+            token_data = json.load(f)
+
+        refresh_token = token_data.get("refresh_token")
+        if not refresh_token:
+            logger.error("No se encontró refresh_token en twitch_tokens.json")
+            return ""
+
         url = "https://id.twitch.tv/oauth2/token"
-        params = {
+        payload = {
             "client_id": self.client_id,
             "client_secret": self.client_secret,
-            "grant_type": "client_credentials",
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
         }
-        async with self.session.post(url, params=params) as resp:
-            data = await resp.json()
-            self.access_token = data.get("access_token", "")
-            return self.access_token
+
+        async with self.session.post(url, data=payload) as resp:
+            if resp.status == 200:
+                new_tokens = await resp.json()
+
+                if "refresh_token" not in new_tokens:
+                    new_tokens["refresh_token"] = refresh_token
+
+                with open(self.tokens_file, "w") as f:
+                    json.dump(new_tokens, f, indent=2)
+
+                self.access_token = new_tokens["access_token"]
+                logger.info("Twitch User Access Token renovado con éxito.")
+                return self.access_token
+            else:
+                body = await resp.text()
+                logger.error(f"Fallo al renovar User Access Token ({resp.status}): {body}")
+                self.access_token = token_data.get("access_token", "")
+                return self.access_token
 
     async def _get_broadcaster_id(self, username: str) -> Optional[str]:
         if not self.access_token:
-            await self._get_app_access_token()
+            await self._get_user_access_token()
 
         headers = {
             "Client-ID": self.client_id,
@@ -84,7 +114,7 @@ class StreamerNotifierCog(commands.Cog):
         url = f"https://api.twitch.tv/helix/users?login={username}"
         async with self.session.get(url, headers=headers) as resp:
             if resp.status == 401:
-                await self._get_app_access_token()
+                await self._get_user_access_token()
                 return await self._get_broadcaster_id(username)
 
             data = await resp.json()
@@ -94,7 +124,7 @@ class StreamerNotifierCog(commands.Cog):
 
     async def _subscribe_to_streamer(self, broadcaster_id: str, session_id: str) -> bool:
         if not self.access_token:
-            await self._get_app_access_token()
+            await self._get_user_access_token()
 
         url = "https://api.twitch.tv/helix/eventsub/subscriptions"
         headers = {
@@ -113,12 +143,27 @@ class StreamerNotifierCog(commands.Cog):
         }
 
         async with self.session.post(url, headers=headers, json=payload) as resp:
+            if resp.status == 401:
+                logger.warning("Token no autorizado (401) en EventSub. Renovando token...")
+                await self._get_user_access_token()
+                headers["Authorization"] = f"Bearer {self.access_token}"
+
+                async with self.session.post(url, headers=headers, json=payload) as retry_resp:
+                    if retry_resp.status in (200, 202):
+                        logger.info(f"Suscrito exitosamente al broadcaster ID {broadcaster_id} (tras reintento)")
+                        return True
+                    else:
+                        body = await retry_resp.text()
+                        logger.error(
+                            f"Fallo de suscripción EventSub tras reintento para ID {broadcaster_id}: {retry_resp.status} - {body}")
+                        return False
+
             body = await resp.text()
             if resp.status in (200, 202):
-                logger.info(f"Successfully subscribed to broadcaster ID {broadcaster_id}")
+                logger.info(f"Suscrito exitosamente al broadcaster ID {broadcaster_id}")
                 return True
             else:
-                logger.error(f"EventSub subscription failed for ID {broadcaster_id}: {resp.status} - {body}")
+                logger.error(f"Fallo de suscripción EventSub para ID {broadcaster_id}: {resp.status} - {body}")
                 return False
 
     async def sync_all_subscriptions(self, session_id: str):
@@ -140,10 +185,10 @@ class StreamerNotifierCog(commands.Cog):
         while not self.bot.is_closed():
             self.active_session_id = None
             try:
-                await self._get_app_access_token()
+                await self._get_user_access_token()
 
                 async with self.session.ws_connect(self.EVENTSUB_WS_URL) as ws:
-                    logger.info("Connected to Twitch EventSub WebSocket")
+                    logger.info("Conectado a Twitch EventSub WebSocket")
 
                     async for msg in ws:
                         if msg.type == aiohttp.WSMsgType.TEXT:
@@ -152,7 +197,7 @@ class StreamerNotifierCog(commands.Cog):
 
                             if message_type == "session_welcome":
                                 session_id = data["payload"]["session"]["id"]
-                                logger.info(f"Received EventSub session welcome. Session ID: {session_id}")
+                                logger.info(f"EventSub session welcome recibido. Session ID: {session_id}")
                                 await self.sync_all_subscriptions(session_id)
 
                             elif message_type == "notification":
@@ -165,15 +210,15 @@ class StreamerNotifierCog(commands.Cog):
 
                             elif message_type == "session_reconnect":
                                 reconnect_url = data["payload"]["session"]["reconnect_url"]
-                                logger.info(f"EventSub requested reconnect to {reconnect_url}")
+                                logger.info(f"EventSub solicitó reconexión a {reconnect_url}")
                                 break
 
                         elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
-                            logger.warning("EventSub WebSocket closed or encountered an error")
+                            logger.warning("EventSub WebSocket cerrado o encontró un error")
                             break
 
             except Exception as e:
-                logger.error(f"Twitch EventSub error: {e}. Reconnecting in 15 seconds...")
+                logger.error(f"Error en Twitch EventSub: {e}. Reconectando en 15 segundos...")
                 await asyncio.sleep(15)
 
     async def _dispatch_stream_alert(self, event_data: dict):
