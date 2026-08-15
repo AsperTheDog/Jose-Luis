@@ -122,7 +122,7 @@ class ModerationCog(commands.Cog):
             color=discord.Color.blue()
         )
 
-        await interaction.send(embed=embed)
+        await interaction.response.send_message(embed=embed)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
