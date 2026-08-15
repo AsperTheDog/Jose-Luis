@@ -105,7 +105,6 @@ class ModerationCog(commands.Cog):
         if await self.bot.filter_operators(interaction): return
 
         operators = [int(userID) for userID in self.bot.config.get_list("operators")]
-        operators.append(self.bot.owner_id)
 
         users = []
         for userID in operators:
@@ -114,7 +113,10 @@ class ModerationCog(commands.Cog):
             except discord.NotFound:
                 pass
 
-        formatted_list = "\n".join(f"• {op.mention}" for op in users)
+        owner = await interaction.guild.fetch_member(self.bot.owner_id)
+
+        formatted_list = owner.mention + " (dueño)\n"
+        formatted_list += "\n".join(f"• {op.mention}" for op in users)
 
         embed = discord.Embed(
             title="Operadores",

@@ -25,6 +25,21 @@ class UtilityCog(commands.Cog):
         await interaction.response.send_message("Shutting down...", ephemeral=True)
         await interaction.client.close()
 
+    @utility_group.command(name="dumpconfig", description="Dumps the contents of config.cfg")
+    async def dumpconfig(self, interaction: discord.Interaction):
+        if await self.bot.filter_owner(interaction): return
+        
+        try:
+            with open("config.cfg", "r", encoding="utf-8") as f:
+                content = f.read()
+
+            if len(content) > 1900:
+                await interaction.response.send_message("Config file is too long for a message, sending as file:", file=discord.File("config.cfg"))
+            else:
+                await interaction.response.send_message(f"```ini\n{content}\n```")
+
+        except FileNotFoundError:
+            await interaction.response.send_message("`config.cfg` was not found.", ephemeral=True)
 
 async def setup(bot: ScalableBot):
     await bot.add_cog(UtilityCog(bot))

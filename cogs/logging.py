@@ -39,10 +39,10 @@ class LoggingCog(commands.Cog):
             self.config[gid] = {
                 "log_channel_id": None,
                 "events": {
-                    "messages": True,
-                    "members": True,
-                    "moderation": True,
-                    "channels": True,
+                    "mensajes": True,
+                    "miembros": True,
+                    "moderación": True,
+                    "canales": True,
                 },
             }
             self._save_config()
@@ -96,16 +96,16 @@ class LoggingCog(commands.Cog):
 
         cfg = self._get_guild_config(interaction.guild.id)
         events = cfg["events"]
-        events["messages"] = messages
-        events["members"] = members
-        events["moderation"] = moderation
-        events["channels"] = channels
+        events["mensajes"] = messages
+        events["miembros"] = members
+        events["moderación"] = moderation
+        events["canales"] = channels
 
         self._save_config()
 
         embed = discord.Embed(title="Actualizada configuración de logs", color=discord.Color.blue())
         for cat, enabled in events.items():
-            status = "Enabled" if enabled else "Disabled"
+            status = "Activo" if enabled else "Inactivo"
             embed.add_field(name=cat.capitalize(), value=f"`{status}`", inline=True)
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
