@@ -1,5 +1,6 @@
 import configparser
 import random
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 
@@ -84,90 +85,3 @@ class ConfigManager:
             self.set(option, ",".join(current_list), auto_save=auto_save)
             return True
         return False
-
-from pathlib import Path
-from typing import List, Set
-
-
-class ListConfig:
-    def __init__(self, config_path: str, separator: str = "||") -> None:
-        self.path = Path(config_path)
-        self.separator = separator
-        self._cache: Set[str] = self._load_from_disk()
-        self._recent_history: List[str] = []
-        self._load_from_disk()
-
-    def _load_from_disk(self) -> Set[str]:
-        if not self.path.exists():
-            return set()
-        try:
-            with open(self.path, "r", encoding="utf-8") as f:
-                content = f.read()
-            return {
-                elem.strip()
-                for elem in content.split(self.separator)
-                if elem.strip()
-            }
-        except OSError:
-            return set()
-
-    def _flush_to_disk(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.path, "w", encoding="utf-8") as f:
-            if self._cache:
-                f.write(self.separator.join(self._cache) + self.separator)
-
-    def get_all(self) -> List[str]:
-        return list(self._cache)
-
-    def contains(self, element: str) -> bool:
-        return element.strip() in self._cache
-
-    def add(self, element: str) -> bool:
-        elem_str = element.strip()
-        if not elem_str or elem_str in self._cache:
-            return False
-
-        self._cache.add(elem_str)
-        self._flush_to_disk()
-        return True
-
-    def remove(self, element: str) -> bool:
-        elem_str = element.strip()
-        if elem_str not in self._cache:
-            return False
-
-        self._cache.remove(elem_str)
-        self._flush_to_disk()
-        return True
-
-    def set(self, elems: List[str]) -> None:
-        new_cache = {e.strip() for e in elems if e.strip()}
-        if new_cache == self._cache:
-            return
-
-        self._cache = new_cache
-        self._flush_to_disk()
-
-    def pick_random(self, history_ratio: float = 0.4) -> Optional[str]:
-        if not self._cache:
-            return "FALLO: No hay nada aquí entre lo que elegir..."
-
-        candidates = list(self._cache)
-        if len(candidates) == 1:
-            return candidates[0]
-
-        max_history_len = max(1, min(len(candidates) - 1, int(len(candidates) * history_ratio)))
-        available = [item for item in candidates if item not in self._recent_history]
-
-        if not available:
-            self._recent_history.clear()
-            available = candidates
-
-        chosen = random.choice(available)
-
-        self._recent_history.append(chosen)
-        if len(self._recent_history) > max_history_len:
-            self._recent_history.pop(0)  # Evict oldest choice
-
-        return chosen

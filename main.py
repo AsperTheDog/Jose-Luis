@@ -19,8 +19,6 @@ class ScalableBot(commands.Bot):
             intents=intents
         )
         self.config = ConfigManager()
-        self.borjaFrases = ListConfig("frases.txt")
-        self.chistes = ListConfig("chistes.txt")
         self.twitchClient = twitchClient
         self.twitchSecret = twitchSecret
 
