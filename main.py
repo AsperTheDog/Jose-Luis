@@ -3,7 +3,7 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from config import ConfigManager, ListConfig
+from config import ConfigManager
 
 load_dotenv()
 
