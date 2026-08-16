@@ -1,3 +1,5 @@
+import os
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -40,6 +42,23 @@ class UtilityCog(commands.Cog):
 
         except FileNotFoundError:
             await interaction.response.send_message("`config.cfg` was not found.", ephemeral=True)
+
+    @app_commands.command(name="dumpdb", description="Descarga una copia de la base de datos (bot_data.db)")
+    async def dumpdb(self, interaction: discord.Interaction):
+        if await self.bot.filter_owner(interaction): return
+
+        db_path = "bot_data.db"
+
+        if not os.path.exists(db_path):
+            await interaction.response.send_message("No se encontró el archivo de la base de datos.", ephemeral=True)
+            return
+
+        file = discord.File(db_path, filename="bot_data.db")
+        await interaction.response.send_message(
+            "Aquí tienes una copia actual de la base de datos:",
+            file=file,
+            ephemeral=True
+        )
 
 async def setup(bot: ScalableBot):
     await bot.add_cog(UtilityCog(bot))

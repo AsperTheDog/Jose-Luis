@@ -6,8 +6,6 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-DB_PATH = "user_stats.db"
-
 EMOJI_REGEX = re.compile(r"<a?:[a-zA-Z0-9_]+:[0-9]+>|[\U00010000-\U0010ffff]")
 
 
@@ -19,11 +17,11 @@ class StatsCog(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.db_path = "bot_data.db"
         self._init_db()
 
-    @staticmethod
-    def _init_db():
-        with sqlite3.connect(DB_PATH) as conn:
+    def _init_db(self):
+        with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS user_stats (
@@ -40,30 +38,27 @@ class StatsCog(commands.Cog):
             """)
             conn.commit()
 
-    @staticmethod
-    async def _db_execute(query: str, params: tuple = ()) -> None:
+    async def _db_execute(self, query: str, params: tuple = ()) -> None:
         def query_runner():
-            with sqlite3.connect(DB_PATH) as conn:
+            with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute(query, params)
                 conn.commit()
 
         await asyncio.to_thread(query_runner)
 
-    @staticmethod
-    async def _db_fetchone(query: str, params: tuple = ()) -> Optional[tuple]:
+    async def _db_fetchone(self, query: str, params: tuple = ()) -> Optional[tuple]:
         def query_runner():
-            with sqlite3.connect(DB_PATH) as conn:
+            with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute(query, params)
                 return cursor.fetchone()
 
         return await asyncio.to_thread(query_runner)
 
-    @staticmethod
-    async def _db_fetchall(query: str, params: tuple = ()) -> list:
+    async def _db_fetchall(self, query: str, params: tuple = ()) -> list:
         def query_runner():
-            with sqlite3.connect(DB_PATH) as conn:
+            with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute(query, params)
                 return cursor.fetchall()
