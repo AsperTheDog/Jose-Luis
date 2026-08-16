@@ -48,6 +48,7 @@ class StreamerNotifierCog(commands.Cog):
                                channel_id      INTEGER NOT NULL,
                                twitch_username TEXT    NOT NULL,
                                kick_username   TEXT,
+                               everyone        BOOL,
                                UNIQUE (guild_id, twitch_username)
                            )
                            """)
@@ -227,7 +228,7 @@ class StreamerNotifierCog(commands.Cog):
 
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT channel_id, kick_username FROM tracked_streamers WHERE twitch_username = ?", (twitch_user,))
+            cursor.execute("SELECT channel_id, kick_username, everyone FROM tracked_streamers WHERE twitch_username = ?", (twitch_user,))
             destinations = cursor.fetchall()
 
         if not destinations:
@@ -235,7 +236,7 @@ class StreamerNotifierCog(commands.Cog):
 
         twitch_url = f"https://twitch.tv/{twitch_user}"
 
-        for channel_id, kick_user in destinations:
+        for channel_id, kick_user, everyone in destinations:
             channel = self.bot.get_channel(channel_id)
             if not channel:
                 continue
@@ -252,14 +253,19 @@ class StreamerNotifierCog(commands.Cog):
             if kick_url:
                 embed.add_field(name="Kick", value=f"[Ver en Kick]({kick_url})", inline=True)
 
-            content = f"¡Atención! {streamer_name} ha iniciado directo: {twitch_url}"
+            if everyone:
+                at_everyone = "@everyone "
+            else:
+                at_everyone = ""
+
+            content = f"{at_everyone}¡Atención! {streamer_name} ha iniciado directo: {twitch_url}"
             if kick_url:
                 content += f" (También en Kick: {kick_url})"
 
             await channel.send(content=content, embed=embed)
 
     @streamer_group.command(name="agregar", description="Añade un streamer para notificar en este canal")
-    async def add_streamer(self, interaction: discord.Interaction, twitch: str, kick: Optional[str] = None, canal: Optional[discord.TextChannel] = None):
+    async def add_streamer(self, interaction: discord.Interaction, twitch: str, kick: Optional[str] = None, canal: Optional[discord.TextChannel] = None, at_everyone: bool = False):
         if await self.bot.filter_operators(interaction):
             return
 
@@ -275,11 +281,11 @@ class StreamerNotifierCog(commands.Cog):
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                           INSERT INTO tracked_streamers (guild_id, channel_id, twitch_username, kick_username)
-                           VALUES (?, ?, ?, ?)
+                           INSERT INTO tracked_streamers (guild_id, channel_id, twitch_username, kick_username, everyone)
+                           VALUES (?, ?, ?, ?, ?)
                            ON CONFLICT(guild_id, twitch_username) DO UPDATE SET channel_id    = excluded.channel_id,
                                                                                 kick_username = excluded.kick_username
-                           """, (interaction.guild_id, target_channel.id, twitch_user, kick_user))
+                           """, (interaction.guild_id, target_channel.id, twitch_user, kick_user, at_everyone))
             conn.commit()
 
         sub_success = True
