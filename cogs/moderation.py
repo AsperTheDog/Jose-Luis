@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import re
 
 import discord
 from discord import app_commands, permissions
@@ -125,6 +126,70 @@ class ModerationCog(commands.Cog):
         )
 
         await interaction.response.send_message(embed=embed)
+
+    @staticmethod
+    def _extract_message_id(input_str: str) -> int:
+        match = re.search(r'(\d+)/?$', input_str.strip())
+        if match:
+            return int(match.group(1))
+        raise ValueError("ID o enlace de mensaje no válido.")
+
+    @app_commands.command(name="purgarpormensajes", description="Borra mensajes desde un mensaje base hasta el final o hasta un segundo mensaje.")
+    @app_commands.describe(
+        mensaje_inicio="ID o enlace del mensaje más antiguo a partir del cual borrar",
+        mensaje_fin="Opcional: ID o enlace del mensaje más reciente hasta el cual borrar"
+    )
+    async def purgarpormensajes(self, interaction: discord.Interaction, mensaje_inicio: str, mensaje_fin: str = None):
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            id_inicio = self._extract_message_id(mensaje_inicio)
+            msg_inicio = await interaction.channel.fetch_message(id_inicio)
+
+            after_target = discord.Object(id=msg_inicio.id - 1)
+
+            before_target = None
+            if mensaje_fin:
+                id_fin = self._extract_message_id(mensaje_fin)
+                msg_fin = await interaction.channel.fetch_message(id_fin)
+                before_target = discord.Object(id=msg_fin.id + 1)
+
+            deleted = await interaction.channel.purge(after=after_target, before=before_target, oldest_first=True)
+
+            await interaction.followup.send(f"Se han eliminado **{len(deleted)}** mensajes correctamente.", ephemeral=True)
+
+        except discord.NotFound:
+            await interaction.followup.send("No se encontró alguno de los mensajes especificados en este canal.", ephemeral=True)
+        except ValueError:
+            await interaction.followup.send("Formato de ID o enlace de mensaje no válido.", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"Error al ejecutar el borrado: {e}", ephemeral=True)
+
+    @app_commands.command(name="purgarpornumero", description="Borra una cantidad específica de mensajes recientes.")
+    @app_commands.describe(cantidad="Número de mensajes a eliminar")
+    async def purgarpornumero(self, interaction: discord.Interaction, cantidad: int):
+        if cantidad <= 0:
+            await interaction.response.send_message("Debes indicar un número mayor a 0.", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        deleted = await interaction.channel.purge(limit=cantidad)
+        await interaction.followup.send(f"Se han eliminado **{len(deleted)}** mensajes.", ephemeral=True)
+
+    @app_commands.command(name="purgarporintervalo", description="Borra los mensajes enviados dentro de un intervalo de segundos hacia atrás.")
+    @app_commands.describe(segundos="Intervalo en segundos (ej: 600 para borrado de los últimos 10 minutos)")
+    async def purgarporintervalo(self, interaction: discord.Interaction, segundos: int):
+        if segundos <= 0:
+            await interaction.response.send_message("El intervalo debe ser mayor a 0 segundos.", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        desde = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=segundos)
+
+        deleted = await interaction.channel.purge(after=desde)
+        await interaction.followup.send(f"Se han eliminado **{len(deleted)}** mensajes enviados en los últimos **{segundos}** segundos.", ephemeral=True)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
