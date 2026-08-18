@@ -169,7 +169,7 @@ class ModerationCog(commands.Cog):
             print(f"Error de permisos: No se pudo silenciar/banear a {message.author}.")
             await message.author.kick(reason="Escribir en canal de muerte. Debido a falta de permisos en vez de mutearte se te ha kickeado")
             if admin_channel:
-                await admin_channel.send(f"El usuario **{message.author}** ({message.author.mention}) ha sido kickeado automáticamente porque Jose Luis no tiene permisos suficientes para mutear o banear.")
+                await admin_channel.send(f"El usuario **{message.author}** ({message.author.mention}) ha sido kickeado automáticamente porque no tengo permisos suficientes para mutear o banear (Solo Borja me los puede dar, y tal).")
             msg = await message.channel.send(f"{message.author.mention} ha sucumbido ante mortal poder de Jose Luis...")
             await message.delete()
             await asyncio.sleep(10 * 60)
