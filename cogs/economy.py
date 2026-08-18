@@ -404,7 +404,7 @@ class EconomyCog(commands.Cog):
 
         await interaction.followup.send(msg)
 
-    @economy_group.command(name="spin", description="Juega a la ruleta. Puedes apostar a color, a número, o a ambos (ej. 0 Verde o 17 Negro).")
+    @economy_group.command(name="ruleta", description="Juega a la ruleta. Puedes apostar a color, a número, o a ambos (ej. 0 Verde o 17 Negro).")
     @app_commands.describe(
         apuesta="Cantidad de choskris a apostar",
         color="Color al que quieres apostar (Rojo, Negro o Verde)",
@@ -496,7 +496,7 @@ class EconomyCog(commands.Cog):
                 msg += f" (-**{apuesta - loss}** cashback)"
             await interaction.followup.send(msg)
 
-    @app_commands.command(name="dados", description="Lanza dos dados de 6 caras. Apuesta a suma exacta, alta/baja/7 o par/impar.")
+    @economy_group.command(name="dados", description="Lanza dos dados de 6 caras. Apuesta a suma exacta, alta/baja/7 o par/impar.")
     @app_commands.describe(
         apuesta="Cantidad de choskris a apostar",
         modalidad="Tipo de apuesta (Alta/Baja/7, Par/Impar o Suma Exacta)",
@@ -660,7 +660,7 @@ class EconomyCog(commands.Cog):
         view = TriviaView(interaction.user.id, recompensa, q_data, self)
         await interaction.response.send_message(f"🧠 **TRIVIA** (Premio: {recompensa} / Penalización: {recompensa})\n\n{q_data['pregunta']}", view=view)
 
-    @app_commands.command(name="pagar", description="Transfiere choskris de tu cuenta personal a otro usuario.")
+    @economy_group.command(name="pagar", description="Transfiere choskris de tu cuenta personal a otro usuario.")
     @app_commands.describe(destinatario="El usuario que recibirá los choskris", cantidad="La cantidad de choskris a transferir")
     async def pagar(self, interaction: discord.Interaction, destinatario: discord.User, cantidad: int):
         await interaction.response.defer()
@@ -693,7 +693,7 @@ class EconomyCog(commands.Cog):
         phrase = self.get_random_phrase("pay_success")
         await interaction.followup.send(f"{phrase}💸 ¡{interaction.user.mention} le ha enviado **{cantidad:,}** choskris a {destinatario.mention}!")
 
-    @app_commands.command(name="generar", description="Genera choskris del aire y se lo otorga a un usuario.")
+    @economy_group.command(name="generar", description="Genera choskris del aire y se lo otorga a un usuario.")
     @app_commands.describe(destinatario="El usuario que recibirá los choskris generados", cantidad="La cantidad de choskris a generar")
     async def generar_dinero(self, interaction: discord.Interaction, destinatario: discord.User, cantidad: int):
         if await self.bot.filter_operators(interaction): return
@@ -712,7 +712,7 @@ class EconomyCog(commands.Cog):
 
         await interaction.followup.send(f"✅ Has generado **{cantidad:,}** choskris para {destinatario.mention}.")
 
-    @app_commands.command(name="interes", description="Reclama los intereses generados por tus ahorros")
+    @economy_group.command(name="interes", description="Reclama los intereses generados por tus ahorros")
     async def claim_interest(self, interaction: discord.Interaction):
         user_id = interaction.user.id
 
@@ -747,7 +747,7 @@ class EconomyCog(commands.Cog):
         )
         await interaction.response.send_message(message)
 
-    @app_commands.command(name="meterfrase", description="Inserta una frase customizada para las acciones de economía")
+    @economy_group.command(name="meterfrase", description="Inserta una frase customizada para las acciones de economía")
     async def meterfrase(self, interaction: discord.Interaction, frase: str, categoria: str, tag: Optional[str] = None):
         if await self.bot.filter_operators(interaction): return
         with sqlite3.connect("bot_data.db") as conn:
