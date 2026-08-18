@@ -9,7 +9,7 @@ from discord import app_commands
 from discord.ext import commands
 from typing import Optional
 
-from main import ScalableBot
+from main import JoseLuisBot
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ class StreamerNotifierCog(commands.Cog):
         description="Gestión de notificaciones de directos"
     )
 
-    def __init__(self, bot: ScalableBot, db_path: str = "bot_data.db"):
+    def __init__(self, bot: JoseLuisBot, db_path: str = "bot_data.db"):
         self.bot = bot
         self.db_path = db_path
 
@@ -336,5 +336,5 @@ class StreamerNotifierCog(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-async def setup(bot: ScalableBot):
+async def setup(bot: JoseLuisBot):
     await bot.add_cog(StreamerNotifierCog(bot))

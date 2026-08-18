@@ -1,0 +1,54 @@
+{
+    "streamer": {
+        "nombre": "Streamer",
+        "emoji": "🎥",
+        "desc": "Dependes del hype y del chat. Tienes probabilidad de recibir 'donaciones' adicionales en los drops.",
+        "perks": {
+            "drop_boost": 0.2
+        }
+    },
+    "empleado_banca": {
+        "nombre": "Empleado de Banca",
+        "emoji": "💼",
+        "desc": "Acceso privilegiado al sistema financiero. Obtienes un pequeño interés sobre los fondos guardados en tu banco.",
+        "perks": {
+            "bank_interest_bonus": 0.015
+        }
+    },
+    "dealer": {
+        "nombre": "Crupier",
+        "emoji": "🎰",
+        "desc": "Conoces todos los trucos de la mesa. Recuperas un porcentaje de tus pérdidas como reembolso al apostar en los comandos de casino.",
+        "perks": {
+            "gambling_cashback": 0.1
+        }
+    },
+    "repartidor": {
+        "nombre": "Repartidor nocturno",
+        "emoji": "🛵",
+        "desc": "Pagas constantes pero ajustadas. Tienes un cooldown de /work muy corto, premiando la constancia sobre el azar.",
+        "perks": {
+            "work_cooldown_seconds": 36000,
+            "flat_work_bonus": 50
+        }
+    },
+    "mafia_boss": {
+        "nombre": "Jefe de la Mafia",
+        "emoji": "🎩",
+        "desc": "Diriges el crimen organizado desde las sombras. Eres eficaz en tus actos criminales y cuentas con contactos para eludir a la policía. Sin embargo, tus crímenes pesan sobre tus espaldas...",
+        "perks": {
+            "crime_success_rate": 0.30,
+            "crime_payout_boost": 0.20,
+            "jail_bonus": 1.0
+        }
+    },
+    "propietario_local": {
+        "nombre": "Casero",
+        "emoji": "🏠",
+        "desc": "Vives de las rentas. Recibes un pequeño estipendio diario automático sin necesidad de ejecutar comandos, pero no puedes trabajar para ganarte el pan.",
+        "perks": {
+            "passive_daily_income": 1.2,
+            "job_penalty": 1.0
+        }
+    }
+}

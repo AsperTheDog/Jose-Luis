@@ -1,13 +1,9 @@
-import json
-import os
-from typing import Dict, Optional, Any
+from typing import Optional
 import discord
 from discord import app_commands, DMChannel
 from discord.ext import commands
 
-from main import ScalableBot
-
-CONFIG_FILE = "logging_config.json"
+from main import JoseLuisBot
 
 
 class LoggingCog(commands.Cog):
@@ -16,57 +12,37 @@ class LoggingCog(commands.Cog):
         description="Herramientas para configurar logs"
     )
 
-    def __init__(self, bot: ScalableBot):
+    def __init__(self, bot: JoseLuisBot):
         self.bot = bot
-        self.config: Dict[str, Dict[str, Any]] = self._load_config()
-
-    def _load_config(self) -> Dict[str, Dict[str, Any]]:
-        if os.path.exists(CONFIG_FILE):
-            try:
-                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except json.JSONDecodeError:
-                return {}
-        return {}
-
-    def _save_config(self) -> None:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(self.config, f, indent=4)
-
-    def _get_guild_config(self, guild_id: int) -> Dict[str, Any]:
-        gid = str(guild_id)
-        if gid not in self.config:
-            self.config[gid] = {
-                "log_channel_id": None,
-                "events": {
-                    "mensajes": True,
-                    "miembros": True,
-                    "moderación": True,
-                    "canales": True,
-                },
-            }
-            self._save_config()
-        return self.config[gid]
 
     def _get_log_channel(self, guild: discord.Guild, category: str) -> Optional[discord.TextChannel]:
-        cfg = self._get_guild_config(guild.id)
-        channel_id = cfg.get("log_channel_id")
-
-        if not channel_id:
+        log_channel_id = self.bot.config.get_log_channel_id(guild.id)
+        if not log_channel_id:
             return None
 
-        if not cfg.get("events", {}).get(category, True):
+        # Check category event toggles
+        category_map = {
+            "messages": self.bot.config.get_event_mensajes,
+            "mensajes": self.bot.config.get_event_mensajes,
+            "members": self.bot.config.get_event_miembros,
+            "miembros": self.bot.config.get_event_miembros,
+            "moderation": self.bot.config.get_event_moderacion,
+            "moderación": self.bot.config.get_event_moderacion,
+            "channels": self.bot.config.get_event_canales,
+            "canales": self.bot.config.get_event_canales,
+        }
+
+        checker = category_map.get(category)
+        if checker and not checker(guild.id):
             return None
 
-        return guild.get_channel(channel_id)
+        return guild.get_channel(log_channel_id)
 
     @logging_group.command(name="activarlog", description="Pone el canal actual como canal de logs")
     async def set_log_channel(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
 
-        cfg = self._get_guild_config(interaction.guild.id)
-        cfg["log_channel_id"] = interaction.channel_id
-        self._save_config()
+        self.bot.config.set_log_channel_id(interaction.guild.id, interaction.channel_id)
 
         embed = discord.Embed(
             title="Logging activado",
@@ -79,9 +55,7 @@ class LoggingCog(commands.Cog):
     async def disable_logging(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
 
-        cfg = self._get_guild_config(interaction.guild_id)
-        cfg["log_channel_id"] = None
-        self._save_config()
+        self.bot.config.set_log_channel_id(interaction.guild_id, None)
 
         embed = discord.Embed(
             title="Logging desactivado",
@@ -91,24 +65,38 @@ class LoggingCog(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @logging_group.command(name="configurarlog", description="Configura los eventos que se van a logear")
-    async def toggle_log_events(self, interaction: discord.Interaction, messages: bool = True, members: bool = True, moderation: bool = True, channels: bool = True):
+    async def toggle_log_events(
+        self,
+        interaction: discord.Interaction,
+        messages: bool = True,
+        members: bool = True,
+        moderation: bool = True,
+        channels: bool = True
+    ):
         if await self.bot.filter_operators(interaction): return
 
-        cfg = self._get_guild_config(interaction.guild.id)
-        events = cfg["events"]
-        events["mensajes"] = messages
-        events["miembros"] = members
-        events["moderación"] = moderation
-        events["canales"] = channels
-
-        self._save_config()
+        guild_id = interaction.guild.id
+        self.bot.config.set_event_mensajes(guild_id, messages)
+        self.bot.config.set_event_miembros(guild_id, members)
+        self.bot.config.set_event_moderacion(guild_id, moderation)
+        self.bot.config.set_event_canales(guild_id, channels)
 
         embed = discord.Embed(title="Actualizada configuración de logs", color=discord.Color.blue())
-        for cat, enabled in events.items():
+        events_status = {
+            "Mensajes": messages,
+            "Miembros": members,
+            "Moderación": moderation,
+            "Canales": channels,
+        }
+        for cat, enabled in events_status.items():
             status = "Activo" if enabled else "Inactivo"
-            embed.add_field(name=cat.capitalize(), value=f"`{status}`", inline=True)
+            embed.add_field(name=cat, value=f"`{status}`", inline=True)
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    # =========================================================================
+    # LISTENERS
+    # =========================================================================
 
     @commands.Cog.listener()
     async def on_message_delete(self, message: discord.Message):
@@ -137,7 +125,7 @@ class LoggingCog(commands.Cog):
             return
 
         channel = self._get_log_channel(before.guild, "messages")
-        if not channel or channel is DMChannel:
+        if not channel or isinstance(channel, DMChannel):
             return
 
         embed = discord.Embed(
@@ -227,7 +215,7 @@ class LoggingCog(commands.Cog):
 
                 if after.timed_out_until:
                     embed.title = "Miembro muteado"
-                    embed.color = discord.Color.orange()
+                    embed.colour = discord.Color.orange()
                     embed.add_field(
                         name="Hasta",
                         value=f"<t:{int(after.timed_out_until.timestamp())}:F>",
@@ -235,7 +223,7 @@ class LoggingCog(commands.Cog):
                     )
                 else:
                     embed.title = "Miembro desmuteado"
-                    embed.color = discord.Color.blue()
+                    embed.colour = discord.Color.blue()
 
                 embed.set_footer(text=f"ID del usuario: {after.id}")
                 await channel_mod.send(embed=embed)
@@ -336,5 +324,5 @@ class LoggingCog(commands.Cog):
         await log_chan.send(embed=embed)
 
 
-async def setup(bot: ScalableBot):
+async def setup(bot: JoseLuisBot):
     await bot.add_cog(LoggingCog(bot))

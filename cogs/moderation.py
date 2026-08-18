@@ -1,12 +1,13 @@
 import asyncio
 import datetime
 import re
+from typing import Optional
 
 import discord
 from discord import app_commands, permissions
 from discord.ext import commands
 
-from main import ScalableBot
+from main import JoseLuisBot
 
 
 class ModerationCog(commands.Cog):
@@ -15,14 +16,14 @@ class ModerationCog(commands.Cog):
         description="Herramientas para moderadores"
     )
 
-    def __init__(self, bot: ScalableBot):
+    def __init__(self, bot: JoseLuisBot):
         self.bot = bot
 
     @moderation_group.command(name="honeypot", description="Pone el canal actual como honeypot y manda un aviso")
     async def honeypot(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
 
-        self.bot.config.set("death_channel_id", interaction.channel.id)
+        self.bot.config.set_death_channel_id(interaction.guild.id, interaction.channel.id)
         embed = discord.Embed(
             title="⚠️ ¡CANAL TRAMPA! ⚠️",
             description=(
@@ -47,25 +48,25 @@ class ModerationCog(commands.Cog):
     async def nohoneypot(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
 
-        channel = self.bot.get_channel(int(self.bot.config.get("death_channel_id")))
+        channel = self.bot.get_channel(int(self.bot.config.get_death_channel_id(interaction.guild.id)))
         if channel is None:
             await interaction.response.send_message("No hay ningún honeypot configurado", ephemeral=True)
             return
-        self.bot.config.set("death_channel_id", None)
+        self.bot.config.set_death_channel_id(interaction.guild.id, 0)
         await interaction.response.send_message("Eliminado el canal honeypot: ", ephemeral=True)
 
     @moderation_group.command(name="setadminchannel", description="Establece este canal como el canal de administración")
     async def setadminchannel(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
 
-        self.bot.config.set("admin_channel_id", interaction.channel.id)
+        self.bot.config.set_admin_channel_id(interaction.guild.id, interaction.channel.id)
         await interaction.response.send_message("Establecido este canal como canal de administración")
 
     @moderation_group.command(name="addoperator", description="Añade a un usuario como operador")
     async def addoperator(self, interaction: discord.Interaction, user: discord.Member):
         if await self.bot.filter_owner(interaction): return
 
-        if await self.bot.is_owner(user) or not self.bot.config.add_to_list("operators", user.id):
+        if await self.bot.is_owner(user) or not self.bot.config.add_operator(interaction.guild.id, user.id):
             await interaction.response.send_message("Esta persona ya es operadora")
             return
         await interaction.response.send_message(f"Añadido {user.mention} como operador")
@@ -78,7 +79,7 @@ class ModerationCog(commands.Cog):
             await interaction.response.send_message("¿Qué haces, payaso? No puedes quitar como operador al dueño del bot ¿Te crees que esto es una democracia?")
             return
 
-        if not self.bot.config.remove_from_list("operators", user.id):
+        if not self.bot.config.remove_operator(interaction.guild.id, user.id):
             await interaction.response.send_message("Esta persona no es operadora")
             return
         await interaction.response.send_message(f"Quitado {user.mention} como operador")
@@ -87,7 +88,7 @@ class ModerationCog(commands.Cog):
     async def whitelist(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
 
-        if not self.bot.config.add_to_list("channel_whitelist", interaction.channel.id):
+        if not self.bot.config.add_to_channel_whitelist(interaction.guild.id, interaction.channel.id):
             await interaction.response.send_message("Este canal ya está en la lista blanca")
             return
         await interaction.response.send_message("Ahora estaré activo en este canal")
@@ -96,7 +97,7 @@ class ModerationCog(commands.Cog):
     async def unwhitelist(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
 
-        if not self.bot.config.remove_from_list("channel_whitelist", interaction.channel.id):
+        if not self.bot.config.remove_from_channel_whitelist(interaction.guild.id, interaction.channel.id):
             await interaction.response.send_message("Este canal no está en la lista blanca")
             return
         await interaction.response.send_message("Ya no estaré activo en este canal")
@@ -105,7 +106,7 @@ class ModerationCog(commands.Cog):
     async def operators(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
 
-        operators = [int(userID) for userID in self.bot.config.get_list("operators")]
+        operators = [int(userID) for userID in self.bot.config.get_operators(interaction.guild.id)]
 
         users = []
         for userID in operators:
@@ -119,12 +120,7 @@ class ModerationCog(commands.Cog):
         formatted_list = "• " + owner.mention + " (dueño)\n"
         formatted_list += "\n".join(f"• {op.mention}" for op in users)
 
-        embed = discord.Embed(
-            title="Operadores",
-            description=formatted_list,
-            color=discord.Color.blue()
-        )
-
+        embed = discord.Embed( title="Operadores", description=formatted_list, color=discord.Color.blue())
         await interaction.response.send_message(embed=embed)
 
     @staticmethod
@@ -135,10 +131,7 @@ class ModerationCog(commands.Cog):
         raise ValueError("ID o enlace de mensaje no válido.")
 
     @moderation_group.command(name="purgarpormensajes", description="Borra mensajes desde un mensaje base hasta el final o hasta un segundo mensaje.")
-    @app_commands.describe(
-        mensaje_inicio="ID o enlace del mensaje más antiguo a partir del cual borrar",
-        mensaje_fin="Opcional: ID o enlace del mensaje más reciente hasta el cual borrar"
-    )
+    @app_commands.describe(mensaje_inicio="ID o enlace del mensaje más antiguo a partir del cual borrar", mensaje_fin="Opcional: ID o enlace del mensaje más reciente hasta el cual borrar")
     async def purgarpormensajes(self, interaction: discord.Interaction, mensaje_inicio: str, mensaje_fin: str = None):
         if await self.bot.filter_operators(interaction): return
         await interaction.response.defer(ephemeral=True)
@@ -194,20 +187,44 @@ class ModerationCog(commands.Cog):
         deleted = await interaction.channel.purge(after=desde)
         await interaction.followup.send(f"Se han eliminado **{len(deleted)}** mensajes enviados en los últimos **{segundos}** segundos.", ephemeral=True)
 
+    @moderation_group.command(name="decir", description="Hacer que Jose Luis diga algo")
+    async def decir(self, interaction: discord.Interaction, message: str, reply_to: Optional[str] = None):
+        if await self.bot.filter_operators(interaction): return
+
+        target_message: Optional[discord.Message] = None
+
+        if reply_to:
+            msg_id_str = reply_to.strip().split("/")[-1]
+            if not msg_id_str.isdigit():
+                await interaction.response.send_message("El ID o enlace del mensaje proporcionado no es válido.", ephemeral=True)
+                return
+            try:
+                target_message = await interaction.channel.fetch_message(int(msg_id_str))
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                await interaction.response.send_message("No se pudo encontrar el mensaje en este canal.", ephemeral=True)
+                return
+
+        if target_message:
+            await target_message.reply(message)
+        else:
+            await interaction.channel.send(message)
+
+        await interaction.response.send_message("Mensaje enviado.", ephemeral=True, delete_after=0.1)
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot or not message.guild:
             return
 
-        death_channel_id = int(self.bot.config.get("death_channel_id"))
+        death_channel_id = int(self.bot.config.get_death_channel_id(message.guild.id))
         if message.channel.id != death_channel_id:
             return
 
-        grace_seconds = self.bot.config.get_float("death_grace_seconds", fallback=60)
+        grace_seconds = self.bot.config.get_death_grace_seconds(message.guild.id)
         duration = datetime.timedelta(seconds=grace_seconds)
         unban_deadline = datetime.datetime.now(datetime.timezone.utc) + duration
 
-        admin_channel_id = int(self.bot.config.get("admin_channel_id"))
+        admin_channel_id = int(self.bot.config.get_admin_channel_id(message.guild.id))
         admin_channel = message.guild.get_channel(admin_channel_id)
 
         try:
@@ -245,5 +262,5 @@ class ModerationCog(commands.Cog):
 
 
 
-async def setup(bot: ScalableBot):
+async def setup(bot: JoseLuisBot):
     await bot.add_cog(ModerationCog(bot))

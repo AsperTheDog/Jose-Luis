@@ -5,7 +5,7 @@ from typing import List, Dict
 from discord import app_commands
 from discord.ext import commands
 
-from main import ScalableBot
+from main import JoseLuisBot
 
 
 class ListasCog(commands.Cog):
@@ -14,7 +14,7 @@ class ListasCog(commands.Cog):
         description="Comandos para que Jose Luis diga cosas graciosas"
     )
 
-    def __init__(self, bot: ScalableBot):
+    def __init__(self, bot: JoseLuisBot):
         self.bot = bot
         self.db_path = "bot_data.db"
 
@@ -158,5 +158,5 @@ class ListasCog(commands.Cog):
         await interaction.response.send_message("Historial de chistes reseteado.", ephemeral=True)
 
 
-async def setup(bot: ScalableBot):
+async def setup(bot: JoseLuisBot):
     await bot.add_cog(ListasCog(bot))
