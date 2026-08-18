@@ -134,12 +134,13 @@ class ModerationCog(commands.Cog):
             return int(match.group(1))
         raise ValueError("ID o enlace de mensaje no válido.")
 
-    @app_commands.command(name="purgarpormensajes", description="Borra mensajes desde un mensaje base hasta el final o hasta un segundo mensaje.")
+    @moderation_group.command(name="purgarpormensajes", description="Borra mensajes desde un mensaje base hasta el final o hasta un segundo mensaje.")
     @app_commands.describe(
         mensaje_inicio="ID o enlace del mensaje más antiguo a partir del cual borrar",
         mensaje_fin="Opcional: ID o enlace del mensaje más reciente hasta el cual borrar"
     )
     async def purgarpormensajes(self, interaction: discord.Interaction, mensaje_inicio: str, mensaje_fin: str = None):
+        if await self.bot.filter_operators(interaction): return
         await interaction.response.defer(ephemeral=True)
 
         try:
@@ -165,9 +166,10 @@ class ModerationCog(commands.Cog):
         except Exception as e:
             await interaction.followup.send(f"Error al ejecutar el borrado: {e}", ephemeral=True)
 
-    @app_commands.command(name="purgarpornumero", description="Borra una cantidad específica de mensajes recientes.")
+    @moderation_group.command(name="purgarpornumero", description="Borra una cantidad específica de mensajes recientes.")
     @app_commands.describe(cantidad="Número de mensajes a eliminar")
     async def purgarpornumero(self, interaction: discord.Interaction, cantidad: int):
+        if await self.bot.filter_operators(interaction): return
         if cantidad <= 0:
             await interaction.response.send_message("Debes indicar un número mayor a 0.", ephemeral=True)
             return
@@ -177,9 +179,10 @@ class ModerationCog(commands.Cog):
         deleted = await interaction.channel.purge(limit=cantidad)
         await interaction.followup.send(f"Se han eliminado **{len(deleted)}** mensajes.", ephemeral=True)
 
-    @app_commands.command(name="purgarporintervalo", description="Borra los mensajes enviados dentro de un intervalo de segundos hacia atrás.")
+    @moderation_group.command(name="purgarporintervalo", description="Borra los mensajes enviados dentro de un intervalo de segundos hacia atrás.")
     @app_commands.describe(segundos="Intervalo en segundos (ej: 600 para borrado de los últimos 10 minutos)")
     async def purgarporintervalo(self, interaction: discord.Interaction, segundos: int):
+        if await self.bot.filter_operators(interaction): return
         if segundos <= 0:
             await interaction.response.send_message("El intervalo debe ser mayor a 0 segundos.", ephemeral=True)
             return
