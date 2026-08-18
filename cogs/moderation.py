@@ -138,13 +138,13 @@ class ModerationCog(commands.Cog):
         grace_seconds = self.bot.config.get_float("death_grace_seconds", fallback=60)
         duration = datetime.timedelta(seconds=grace_seconds)
         unban_deadline = datetime.datetime.now(datetime.timezone.utc) + duration
+        
+        admin_channel_id = int(self.bot.config.get("admin_channel_id"))
+        admin_channel = message.guild.get_channel(admin_channel_id)
 
         try:
             await message.author.timeout(duration, reason=f"Escribir en canal de muerte. Tienes {grace_seconds} segundos para contactar a un mod si esto fue por error antes de ser baneado")
             await message.delete()
-
-            admin_channel_id = int(self.bot.config.get("admin_channel_id"))
-            admin_channel = message.guild.get_channel(admin_channel_id)
 
             if admin_channel:
                 rel_time = discord.utils.format_dt(unban_deadline, style="R")
@@ -163,6 +163,9 @@ class ModerationCog(commands.Cog):
 
         except discord.Forbidden:
             print(f"Error de permisos: No se pudo silenciar/banear a {message.author}.")
+            await message.author.kick(reason="Escribir en canal de muerte. Debido a falta de permisos en vez de mutearte se te ha kickeado")
+            if admin_channel:
+                await admin_channel.send(f"El usuario **{member}** ({member.mention}) ha sido kickeado automáticamente porque Jose Luis no tiene permisos suficientes para mutear o banear.")
         except discord.NotFound:
             print(f"El usuario {message.author} ya no se encuentra en el servidor.")
 
