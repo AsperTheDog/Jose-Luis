@@ -12,11 +12,11 @@ from typing import Optional
 from main import JoseLuisBot
 
 SYMBOLS = {
-    "🍒": {"weight": 40, "payout_3": 3, "payout_2": 1.5},
-    "🍋": {"weight": 30, "payout_3": 5, "payout_2": 2},
-    "🔔": {"weight": 15, "payout_3": 10, "payout_2": 3},
-    "💎": {"weight": 10, "payout_3": 25, "payout_2": 5},
-    "7️⃣": {"weight": 5,  "payout_3": 100, "payout_2": 10},
+    "🍒": {"weight": 45, "payout_3": 3.0, "payout_2": 0.5},
+    "🍋": {"weight": 28, "payout_3": 5.0, "payout_2": 0.8},
+    "🔔": {"weight": 15, "payout_3": 12.0, "payout_2": 1.2},
+    "💎": {"weight": 8,  "payout_3": 30.0, "payout_2": 2.0},
+    "7️⃣": {"weight": 4,  "payout_3": 100.0, "payout_2": 4.0},
 }
 
 class DropView(discord.ui.View):
@@ -758,43 +758,37 @@ class EconomyCog(commands.Cog):
 
         user_id = interaction.user.id
 
+        reel1 = self._get_random_symbol()
+        reel2 = self._get_random_symbol()
+        reel3 = self._get_random_symbol()
+
+        multiplier = 0.0
+        if reel1 == reel2 == reel3:
+            multiplier = SYMBOLS[reel1]["payout_3"]
+        elif reel1 == reel2 or reel1 == reel3:
+            multiplier = SYMBOLS[reel1]["payout_2"]
+        elif reel2 == reel3:
+            multiplier = SYMBOLS[reel2]["payout_2"]
+
+        winnings = int(apuesta * multiplier)
+        net_change = winnings - apuesta  # Net balance shift
+
         with sqlite3.connect("bot_data.db") as conn:
             cursor = conn.cursor()
-            cursor.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, balance INTEGER DEFAULT 1000)")
             cursor.execute("SELECT balance FROM economy_users WHERE user_id = ?", (user_id,))
             row = cursor.fetchone()
 
-            balance = row[0] if row else 1000
             if not row:
+                balance = 1000
                 cursor.execute("INSERT INTO economy_users (user_id, balance) VALUES (?, ?)", (user_id, balance))
+            else:
+                balance = row[0]
 
             if balance < apuesta:
                 await interaction.response.send_message(f"No tienes suficientes monedas. Saldo actual: {balance}", ephemeral=True)
                 return
 
-            # Deduct bet
-            cursor.execute("UPDATE economy_users SET balance = balance - ? WHERE user_id = ?", (apuesta, user_id))
-            conn.commit()
-
-        # Spin the reels
-        reel1 = self._get_random_symbol()
-        reel2 = self._get_random_symbol()
-        reel3 = self._get_random_symbol()
-
-        multiplier = 0
-        if reel1 == reel2 == reel3:
-            multiplier = SYMBOLS[reel1]["payout_3"]
-        elif reel1 == reel2 or reel2 == reel3 or reel1 == reel3:
-            match_symbol = reel2 if reel2 in (reel1, reel3) else reel1
-            multiplier = SYMBOLS[match_symbol]["payout_2"]
-
-        winnings = int(apuesta * multiplier)
-        net_profit = winnings - apuesta
-
-        with sqlite3.connect("bot_data.db") as conn:
-            cursor = conn.cursor()
-            if winnings > 0:
-                cursor.execute("UPDATE economy_users SET balance = balance + ? WHERE user_id = ?", (winnings, user_id))
+            cursor.execute("UPDATE economy_users SET balance = balance + ? WHERE user_id = ?", (net_change, user_id))
             conn.commit()
 
         reels_display = f"| {reel1} | {reel2} | {reel3} |"
@@ -803,7 +797,10 @@ class EconomyCog(commands.Cog):
         else:
             result_text = "❌ Has perdido tu apuesta."
 
-        embed = discord.Embed(title="🎰 Tragaperras 🎰", color=discord.Color.gold() if winnings > 0 else discord.Color.red())
+        embed = discord.Embed(
+            title="🎰 Tragaperras 🎰",
+            color=discord.Color.gold() if winnings > 0 else discord.Color.red()
+        )
         embed.add_field(name="Rodillos", value=f"```\n{reels_display}\n```", inline=False)
         embed.add_field(name="Resultado", value=result_text, inline=False)
 
