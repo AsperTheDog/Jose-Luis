@@ -4,7 +4,7 @@
         "emoji": "🎥",
         "desc": "Dependes del hype y del chat. Tienes probabilidad de recibir 'donaciones' adicionales en los drops.",
         "perks": {
-            "drop_boost": 0.2
+            "drop_boost": 1.0
         }
     },
     "empleado_banca": {
@@ -39,7 +39,7 @@
         "perks": {
             "crime_success_rate": 0.30,
             "crime_payout_boost": 0.20,
-            "jail_bonus": 1.0
+            "jail_bonus": -0.5
         }
     },
     "propietario_local": {

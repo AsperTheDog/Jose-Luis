@@ -1,7 +1,8 @@
 import json
 import os
+import random
 import sqlite3
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import discord
 from discord.ext import commands
@@ -90,23 +91,56 @@ class JoseLuisBot(commands.Bot):
         job = self.get_user_active_job(user_id)
         if job is None:
             return default
-        return self.get_job_perk(job, perk_name, default)
+        return self.get_job_perk(job, perk_name, default, user_id)
 
-    def get_job_perk(self, user_job_id: str, perk_name: str, default: float) -> float:
-        perks = self.job_registry[user_job_id].get("perks", {})
+    def get_job_perk(self, user_job_id: str, perk_name: str, default: float, user_id: Optional[int] = None) -> float:
+        def calc_level(job_level: float, val: float) -> float:
+            if val < 0.0:
+                return max((-val) * 0.2, (-val) - (-val) * 0.05 * job_level)
+            return val + val * 0.1 * job_level
 
-        if perk_name not in perks:
-            return default
+        level = 1.0
+        if user_id:
+            with sqlite3.connect("bot_data.db") as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT level FROM economy_jobs WHERE user_id = ? AND job_id = ?",
+                               (user_id, user_job_id))
+                row = cursor.fetchone()
+                if row and row[0] is not None:
+                    level = float(row[0])
 
-        val = perks[perk_name]
+        perks = self.job_registry.get(user_job_id, {}).get("perks", {})
+        raw_val = perks.get(perk_name)
 
-        if val is not None:
+        if raw_val is not None:
             try:
-                return float(val)
+                return calc_level(level, float(raw_val))
             except (ValueError, TypeError):
-                return default
+                pass
 
-        return default
+        return calc_level(level, default)
+
+    @staticmethod
+    def get_random_phrase(category: str, tag: str = None) -> str:
+        with sqlite3.connect("bot_data.db") as conn:
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT phrase FROM economy_phrases WHERE category = ? AND (tag IS NULL OR tag = '') ORDER BY RANDOM() LIMIT 1", (category,))
+            no_tag_row = cursor.fetchone()
+            no_tag_phrase = no_tag_row[0] if no_tag_row else None
+
+            phrases = [no_tag_phrase]
+
+            if tag:
+                cursor.execute("SELECT phrase FROM economy_phrases WHERE category = ? AND tag = ? ORDER BY RANDOM() LIMIT 1", (category, tag))
+                tagged_row = cursor.fetchone()
+                if tagged_row:
+                    phrases.append(tagged_row[0])
+
+            choice = random.choice(phrases)
+            if choice is None:
+                return ""
+            return choice + "\n"
 
 if __name__ == "__main__":
     twitchClient = os.getenv("TWITCH_CLIENT")
