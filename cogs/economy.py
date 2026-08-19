@@ -169,7 +169,7 @@ class EconomyCog(commands.Cog):
         with sqlite3.connect(self.db_path) as conn:
             c = conn.cursor()
             self._ensure_user(c, user_id)
-            c.execute("UPDATE economy_users SET balance = balance + ? WHERE user_id = ?", (amount, user_id))
+            c.execute("UPDATE economy_users SET balance = MAX(0, balance + ?) WHERE user_id = ?", (amount, user_id))
 
     def _get_user_data(self, user_id: int) -> dict:
         with sqlite3.connect(self.db_path) as conn:
@@ -337,7 +337,7 @@ class EconomyCog(commands.Cog):
 
         with sqlite3.connect(self.db_path) as conn:
             c = conn.cursor()
-            c.execute("UPDATE economy_users SET balance = balance + ?, last_work = ? WHERE user_id = ?", (salary, now.isoformat(), interaction.user.id))
+            c.execute("UPDATE economy_users SET balance = MAX(0, balance + ?), last_work = ? WHERE user_id = ?", (salary, now.isoformat(), interaction.user.id))
             c.execute("INSERT OR REPLACE INTO economy_jobs (user_id, job_id, level, xp) VALUES (?, ?, ?, ?)", (interaction.user.id, active_job, level, new_xp))
             conn.commit()
 
@@ -380,7 +380,7 @@ class EconomyCog(commands.Cog):
 
         with sqlite3.connect(self.db_path) as conn:
             c = conn.cursor()
-            c.execute("UPDATE economy_users SET balance = balance + ?, daily_streak = ?, last_daily = ? WHERE user_id = ?", (final_paga, streak + 1, now.isoformat(), interaction.user.id))
+            c.execute("UPDATE economy_users SET balance = MAX(0, balance + ?), daily_streak = ?, last_daily = ? WHERE user_id = ?", (final_paga, streak + 1, now.isoformat(), interaction.user.id))
             conn.commit()
 
         phrase = self.bot.get_random_phrase("allowance", "success")
@@ -602,7 +602,7 @@ class EconomyCog(commands.Cog):
 
             with sqlite3.connect(self.db_path) as conn:
                 c = conn.cursor()
-                c.execute("UPDATE economy_users SET balance = balance + ?, crime_streak = crime_streak + 1 WHERE user_id = ?", (reward, interaction.user.id))
+                c.execute("UPDATE economy_users SET balance = MAX(0, balance + ?), crime_streak = crime_streak + 1 WHERE user_id = ?", (reward, interaction.user.id))
                 conn.commit()
 
             phrase = self.bot.get_random_phrase("crime_success", job)
@@ -615,7 +615,7 @@ class EconomyCog(commands.Cog):
 
             with sqlite3.connect(self.db_path) as conn:
                 c = conn.cursor()
-                c.execute("UPDATE economy_users SET balance = balance - ?, crime_streak = 0, jail_until = ? WHERE user_id = ?", (penalty, jail_until_str, interaction.user.id))
+                c.execute("UPDATE economy_users SET balance = MAX(0, balance + ?), crime_streak = 0, jail_until = ? WHERE user_id = ?", (penalty, jail_until_str, interaction.user.id))
                 conn.commit()
 
             phrase = self.bot.get_random_phrase("crime_fail", job)
@@ -672,8 +672,8 @@ class EconomyCog(commands.Cog):
         with sqlite3.connect(self.db_path) as conn:
             c = conn.cursor()
             self._ensure_user(c, destinatario.id)
-            c.execute("UPDATE economy_users SET balance = balance - ? WHERE user_id = ?",(cantidad, interaction.user.id))
-            c.execute("UPDATE economy_users SET balance = balance + ? WHERE user_id = ?", (cantidad, destinatario.id))
+            c.execute("UPDATE economy_users SET balance = MAX(0, balance - ?) WHERE user_id = ?",(cantidad, interaction.user.id))
+            c.execute("UPDATE economy_users SET balance = MAX(0, balance + ?) WHERE user_id = ?", (cantidad, destinatario.id))
             conn.commit()
 
         phrase = self.bot.get_random_phrase("pay_success")
@@ -722,7 +722,7 @@ class EconomyCog(commands.Cog):
 
             new_balance = row["balance"] + unclaimed
 
-            cursor.execute("UPDATE economy_users SET balance = ?, unclaimed_interest = 0 WHERE user_id = ?", (new_balance, user_id)
+            cursor.execute("UPDATE economy_users SET balance = MAX(0, ?), unclaimed_interest = 0 WHERE user_id = ?", (new_balance, user_id)
             )
             conn.commit()
 
@@ -788,7 +788,7 @@ class EconomyCog(commands.Cog):
                 await interaction.response.send_message(f"No tienes suficientes monedas. Saldo actual: {balance}", ephemeral=True)
                 return
 
-            cursor.execute("UPDATE economy_users SET balance = balance + ? WHERE user_id = ?", (net_change, user_id))
+            cursor.execute("UPDATE economy_users SET balance = MAX(0, balance + ?) WHERE user_id = ?", (net_change, user_id))
             conn.commit()
 
         reels_display = f"| {reel1} | {reel2} | {reel3} |"
