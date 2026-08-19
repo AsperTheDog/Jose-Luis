@@ -241,7 +241,7 @@ class EconomyCog(commands.Cog):
         embed.add_field(name="💼 Carrera Profesional", value=trabajo_val, inline=True)
         embed.add_field(name="⚖️ Situación Legal", value=estado_legal, inline=True)
         embed.add_field(name="🔥 Rachas Activas", value=f"📆 *Paga Diaria:* {user_data['daily_streak']} días\n🥷 *Racha Criminal:* {user_data['crime_streak']} éxitos", inline=False)
-        phrase = self.bot.get_random_phrase("profile", "quote")
+        phrase = self.bot.get_random_phrase("profile", "quote", False)
         embed.set_footer(text=f"'{phrase}' - {target_user.display_name}")
         await interaction.followup.send(embed=embed)
 
@@ -808,7 +808,7 @@ class EconomyCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        if message.author.bot or not self.bot.is_channel_whitelisted(message.channel.id):
+        if message.author.bot or not self.bot.is_channel_whitelisted(message.guild.id, message.channel.id):
             return
 
         channel_id = message.channel.id

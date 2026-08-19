@@ -65,8 +65,8 @@ class JoseLuisBot(commands.Bot):
             return True
         return False
 
-    def is_channel_whitelisted(self, channel_id):
-        return self.config.is_channel_whitelisted(channel_id)
+    def is_channel_whitelisted(self, guild_id, channel_id):
+        return self.config.is_channel_whitelisted(guild_id, channel_id)
 
     @staticmethod
     def _load_json(path: str) -> Any:
@@ -121,7 +121,7 @@ class JoseLuisBot(commands.Bot):
         return calc_level(level, default)
 
     @staticmethod
-    def get_random_phrase(category: str, tag: str = None) -> str:
+    def get_random_phrase(category: str, tag: Optional[str] = None, add_enter: bool = True) -> str:
         with sqlite3.connect("bot_data.db") as conn:
             cursor = conn.cursor()
 
@@ -135,12 +135,14 @@ class JoseLuisBot(commands.Bot):
                 cursor.execute("SELECT phrase FROM economy_phrases WHERE category = ? AND tag = ? ORDER BY RANDOM() LIMIT 1", (category, tag))
                 tagged_row = cursor.fetchone()
                 if tagged_row:
+                    if no_tag_phrase is None:
+                        return tagged_row[0]
                     phrases.append(tagged_row[0])
 
             choice = random.choice(phrases)
             if choice is None:
                 return ""
-            return choice + "\n"
+            return choice + ("\n" if add_enter else "")
 
 if __name__ == "__main__":
     twitchClient = os.getenv("TWITCH_CLIENT")
