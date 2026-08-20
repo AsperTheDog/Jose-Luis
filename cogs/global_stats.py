@@ -45,7 +45,7 @@ class GlobalStatsCog(commands.Cog):
         embed.add_field(
             name="🔴 Ruleta",
             value=(
-                f"**Seguimiento:** {r_win}W / {r_loss}L\n"
+                f"**Vi/De:** {r_win} / {r_loss}\n"
                 f"**Obtenido:** ${r_gained:,}\n"
                 f"**Perdido:** ${r_lost:,}\n"
                 f"**Beneficios:** ${(r_gained - r_lost):,}\n"
@@ -62,7 +62,7 @@ class GlobalStatsCog(commands.Cog):
         embed.add_field(
             name="🎲 Dados",
             value=(
-                f"**Seguimiento:** {d_win}W / {d_loss}L\n"
+                f"**Vi/De:** {d_win} / {d_loss}\n"
                 f"**Obtenido:** ${d_gained:,}\n"
                 f"**Perdido:** ${d_lost:,}\n"
                 f"**Beneficios:** ${(d_gained - d_lost):,}\n"
@@ -79,7 +79,7 @@ class GlobalStatsCog(commands.Cog):
         embed.add_field(
             name="🎰 Tragaperras",
             value=(
-                f"**Seguimiento:** {s_win}W / {s_loss}L\n"
+                f"**Vi/De:** {s_win} / {s_loss}\n"
                 f"**Obtenido:** ${s_gained:,}\n"
                 f"**Perdido:** ${s_lost:,}\n"
                 f"**Beneficios:** ${(s_gained - s_lost):,}\n"
