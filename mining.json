@@ -1,0 +1,193 @@
+{
+  "levels": {
+    "superficie": {
+      "name": "Superficie",
+      "hardness": 5,
+      "energy_cost": 10,
+      "drops": [
+        "piedra_bruta",
+        "hierro"
+      ]
+    },
+    "cavernas": {
+      "name": "Cavernas Profundas",
+      "hardness": 15,
+      "energy_cost": 20,
+      "drops": [
+        "carbon",
+        "plata"
+      ]
+    },
+    "profundidades": {
+      "name": "Manto Profundo",
+      "hardness": 40,
+      "energy_cost": 25,
+      "drops": [
+        "oro",
+        "diamante_bruto"
+      ]
+    },
+    "nucleo": {
+      "name": "Núcleo del Planeta",
+      "hardness": 60,
+      "energy_cost": 50,
+      "drops": [
+        "obsidiana",
+        "pavonita"
+      ]
+    }
+  },
+  "pickaxes": {
+    "pico_piedra": {
+      "name": "Pico de Piedra",
+      "efficiency": 10,
+      "max_durability": 25,
+      "emoji": "🪨"
+    },
+    "pico_hierro": {
+      "name": "Pico de Hierro",
+      "efficiency": 25,
+      "max_durability": 50,
+      "emoji": "⚙️"
+    },
+    "pico_acero": {
+      "name": "Pico de Acero",
+      "efficiency": 50,
+      "max_durability": 100,
+      "emoji": "🔩"
+    },
+    "pico_diamante": {
+      "name": "Pico de Diamante",
+      "efficiency": 100,
+      "max_durability": 300,
+      "emoji": "💎"
+    }
+  },
+  "materials": {
+    "piedra_bruta": {
+      "name": "Piedra Bruta",
+      "emoji": "🪨"
+    },
+    "carbon": {
+      "name": "Carbón",
+      "emoji": "⬛"
+    },
+    "hierro": {
+      "name": "Mineral de Hierro",
+      "emoji": "🟤"
+    },
+    "plata": {
+      "name": "Mineral de Plata",
+      "emoji": "⚪"
+    },
+    "oro": {
+      "name": "Mineral de Oro",
+      "emoji": "🟡"
+    },
+    "diamante_bruto": {
+      "name": "Diamante Bruto",
+      "emoji": "💠"
+    },
+    "obsidiana": {
+      "name": "Obsidiana",
+      "emoji": "🖤"
+    },
+    "pavonita": {
+      "name": "Pavonita",
+      "emoji": "🦚"
+    }
+  },
+  "valuables": {
+    "estatua_piedra": {
+      "name": "Estatua de Piedra",
+      "value": 50,
+      "emoji": "🗿"
+    },
+    "lingote_hierro": {
+      "name": "Lingote de Hierro",
+      "value": 150,
+      "emoji": "🪙"
+    },
+    "anillo_plata": {
+      "name": "Anillo de Plata",
+      "value": 250,
+      "emoji": "💍"
+    },
+    "corona_oro": {
+      "name": "Corona de Oro",
+      "value": 900,
+      "emoji": "👑"
+    },
+    "cristal_mistico": {
+      "name": "Cristal Místico",
+      "value": 2400,
+      "emoji": "🔮"
+    }
+  },
+  "recipes": {
+    "estatua_piedra": {
+      "type": "valuable",
+      "result": "estatua_piedra",
+      "ingredients": {
+        "piedra_bruta": 10
+      }
+    },
+    "lingote_hierro": {
+      "type": "valuable",
+      "result": "lingote_hierro",
+      "ingredients": {
+        "hierro": 5,
+        "carbon": 2
+      }
+    },
+    "anillo_plata": {
+      "type": "valuable",
+      "result": "anillo_plata",
+      "ingredients": {
+        "plata": 8,
+        "carbon": 3
+      }
+    },
+    "corona_oro": {
+      "type": "valuable",
+      "result": "corona_oro",
+      "ingredients": {
+        "oro": 10,
+        "diamante_bruto": 1
+      }
+    },
+    "cristal_mistico": {
+      "type": "valuable",
+      "result": "cristal_mistico",
+      "ingredients": {
+        "obsidiana": 10,
+        "pavonita": 5,
+        "diamante_bruto": 2
+      }
+    },
+    "craft_pico_hierro": {
+      "type": "pickaxe",
+      "result": "pico_hierro",
+      "ingredients": {
+        "piedra_bruta": 20,
+        "hierro": 10
+      }
+    },
+    "craft_pico_acero": {
+      "type": "pickaxe",
+      "result": "pico_acero",
+      "ingredients": {
+        "hierro": 30,
+        "carbon": 15
+      }
+    },
+    "craft_pico_diamante": {
+      "type": "pickaxe",
+      "result": "pico_diamante",
+      "ingredients": {
+        "oro": 20,
+        "diamante_bruto": 5
+      }
+    }
+  }
+}

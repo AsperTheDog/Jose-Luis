@@ -9,6 +9,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 from config import GuildConfigManager
+from stats import StatsTracker
 
 load_dotenv()
 
@@ -28,7 +29,8 @@ class JoseLuisBot(commands.Bot):
         self.twitchSecret = twitchSecret
 
         self.job_registry: Dict[str, Dict[str, Any]] = self._load_json("jobs.json")
-        self.trivia_questions: List[Dict[str, Any]] = self._load_json("trivia.json")
+
+        self.global_stats = StatsTracker()
 
     async def setup_hook(self) -> None:
         for filename in os.listdir("./cogs"):

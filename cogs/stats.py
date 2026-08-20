@@ -11,8 +11,8 @@ EMOJI_REGEX = re.compile(r"<a?:[a-zA-Z0-9_]+:[0-9]+>|[\U00010000-\U0010ffff]")
 
 class StatsCog(commands.Cog):
     stats_group = app_commands.Group(
-        name="estadísticas",
-        description="Comandos para mirar las estadísticas de jugadores y los rankings"
+        name="actividad",
+        description="Comandos para mirar las estadísticas de actividad de los jugadores y sus rankings"
     )
 
     def __init__(self, bot: commands.Bot):
