@@ -34,7 +34,6 @@ class AscensorView(discord.ui.View):
         self.add_item(self.select)
 
     async def select_callback(self, interaction: discord.Interaction):
-        await interaction.response.defer()
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("Estos botones no son para ti.", ephemeral=True)
             return
@@ -45,7 +44,7 @@ class AscensorView(discord.ui.View):
             cursor.execute("UPDATE mining_users SET current_depth_id = ? WHERE user_id = ?", (selected_level, self.user_id))
             conn.commit()
 
-        await interaction.followup.send(content=f"🛗 El ascensor te ha llevado a: **{selected_level}**", view=None)
+        await interaction.response.send_message(content=f"🛗 El ascensor te ha llevado a: **{selected_level}**", view=None)
 
 
 class MiningSystemCog(commands.Cog):
