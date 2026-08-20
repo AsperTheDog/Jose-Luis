@@ -570,7 +570,7 @@ class EconomyCog(commands.Cog):
 
             with sqlite3.connect(self.db_path) as conn:
                 c = conn.cursor()
-                c.execute("UPDATE economy_users SET balance = MAX(0, balance + ?), crime_streak = 0, jail_until = ? WHERE user_id = ?", (penalty, jail_until_str, interaction.user.id))
+                c.execute("UPDATE economy_users SET balance = MAX(0, balance - ?), crime_streak = 0, jail_until = ? WHERE user_id = ?", (penalty, jail_until_str, interaction.user.id))
                 conn.commit()
             self.bot.global_stats.register_jail_sentence(interaction.user.id, penalty)
 
