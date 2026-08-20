@@ -49,6 +49,7 @@ class MiningSystemCog(commands.Cog):
     def __init__(self, bot: JoseLuisBot):
         self.bot = bot
         self.active_miners = set()
+        self.daily_reset_task.start()
 
         with open(JSON_PATH, "r", encoding="utf-8") as f:
             self.game_data = json.load(f)
