@@ -164,13 +164,14 @@ class MiningSystemCog(commands.Cog):
             new_durability = durability - 1
             durability_msg = f"Durabilidad pico: {new_durability}/{pickaxe_data['max_durability']}"
 
+            pick_was_broken = False
             async with aiosqlite.connect(DB_PATH, timeout=30.0) as db:
                 await db.execute("UPDATE mining_users SET energy = energy - ? WHERE user_id = ?", (energy_cost, user_id))
 
                 if new_durability <= 0:
                     await db.execute("DELETE FROM mining_inv_pickaxes WHERE id = ?", (db_pick_id,))
                     durability_msg = f"💥 **¡Tu {pickaxe_data['name']} se ha roto!**"
-                    self.bot.global_stats.register_pickaxe_broken(interaction.user.id)
+                    pick_was_broken = True
                 else:
                     await db.execute("UPDATE mining_inv_pickaxes SET durability = ? WHERE id = ?",(new_durability, db_pick_id),)
 
@@ -191,6 +192,9 @@ class MiningSystemCog(commands.Cog):
                     await db.execute("UPDATE mining_users SET xp = ? WHERE user_id = ?", (new_xp, user_id))
 
                 await db.commit()
+            self.bot.global_stats.register_mine_action(interaction.user.id, energy_cost, total_yield)
+            if pick_was_broken:
+                self.bot.global_stats.register_pickaxe_broken(interaction.user.id)
 
             hit_1 = total_yield // 3
             hit_2 = total_yield // 3
@@ -222,7 +226,6 @@ class MiningSystemCog(commands.Cog):
                 )
                 await interaction.edit_original_response(embed=embed)
 
-            self.bot.global_stats.register_mine_action(interaction.user.id, energy_cost, total_yield)
             final_embed = discord.Embed(
                 title="✅ ¡Extracción Completada!",
                 description=(
