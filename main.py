@@ -97,6 +97,8 @@ class JoseLuisBot(commands.Bot):
 
     def get_job_perk(self, user_job_id: str, perk_name: str, default: float, user_id: Optional[int] = None) -> float:
         def calc_level(job_level: float, val: float) -> float:
+            if perk_name == "job_penalty":
+                return val
             if val < 0.0:
                 return max((-val) * 0.2, (-val) - (-val) * 0.05 * job_level)
             return val + val * 0.1 * job_level
