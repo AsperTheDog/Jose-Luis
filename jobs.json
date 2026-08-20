@@ -28,8 +28,8 @@
         "emoji": "🛵",
         "desc": "Pagas constantes pero ajustadas. Tienes un cooldown de /work muy corto, premiando la constancia sobre el azar.",
         "perks": {
-            "work_cooldown_seconds": 36000,
-            "flat_work_bonus": 50
+            "work_cooldown_seconds": 14400,
+            "flat_work_bonus": 100
         }
     },
     "mafia_boss": {

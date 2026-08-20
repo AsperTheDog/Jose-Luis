@@ -253,12 +253,12 @@ class EconomyCog(commands.Cog):
             last_work = datetime.datetime.fromisoformat(user_data['last_work'])
             reduction = self.bot.get_user_job_perk(interaction.user.id, "cooldown_reduction_pct", 0.0)
             reduction_flat = self.bot.get_user_job_perk(interaction.user.id, "work_cooldown_seconds", 0.0)
-            if now < last_work + datetime.timedelta(hours=24 * (1.0 - reduction)):
-                time_cooldown = datetime.timedelta(hours=24 * (1.0 - reduction)) - datetime.timedelta(seconds=reduction_flat)
+            if now < last_work + datetime.timedelta(hours=12 * (1.0 - reduction)):
+                time_cooldown = datetime.timedelta(hours=12 * (1.0 - reduction)) - datetime.timedelta(seconds=reduction_flat)
                 time_left = (last_work + time_cooldown) - now
                 text = f"Ya has trabajado hoy. Vuelve en **{time_left.seconds // 3600}h {(time_left.seconds // 60) % 60}m**."
                 if reduction > 0.0:
-                    time_reduced = datetime.timedelta(hours=24 - 24 * (1.0 - reduction)) + datetime.timedelta(seconds=reduction_flat)
+                    time_reduced = datetime.timedelta(hours=12 - 12 * (1.0 - reduction)) + datetime.timedelta(seconds=reduction_flat)
                     text += f" (-{time_reduced.seconds // 3600}h {(time_reduced.seconds // 60) % 60}m!)"
                 await interaction.followup.send(content=text)
                 return
