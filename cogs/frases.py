@@ -8,7 +8,7 @@ from discord.ext import commands
 from main import JoseLuisBot
 
 
-class ListasCog(commands.Cog):
+class FrasesCog(commands.Cog):
     listas_group = app_commands.Group(
         name="frases_chistes",
         description="Comandos para que Jose Luis diga cosas graciosas"
@@ -16,36 +16,28 @@ class ListasCog(commands.Cog):
 
     def __init__(self, bot: JoseLuisBot):
         self.bot = bot
-        self.db_path = "bot_data.db"
-
         self._recent_history: Dict[str, List[str]] = {"frase": [], "chiste": []}
 
-        self._init_sqlite()
+    async def _add(self, category: str, content: str) -> bool:
+        content = content.strip()
+        if not content:
+            return False
+        return await self.bot.db.phrases_add_new(category, content)
 
-    def _init_sqlite(self):
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                           CREATE TABLE IF NOT EXISTS text_lists
-                           (
-                               id       INTEGER PRIMARY KEY AUTOINCREMENT,
-                               category TEXT NOT NULL,
-                               content  TEXT NOT NULL,
-                               UNIQUE (category, content)
-                           )
-                           """)
-            conn.commit()
+    async def _remove(self, category: str, content: str):
+        content = content.strip()
+        deleted = await self.bot.db.phrases_remove(category, content)
 
-    def _pick_random(self, category: str, history_ratio: float = 0.4) -> str:
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT content FROM text_lists WHERE category = ?", (category,))
-            rows = cursor.fetchall()
+        if deleted and content in self._recent_history[category]:
+            self._recent_history[category].remove(content)
 
-        if not rows:
-            return "FALLO: No hay nada aquí entre lo que elegir..."
+        return deleted
 
-        candidates = [row[0] for row in rows]
+    async def _pick_random(self, category: str, history_ratio: float = 0.4):
+        candidates = await self.bot.db.phrases_pick_random(category, history_ratio)
+        if candidates is None:
+            return "[FALLO] Aquí no hay nada entre lo que elegir..."
+
         if len(candidates) == 1:
             return candidates[0]
 
@@ -66,49 +58,15 @@ class ListasCog(commands.Cog):
 
         return chosen
 
-    def _add_item(self, category: str, content: str) -> bool:
-        content = content.strip()
-        if not content:
-            return False
-
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "INSERT INTO text_lists (category, content) VALUES (?, ?)",
-                    (category, content)
-                )
-                conn.commit()
-                return True
-        except sqlite3.IntegrityError:
-            return False
-
-    def _remove_item(self, category: str, content: str) -> bool:
-        content = content.strip()
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "DELETE FROM text_lists WHERE category = ? AND content = ?",
-                (category, content)
-            )
-            deleted = cursor.rowcount > 0
-            conn.commit()
-
-        # Si se borró, lo quitamos también del historial reciente para evitar errores
-        if deleted and content in self._recent_history[category]:
-            self._recent_history[category].remove(content)
-
-        return deleted
-
     @listas_group.command(name="frase", description="Borja di tu frase!")
     async def frase(self, interaction: discord.Interaction):
-        await interaction.response.send_message(self._pick_random("frase"))
+        await interaction.response.send_message(await self._pick_random("frase"))
 
     @listas_group.command(name="meterfrase", description="Mete una frase en la lista de frases de borja")
     async def meterfrase(self, interaction: discord.Interaction, frase: str):
         if await self.bot.filter_operators(interaction): return
 
-        if not self._add_item("frase", frase):
+        if not await self._add("frase", frase):
             await interaction.response.send_message("Esa frase ya estaba en la lista")
         else:
             await interaction.response.send_message(f"Añadida a la lista: '{frase}'")
@@ -117,7 +75,7 @@ class ListasCog(commands.Cog):
     async def quitarfrase(self, interaction: discord.Interaction, frase: str):
         if await self.bot.filter_operators(interaction): return
 
-        if not self._remove_item("frase", frase):
+        if not await self._remove("frase", frase):
             await interaction.response.send_message("Esa frase no está en la lista")
         else:
             await interaction.response.send_message(f"Eliminada de la lista: '{frase}'")
@@ -126,18 +84,17 @@ class ListasCog(commands.Cog):
     async def recargarfrases(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
         self._recent_history["frase"].clear()
-        # Se añade un mensaje de respuesta para que la interacción no de error en Discord
         await interaction.response.send_message("Historial de frases reseteado.", ephemeral=True)
 
     @listas_group.command(name="chiste", description="Cuenta un chiste")
     async def chiste(self, interaction: discord.Interaction):
-        await interaction.response.send_message(self._pick_random("chiste"))
+        await interaction.response.send_message(await self._pick_random("chiste"))
 
     @listas_group.command(name="meterchiste", description="Mete un chiste en la lista de chistes")
     async def meterchiste(self, interaction: discord.Interaction, chiste: str):
         if await self.bot.filter_operators(interaction): return
 
-        if not self._add_item("chiste", chiste):
+        if not await self._add("chiste", chiste):
             await interaction.response.send_message("Ese chiste ya estaba en la lista")
         else:
             await interaction.response.send_message(f"Añadido a la lista: '{chiste}'")
@@ -146,7 +103,7 @@ class ListasCog(commands.Cog):
     async def quitarchiste(self, interaction: discord.Interaction, chiste: str):
         if await self.bot.filter_operators(interaction): return
 
-        if not self._remove_item("chiste", chiste):
+        if not await self._remove("chiste", chiste):
             await interaction.response.send_message("Ese chiste no está en la lista")
         else:
             await interaction.response.send_message(f"Eliminado de la lista: '{chiste}'")
@@ -159,4 +116,4 @@ class ListasCog(commands.Cog):
 
 
 async def setup(bot: JoseLuisBot):
-    await bot.add_cog(ListasCog(bot))
+    await bot.add_cog(FrasesCog(bot))

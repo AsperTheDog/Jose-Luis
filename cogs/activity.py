@@ -6,6 +6,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from main import JoseLuisBot
+
 EMOJI_REGEX = re.compile(r"<a?:[a-zA-Z0-9_]+:[0-9]+>|[\U00010000-\U0010ffff]")
 
 
@@ -15,55 +17,8 @@ class StatsCog(commands.Cog):
         description="Comandos para mirar las estadísticas de actividad de los jugadores y sus rankings"
     )
 
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: JoseLuisBot):
         self.bot = bot
-        self.db_path = "bot_data.db"
-        self._init_db()
-
-    def _init_db(self):
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS user_stats (
-                    guild_id INTEGER NOT NULL,
-                    user_id INTEGER NOT NULL,
-                    messages INTEGER DEFAULT 0,
-                    xp INTEGER DEFAULT 0,
-                    words INTEGER DEFAULT 0,
-                    chars INTEGER DEFAULT 0,
-                    attachments INTEGER DEFAULT 0,
-                    emojis INTEGER DEFAULT 0,
-                    PRIMARY KEY (guild_id, user_id)
-                )
-            """)
-            conn.commit()
-
-    async def _db_execute(self, query: str, params: tuple = ()) -> None:
-        def query_runner():
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(query, params)
-                conn.commit()
-
-        await asyncio.to_thread(query_runner)
-
-    async def _db_fetchone(self, query: str, params: tuple = ()) -> Optional[tuple]:
-        def query_runner():
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(query, params)
-                return cursor.fetchone()
-
-        return await asyncio.to_thread(query_runner)
-
-    async def _db_fetchall(self, query: str, params: tuple = ()) -> list:
-        def query_runner():
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(query, params)
-                return cursor.fetchall()
-
-        return await asyncio.to_thread(query_runner)
 
     @staticmethod
     def calculate_level_and_progress(xp: int) -> Tuple[int, int, int]:
@@ -79,9 +34,6 @@ class StatsCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        if not message.guild:
-            return
-
         content = message.content or ""
         word_count = len(content.split())
         char_count = len(content)
@@ -89,39 +41,14 @@ class StatsCog(commands.Cog):
         emoji_count = len(EMOJI_REGEX.findall(content))
 
         xp_gained = 10 + min(word_count, 25)
-
-        query = """
-            INSERT INTO user_stats (guild_id, user_id, messages, xp, words, chars, attachments, emojis)
-            VALUES (?, ?, 1, ?, ?, ?, ?, ?)
-            ON CONFLICT(guild_id, user_id) DO UPDATE SET
-                messages = messages + 1,
-                xp = xp + excluded.xp,
-                words = words + excluded.words,
-                chars = chars + excluded.chars,
-                attachments = attachments + excluded.attachments,
-                emojis = emojis + excluded.emojis
-        """
-        params = (
-            message.guild.id,
-            message.author.id,
-            xp_gained,
-            word_count,
-            char_count,
-            attachment_count,
-            emoji_count,
-        )
-        await self._db_execute(query, params)
+        await self.bot.db.activity_update_user_stats(message.guild.id, message.author.id, xp_gained, word_count, char_count, attachment_count, emoji_count)
 
     @stats_group.command(name="stats", description="Muestra las estadísticas de un usuario")
     @app_commands.describe(user="Usuario a consultar (por defecto tú)")
     async def stats(self, interaction: discord.Interaction, user: Optional[discord.User] = None):
         target = user or interaction.user
 
-        row = await self._db_fetchone(
-            "SELECT messages, xp, words, chars, attachments, emojis FROM user_stats WHERE guild_id = ? AND user_id = ?",
-            (interaction.guild_id, target.id),
-        )
-
+        row = await self.bot.db.activity_get_user_stats(interaction.guild, interaction.user)
         if not row:
             await interaction.response.send_message(f"**{target.display_name}** aún no tiene estadísticas registradas.", ephemeral=True)
             return
@@ -175,13 +102,7 @@ class StatsCog(commands.Cog):
             "attachments": "Archivos Adjuntos",
         }
 
-        query = f"""
-            SELECT user_id, {category}, xp FROM user_stats
-            WHERE guild_id = ?
-            ORDER BY {category} DESC
-            LIMIT 10
-        """
-        rows = await self._db_fetchall(query, (interaction.guild_id,))
+        rows = await self.bot.db.activity_get_top_users_by_category(interaction.guild, category)
 
         if not rows:
             await interaction.response.send_message("Aún no hay datos para el leaderboard.", ephemeral=True)
@@ -210,5 +131,5 @@ class StatsCog(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: JoseLuisBot):
     await bot.add_cog(StatsCog(bot))

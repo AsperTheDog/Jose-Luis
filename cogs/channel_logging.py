@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Callable, Dict
 import discord
 from discord import app_commands, DMChannel
 from discord.ext import commands
@@ -15,13 +15,12 @@ class LoggingCog(commands.Cog):
     def __init__(self, bot: JoseLuisBot):
         self.bot = bot
 
-    def _get_log_channel(self, guild: discord.Guild, category: str) -> Optional[discord.TextChannel]:
-        log_channel_id = self.bot.config.get_log_channel_id(guild.id)
+    async def _get_log_channel(self, guild: discord.Guild, category: str) -> Optional[discord.TextChannel]:
+        log_channel_id = await self.bot.config.get_log_channel_id(guild.id)
         if not log_channel_id:
             return None
 
-        # Check category event toggles
-        category_map = {
+        category_map: Dict[str, Callable[[int], bool]] = {
             "messages": self.bot.config.get_event_mensajes,
             "mensajes": self.bot.config.get_event_mensajes,
             "members": self.bot.config.get_event_miembros,
@@ -36,7 +35,7 @@ class LoggingCog(commands.Cog):
         if checker and not checker(guild.id):
             return None
 
-        return guild.get_channel(log_channel_id)
+        return await guild.fetch_channel(log_channel_id)
 
     @logging_group.command(name="activarlog", description="Pone el canal actual como canal de logs")
     async def set_log_channel(self, interaction: discord.Interaction):
@@ -65,14 +64,7 @@ class LoggingCog(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @logging_group.command(name="configurarlog", description="Configura los eventos que se van a logear")
-    async def toggle_log_events(
-        self,
-        interaction: discord.Interaction,
-        messages: bool = True,
-        members: bool = True,
-        moderation: bool = True,
-        channels: bool = True
-    ):
+    async def toggle_log_events(self, interaction: discord.Interaction, messages: bool = True, members: bool = True, moderation: bool = True, channels: bool = True):
         if await self.bot.filter_operators(interaction): return
 
         guild_id = interaction.guild.id
@@ -94,16 +86,12 @@ class LoggingCog(commands.Cog):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    # =========================================================================
-    # LISTENERS
-    # =========================================================================
-
     @commands.Cog.listener()
     async def on_message_delete(self, message: discord.Message):
         if not message.guild:
             return
 
-        channel = self._get_log_channel(message.guild, "messages")
+        channel = await self._get_log_channel(message.guild, "messages")
         if not channel:
             return
 
@@ -124,7 +112,7 @@ class LoggingCog(commands.Cog):
         if not before.guild or before.content == after.content:
             return
 
-        channel = self._get_log_channel(before.guild, "messages")
+        channel = await self._get_log_channel(before.guild, "messages")
         if not channel or isinstance(channel, DMChannel):
             return
 
@@ -144,7 +132,7 @@ class LoggingCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
-        channel = self._get_log_channel(member.guild, "members")
+        channel = await self._get_log_channel(member.guild, "members")
         if not channel:
             return
 
@@ -168,7 +156,7 @@ class LoggingCog(commands.Cog):
     async def on_member_remove(self, member: discord.Member):
         guild = member.guild
 
-        log_channel_mod = self._get_log_channel(guild, "moderation")
+        log_channel_mod = await self._get_log_channel(guild, "moderation")
         was_kicked = False
 
         if log_channel_mod:
@@ -191,7 +179,7 @@ class LoggingCog(commands.Cog):
                 pass
 
         if not was_kicked:
-            channel_mem = self._get_log_channel(guild, "members")
+            channel_mem = await self._get_log_channel(guild, "members")
             if channel_mem:
                 embed = discord.Embed(
                     title="Miembro se ha ido",
@@ -207,7 +195,7 @@ class LoggingCog(commands.Cog):
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         guild = before.guild
 
-        channel_mod = self._get_log_channel(guild, "moderation")
+        channel_mod = await self._get_log_channel(guild, "moderation")
         if channel_mod:
             if before.timed_out_until != after.timed_out_until:
                 embed = discord.Embed(timestamp=discord.utils.utcnow())
@@ -228,7 +216,7 @@ class LoggingCog(commands.Cog):
                 embed.set_footer(text=f"ID del usuario: {after.id}")
                 await channel_mod.send(embed=embed)
 
-        channel_mem = self._get_log_channel(guild, "members")
+        channel_mem = await self._get_log_channel(guild, "members")
         if channel_mem and before.roles != after.roles:
             added_roles = [r.mention for r in after.roles if r not in before.roles]
             removed_roles = [r.mention for r in before.roles if r not in after.roles]
@@ -249,7 +237,7 @@ class LoggingCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_ban(self, guild: discord.Guild, user: discord.User):
-        channel = self._get_log_channel(guild, "moderation")
+        channel = await self._get_log_channel(guild, "moderation")
         if not channel:
             return
 
@@ -279,7 +267,7 @@ class LoggingCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_unban(self, guild: discord.Guild, user: discord.User):
-        channel = self._get_log_channel(guild, "moderation")
+        channel = await self._get_log_channel(guild, "moderation")
         if not channel:
             return
 
@@ -295,7 +283,7 @@ class LoggingCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_channel_create(self, channel: discord.abc.GuildChannel):
-        log_chan = self._get_log_channel(channel.guild, "channels")
+        log_chan = await self._get_log_channel(channel.guild, "channels")
         if not log_chan:
             return
 
@@ -310,7 +298,7 @@ class LoggingCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel):
-        log_chan = self._get_log_channel(channel.guild, "channels")
+        log_chan = await self._get_log_channel(channel.guild, "channels")
         if not log_chan:
             return
 

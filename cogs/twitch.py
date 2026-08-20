@@ -19,9 +19,8 @@ class StreamerNotifierCog(commands.Cog):
         description="Gestión de notificaciones de directos"
     )
 
-    def __init__(self, bot: JoseLuisBot, db_path: str = "bot_data.db"):
+    def __init__(self, bot: JoseLuisBot):
         self.bot = bot
-        self.db_path = db_path
 
         self.client_id = self.bot.twitchClient
         self.client_secret = self.bot.twitchSecret
@@ -31,25 +30,6 @@ class StreamerNotifierCog(commands.Cog):
         self.session: Optional[aiohttp.ClientSession] = None
         self.ws_task: Optional[asyncio.Task] = None
         self.active_session_id: Optional[str] = None
-
-        self._init_sqlite()
-
-    def _init_sqlite(self):
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                           CREATE TABLE IF NOT EXISTS tracked_streamers
-                           (
-                               id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                               guild_id        INTEGER NOT NULL,
-                               channel_id      INTEGER NOT NULL,
-                               twitch_username TEXT    NOT NULL,
-                               kick_username   TEXT,
-                               everyone        BOOL,
-                               UNIQUE (guild_id, twitch_username)
-                           )
-                           """)
-            conn.commit()
 
     async def cog_load(self):
         self.session = aiohttp.ClientSession()
@@ -63,7 +43,7 @@ class StreamerNotifierCog(commands.Cog):
 
     async def _get_user_access_token(self) -> str:
         if not os.path.exists(self.tokens_file):
-            print(f"¡Falta {self.tokens_file}! Ejecuta el script de autorización primero.")
+            print(f"Falta {self.tokens_file}")
             return ""
 
         with open(self.tokens_file, "r") as f:
@@ -93,7 +73,7 @@ class StreamerNotifierCog(commands.Cog):
                     json.dump(new_tokens, f, indent=2)
 
                 self.access_token = new_tokens["access_token"]
-                print("Twitch User Access Token renovado con éxito.")
+                # print("Twitch User Access Token renovado con éxito.")
                 return self.access_token
             else:
                 body = await resp.text()
@@ -166,12 +146,9 @@ class StreamerNotifierCog(commands.Cog):
     async def sync_all_subscriptions(self, session_id: str):
         self.active_session_id = session_id
 
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT DISTINCT twitch_username FROM tracked_streamers")
-            rows = cursor.fetchall()
+        streamers = await self.bot.db.twitch_get_tracked_streamers()
 
-        for (twitch_user,) in rows:
+        for (twitch_user,) in streamers:
             broadcaster_id = await self._get_broadcaster_id(twitch_user)
             if broadcaster_id:
                 await self._subscribe_to_streamer(broadcaster_id, session_id)
@@ -185,7 +162,7 @@ class StreamerNotifierCog(commands.Cog):
                 await self._get_user_access_token()
 
                 async with self.session.ws_connect(self.EVENTSUB_WS_URL) as ws:
-                    print("Conectado a Twitch EventSub WebSocket")
+                    # print("Conectado a Twitch EventSub WebSocket")
 
                     async for msg in ws:
                         if msg.type == aiohttp.WSMsgType.TEXT:
@@ -194,7 +171,7 @@ class StreamerNotifierCog(commands.Cog):
 
                             if message_type == "session_welcome":
                                 session_id = data["payload"]["session"]["id"]
-                                print(f"EventSub session welcome recibido. Session ID: {session_id}")
+                                # print(f"EventSub session welcome recibido. Session ID: {session_id}")
                                 await self.sync_all_subscriptions(session_id)
 
                             elif message_type == "notification":
@@ -222,10 +199,7 @@ class StreamerNotifierCog(commands.Cog):
         twitch_user = event_data.get("broadcaster_user_login", "").lower()
         streamer_name = event_data.get("broadcaster_user_name", twitch_user)
 
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT channel_id, kick_username, everyone FROM tracked_streamers WHERE twitch_username = ?", (twitch_user,))
-            destinations = cursor.fetchall()
+        destinations = await self.bot.db.twitch_get_streamer_destinations(twitch_user)
 
         if not destinations:
             return
@@ -239,11 +213,7 @@ class StreamerNotifierCog(commands.Cog):
 
             kick_url = f"https://kick.com/{kick_user}" if kick_user else None
 
-            embed = discord.Embed(
-                title=f"🔴 ¡{streamer_name} está en directo!",
-                url=twitch_url,
-                color=0x9146FF
-            )
+            embed = discord.Embed(title=f"🔴 ¡{streamer_name} está en directo!", url=twitch_url, color=0x9146FF)
             embed.add_field(name="Twitch", value=f"[Ver en Twitch]({twitch_url})", inline=True)
 
             if kick_url:
@@ -274,15 +244,7 @@ class StreamerNotifierCog(commands.Cog):
             await interaction.response.send_message(f"No se pudo encontrar al usuario `{twitch_user}` en Twitch.", ephemeral=True)
             return
 
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                           INSERT INTO tracked_streamers (guild_id, channel_id, twitch_username, kick_username, everyone)
-                           VALUES (?, ?, ?, ?, ?)
-                           ON CONFLICT(guild_id, twitch_username) DO UPDATE SET channel_id    = excluded.channel_id,
-                                                                                kick_username = excluded.kick_username
-                           """, (interaction.guild_id, target_channel.id, twitch_user, kick_user, at_everyone))
-            conn.commit()
+        await self.bot.db.twitch_add_or_update_tracked_streamer(interaction.guild_id, target_channel.id, twitch_user, kick_user, at_everyone)
 
         sub_success = True
         if self.active_session_id:
@@ -304,19 +266,16 @@ class StreamerNotifierCog(commands.Cog):
 
         twitch_user = twitch.strip().lower()
 
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM tracked_streamers WHERE guild_id = ? AND twitch_username = ?", (interaction.guild_id, twitch_user))
-            conn.commit()
+        deleted = await self.bot.db.twitch_remove_tracked_streamer(interaction.guild_id, twitch_user)
 
-        await interaction.response.send_message(f"Notificaciones desactivadas para **{twitch_user}**.", ephemeral=True)
+        if not deleted:
+            await interaction.response.send_message(f"**{twitch_user}** no estaba en la lista", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"Notificaciones desactivadas para **{twitch_user}**.", ephemeral=True)
 
     @streamer_group.command(name="lista", description="Muestra los streamers configurados")
     async def list_streamers(self, interaction: discord.Interaction):
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT twitch_username, kick_username, channel_id FROM tracked_streamers WHERE guild_id = ?", (interaction.guild_id,))
-            rows = cursor.fetchall()
+        rows = await self.bot.db.get_guild_tracked_streamers(interaction.guild_id)
 
         if not rows:
             await interaction.response.send_message("No hay streamers configurados en este servidor.", ephemeral=True)

@@ -5,21 +5,12 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from main import JoseLuisBot
+
 
 class GlobalStatsCog(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: JoseLuisBot):
         self.bot = bot
-
-    @staticmethod
-    def _fetch_user_stats(user_id: int) -> dict:
-        with sqlite3.connect("bot_data.db") as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM user_global_stats WHERE user_id = ?", (user_id,))
-            row = cursor.fetchone()
-            if row:
-                return dict(row)
-            return {}
 
     stats_group = app_commands.Group(
         name="estadisticas",
@@ -29,7 +20,7 @@ class GlobalStatsCog(commands.Cog):
     @stats_group.command(name="casino", description="Mira estadísticas de los juegos de azar")
     async def stats_gambling(self, interaction: discord.Interaction, target: Optional[discord.User] = None):
         user = target or interaction.user
-        data = self._fetch_user_stats(user.id)
+        data = await self.bot.db.global_fetch_user_stats(user.id)
 
         embed = discord.Embed(
             title=f"🎰 Estadísticas de Casino - {user.display_name}",
@@ -93,7 +84,7 @@ class GlobalStatsCog(commands.Cog):
     @stats_group.command(name="economia", description="Mira estadísticas de flujo de dinero y movimientos")
     async def stats_economy(self, interaction: discord.Interaction, target: Optional[discord.User] = None):
         user = target or interaction.user
-        data = self._fetch_user_stats(user.id)
+        data = await self.bot.db.global_fetch_user_stats(user.id)
 
         embed = discord.Embed(
             title=f"💸 Economía y Crímen - {user.display_name}",
@@ -168,7 +159,7 @@ class GlobalStatsCog(commands.Cog):
     @stats_group.command(name="mineria", description="Mira estadísticas de minería y forja")
     async def stats_mining(self, interaction: discord.Interaction, target: Optional[discord.User] = None):
         user = target or interaction.user
-        data = self._fetch_user_stats(user.id)
+        data = await self.bot.db.global_fetch_user_stats(user.id)
 
         embed = discord.Embed(
             title=f"⛏️ Minería - {user.display_name}",
@@ -219,5 +210,5 @@ class GlobalStatsCog(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: JoseLuisBot):
     await bot.add_cog(GlobalStatsCog(bot))

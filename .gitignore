@@ -219,3 +219,5 @@ __marimo__/
 /.idea
 bot_data.db
 twitch_tokens.json
+bot_data.db-shm
+bot_data.db-wal

@@ -8,8 +8,9 @@ from discord import app_commands
 from discord.ext import commands, tasks
 from typing import Optional
 
-from cogs.global_stats import GlobalStatsCog
+from database import DBManager
 from main import JoseLuisBot
+from stats import StatsTracker
 
 SYMBOLS = {
     "🍒": {"weight": 45, "payout_3": 3.0, "payout_2": 0.5},
@@ -20,11 +21,12 @@ SYMBOLS = {
 }
 
 class DropView(discord.ui.View):
-    def __init__(self, amount: int, cog):
+    def __init__(self, amount: int, db: DBManager, global_stats: StatsTracker):
         super().__init__(timeout=60)
         self.amount = amount
-        self.cog = cog
+        self.db = db
         self.claimed = False
+        self.global_stats = global_stats
 
     @discord.ui.button(label="¡Reclamar Botín!", style=discord.ButtonStyle.success, emoji="💰")
     async def claim_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -35,11 +37,11 @@ class DropView(discord.ui.View):
         self.claimed = True
         self.stop()
 
-        drop_boost = self.cog.bot.get_user_job_perk(interaction.user.id, "drop_boost", 0.0)
+        drop_boost = await self.db.get_user_job_perk(interaction.user.id, "drop_boost", 0.0)
         final_amount = int(self.amount * (1 + drop_boost))
 
-        self.cog._update_balance(interaction.user.id, final_amount)
-        self.cog.bot.global_stats.register_drop_obtained(interaction.user.id, final_amount)
+        await self.db.economy_update_balance(interaction.user.id, final_amount)
+        await self.global_stats.register_drop_obtained(interaction.user.id, final_amount)
 
         for item in self.children:
             item.disabled = True
@@ -55,7 +57,6 @@ class EconomyCog(commands.Cog):
     def __init__(self, bot: JoseLuisBot):
         self.bot = bot
         self.db_path = "bot_data.db"
-        self._init_sqlite()
         self.daily_interest_task.start()
 
         self.last_drop_time = {}
@@ -67,71 +68,6 @@ class EconomyCog(commands.Cog):
 
     def cog_unload(self):
         self.daily_interest_task.cancel()
-
-    def _init_sqlite(self):
-        with sqlite3.connect(self.db_path) as conn:
-            c = conn.cursor()
-            c.execute("""
-                      CREATE TABLE IF NOT EXISTS economy_users
-                      (
-                          user_id            INTEGER PRIMARY KEY,
-                          balance            INTEGER NOT NULL DEFAULT 100,
-                          daily_streak       INTEGER NOT NULL DEFAULT 0,
-                          last_daily         TIMESTAMP,
-                          active_job         TEXT,
-                          last_job_switch    TIMESTAMP,
-                          last_work          TIMESTAMP,
-                          crime_streak       INTEGER NOT NULL DEFAULT 0,
-                          jail_until         TIMESTAMP,
-                          unclaimed_interest INTEGER NOT NULL DEFAULT 0
-                      )
-                      """)
-            c.execute("""
-                      CREATE TABLE IF NOT EXISTS economy_jobs
-                      (
-                          user_id INTEGER NOT NULL,
-                          job_id  TEXT    NOT NULL,
-                          level   INTEGER NOT NULL DEFAULT 1,
-                          xp      INTEGER NOT NULL DEFAULT 0,
-                          PRIMARY KEY (user_id, job_id)
-                      )
-                      """)
-            c.execute("""
-                      CREATE TABLE IF NOT EXISTS economy_phrases
-                      (
-                          phrase TEXT NOT NULL,
-                          category TEXT NOT NULL,
-                          tag TEXT,
-                          PRIMARY KEY (phrase)
-                      )
-                      """)
-            conn.commit()
-
-    @staticmethod
-    def _ensure_user(cursor, user_id: int):
-        cursor.execute("INSERT OR IGNORE INTO economy_users (user_id) VALUES (?)", (user_id,))
-
-    def _update_balance(self, user_id: int, amount: int):
-        with sqlite3.connect(self.db_path) as conn:
-            c = conn.cursor()
-            self._ensure_user(c, user_id)
-            c.execute("UPDATE economy_users SET balance = MAX(0, balance + ?) WHERE user_id = ?", (amount, user_id))
-
-    def _get_user_data(self, user_id: int) -> dict:
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            c = conn.cursor()
-            self._ensure_user(c, user_id)
-            c.execute("SELECT * FROM economy_users WHERE user_id = ?", (user_id,))
-            return dict(c.fetchone())
-
-    def _get_job_data(self, user_id: int, job_id: str) -> dict:
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            c = conn.cursor()
-            c.execute("SELECT * FROM economy_jobs WHERE user_id = ? AND job_id = ?", (user_id, job_id))
-            row = c.fetchone()
-            return dict(row) if row else {"level": 1, "xp": 0}
 
     @staticmethod
     def _check_jail(jail_until: str) -> bool:
@@ -149,13 +85,13 @@ class EconomyCog(commands.Cog):
             await interaction.followup.send("Los bots no tienen cuenta bancaria.", ephemeral=True)
             return
 
-        user_data = self._get_user_data(target_user.id)
+        user_data = await self.bot.db.economy_get_user_data(target_user.id)
         now = datetime.datetime.now(datetime.timezone.utc)
 
         active_job_id = user_data.get('active_job')
-        if active_job_id and active_job_id in self.bot.job_registry:
-            job_info = self.bot.job_registry[active_job_id]
-            job_stats = self._get_job_data(target_user.id, active_job_id)
+        if active_job_id and active_job_id in self.bot.db.job_registry:
+            job_info = self.bot.db.job_registry[active_job_id]
+            job_stats = await self.bot.db.economy_get_job_data(target_user.id, active_job_id)
 
             level = job_stats['level']
             xp = job_stats['xp']
@@ -187,7 +123,7 @@ class EconomyCog(commands.Cog):
         embed.add_field(name="💼 Carrera Profesional", value=trabajo_val, inline=True)
         embed.add_field(name="⚖️ Situación Legal", value=estado_legal, inline=True)
         embed.add_field(name="🔥 Rachas Activas", value=f"📆 *Paga Diaria:* {user_data['daily_streak']} días\n🥷 *Racha Criminal:* {user_data['crime_streak']} éxitos", inline=False)
-        phrase = self.bot.get_random_phrase("profile", "quote", False)
+        phrase = await self.bot.db.global_get_random_phrase("profile", "quote", False)
         embed.set_footer(text=f"'{phrase}' - {target_user.display_name}")
         await interaction.followup.send(embed=embed)
 
@@ -195,14 +131,14 @@ class EconomyCog(commands.Cog):
     @app_commands.describe(empleo="ID del trabajo al que quieres cambiarte (déjalo vacío para ver la lista)")
     async def buscartrabajo(self, interaction: discord.Interaction, empleo: Optional[str] = None):
         await interaction.response.defer()
-        user_data = self._get_user_data(interaction.user.id)
+        user_data = await self.bot.db.economy_get_user_data(interaction.user.id)
 
-        job_names = {job["nombre"].lower(): job_id for job_id, job in self.bot.job_registry.items()}
+        job_names = {job["nombre"].lower(): job_id for job_id, job in self.bot.db.job_registry.items()}
 
         if not empleo:
             embed = discord.Embed(title="🏢 Agencia de Empleo", color=0x3498db)
-            for j_id, j_data in self.bot.job_registry.items():
-                stats = self._get_job_data(interaction.user.id, j_id)
+            for j_id, j_data in self.bot.db.job_registry.items():
+                stats = await self.bot.db.economy_get_job_data(interaction.user.id, j_id)
                 embed.add_field(
                     name=f"{j_data['emoji']} {j_data['nombre']}",
                     value=f"{j_data['desc']}\n*Nivel Actual: {stats['level']}*",
@@ -213,7 +149,7 @@ class EconomyCog(commands.Cog):
 
         empleo = empleo.lower()
         if empleo not in job_names:
-            phrase = self.bot.get_random_phrase("job_obtain_fail", "unknonwn")
+            phrase = await self.bot.db.global_get_random_phrase("job_obtain_fail", "unknonwn")
             await interaction.followup.send(f"{phrase}Ese empleo no existe. Usa el comando sin argumentos para ver la lista.")
             return
 
@@ -224,7 +160,7 @@ class EconomyCog(commands.Cog):
             now = datetime.datetime.now(datetime.timezone.utc)
             if now < last_switch + datetime.timedelta(days=3):
                 delta = (last_switch + datetime.timedelta(days=3)) - now
-                phrase = self.bot.get_random_phrase("job_obtain_fail", "fast")
+                phrase = await self.bot.db.global_get_random_phrase("job_obtain_fail", "fast")
                 await interaction.followup.send(f"{phrase}Debes esperar **{delta.days} días y {delta.seconds // 3600}h** para volver a cambiar de trabajo.")
                 return
 
@@ -232,27 +168,27 @@ class EconomyCog(commands.Cog):
             c = conn.cursor()
             c.execute("UPDATE economy_users SET active_job = ?, last_job_switch = ? WHERE user_id = ?", (empleo, datetime.datetime.now(datetime.timezone.utc).isoformat(), interaction.user.id))
             conn.commit()
-        self.bot.global_stats.register_job_switch(interaction.user.id)
+        await self.bot.global_stats.register_job_switch(interaction.user.id)
 
-        j_data = self.bot.job_registry[empleo]
-        phrase = self.bot.get_random_phrase("job_obtain_success", empleo)
+        j_data = self.bot.db.job_registry[empleo]
+        phrase = await self.bot.db.global_get_random_phrase("job_obtain_success", empleo)
         await interaction.followup.send(f"{phrase}¡Contratado! Ahora trabajas como **{j_data['nombre']}** {j_data['emoji']}.")
 
     @economy_group.command(name="trabajar", description="Trabaja en tu empleo activo para ganar choskris y experiencia.")
     async def trabajar(self, interaction: discord.Interaction):
         await interaction.response.defer()
-        user_data = self._get_user_data(interaction.user.id)
+        user_data = await self.bot.db.economy_get_user_data(interaction.user.id)
 
         active_job = user_data['active_job']
-        if not active_job or active_job not in self.bot.job_registry:
+        if not active_job or active_job not in self.bot.db.job_registry:
             await interaction.followup.send("No tienes un trabajo. Usa `/buscartrabajo` para buscar uno.")
             return
 
         now = datetime.datetime.now(datetime.timezone.utc)
         if user_data['last_work']:
             last_work = datetime.datetime.fromisoformat(user_data['last_work'])
-            reduction = self.bot.get_user_job_perk(interaction.user.id, "cooldown_reduction_pct", 0.0)
-            reduction_flat = self.bot.get_user_job_perk(interaction.user.id, "work_cooldown_seconds", 0.0)
+            reduction = await self.bot.db.get_user_job_perk(interaction.user.id, "cooldown_reduction_pct", 0.0)
+            reduction_flat = await self.bot.db.get_user_job_perk(interaction.user.id, "work_cooldown_seconds", 0.0)
             if now < last_work + datetime.timedelta(hours=12 * (1.0 - reduction)):
                 time_cooldown = datetime.timedelta(hours=12 * (1.0 - reduction)) - datetime.timedelta(seconds=reduction_flat)
                 time_left = (last_work + time_cooldown) - now
@@ -263,7 +199,7 @@ class EconomyCog(commands.Cog):
                 await interaction.followup.send(content=text)
                 return
 
-        job_stats = self._get_job_data(interaction.user.id, active_job)
+        job_stats = await self.bot.db.economy_get_job_data(interaction.user.id, active_job)
         level = job_stats['level']
         xp = job_stats['xp']
 
@@ -277,21 +213,17 @@ class EconomyCog(commands.Cog):
             new_xp -= xp_needed
             leveled_up = True
 
-        bonus = self.bot.get_user_job_perk(interaction.user.id, "flat_work_bonus", 0.0)
-        penalty = self.bot.get_user_job_perk(interaction.user.id, "job_penalty", 0.0)
+        bonus = await self.bot.db.get_user_job_perk(interaction.user.id, "flat_work_bonus", 0.0)
+        penalty = await self.bot.db.get_user_job_perk(interaction.user.id, "job_penalty", 0.0)
         salary = random.randint(150, 250) + (level * 20) + bonus
         salary *= 1 - penalty
         salary = int(salary)
 
-        with sqlite3.connect(self.db_path) as conn:
-            c = conn.cursor()
-            c.execute("UPDATE economy_users SET balance = MAX(0, balance + ?), last_work = ? WHERE user_id = ?", (salary, now.isoformat(), interaction.user.id))
-            c.execute("INSERT OR REPLACE INTO economy_jobs (user_id, job_id, level, xp) VALUES (?, ?, ?, ?)", (interaction.user.id, active_job, level, new_xp))
-            conn.commit()
+        await self.bot.db.economy_update_work_and_job(interaction.user.id, salary, now.isoformat(), active_job, level, new_xp)
 
-        self.bot.global_stats.register_work(interaction.user.id, salary)
-        j_data = self.bot.job_registry[active_job]
-        phrase = self.bot.get_random_phrase("job_work", active_job)
+        await self.bot.global_stats.register_work(interaction.user.id, salary)
+        j_data = self.bot.db.job_registry[active_job]
+        phrase = await self.bot.db.global_get_random_phrase("job_work", active_job)
         if salary == 0.0:
             msg = f"{phrase}💼 Has holgazaneado como **{j_data['nombre']}** por lo que no has ganado choskris. (+{xp_gained} XP)"
         else:
@@ -306,7 +238,7 @@ class EconomyCog(commands.Cog):
     @economy_group.command(name="allowence", description="Reclama tu choskris diario.")
     async def paga(self, interaction: discord.Interaction):
         await interaction.response.defer()
-        user_data = self._get_user_data(interaction.user.id)
+        user_data = await self.bot.db.economy_get_user_data(interaction.user.id)
         now = datetime.datetime.now(datetime.timezone.utc)
 
         streak = user_data['daily_streak']
@@ -315,7 +247,7 @@ class EconomyCog(commands.Cog):
             delta = now - last_daily
             if delta < datetime.timedelta(hours=24):
                 time_left = datetime.timedelta(hours=24) - delta
-                phrase = self.bot.get_random_phrase("allowance", "fail")
+                phrase = await self.bot.db.global_get_random_phrase("allowance", "fail")
                 await interaction.followup.send(f"{phrase}Aún no puedes reclamar tu paga. Vuelve en **{time_left.seconds // 3600}h {(time_left.seconds // 60) % 60}m**.")
                 return
             elif delta > datetime.timedelta(hours=48):
@@ -324,16 +256,13 @@ class EconomyCog(commands.Cog):
         base_paga = 200
         streak_bonus = min(streak * 25, 500)
 
-        job_boost = self.bot.get_user_job_perk(interaction.user.id, "passive_daily_income", 0.0)
+        job_boost = await self.bot.db.get_user_job_perk(interaction.user.id, "passive_daily_income", 0.0)
         final_paga = int((base_paga + streak_bonus) * (1 + job_boost))
 
-        with sqlite3.connect(self.db_path) as conn:
-            c = conn.cursor()
-            c.execute("UPDATE economy_users SET balance = MAX(0, balance + ?), daily_streak = ?, last_daily = ? WHERE user_id = ?", (final_paga, streak + 1, now.isoformat(), interaction.user.id))
-            conn.commit()
+        await self.bot.db.economy_daily_claim(interaction.user.id, final_paga, streak, now.isoformat())
 
-        self.bot.global_stats.register_allowance_claim(interaction.user.id, final_paga, streak)
-        phrase = self.bot.get_random_phrase("allowance", "success")
+        await self.bot.global_stats.register_allowance_claim(interaction.user.id, final_paga, streak)
+        phrase = await self.bot.db.global_get_random_phrase("allowance", "success")
         msg = f"{phrase}💸Could you give me an allowence?\n Has obtenido **{final_paga}** choskris.\n🔥 Racha diaria: **{streak + 1}** días."
         if job_boost > 0.0:
             msg += f" *(+{int(job_boost * 100)}%!)*"
@@ -354,7 +283,7 @@ class EconomyCog(commands.Cog):
     async def spin(self, interaction: discord.Interaction, apuesta: int, color: Optional[str] = None, numero: Optional[int] = None):
         await interaction.response.defer()
 
-        phrase = self.bot.get_random_phrase("gamble", "error")
+        phrase = await self.bot.db.global_get_random_phrase("gamble", "error")
         if apuesta <= 0:
             await interaction.followup.send(f"{phrase}La apuesta debe ser mayor a 0.")
             return
@@ -367,7 +296,7 @@ class EconomyCog(commands.Cog):
             await interaction.followup.send(f"{phrase}El número debe estar entre 0 y 36.")
             return
 
-        user_data = self._get_user_data(interaction.user.id)
+        user_data = await self.bot.db.economy_get_user_data(interaction.user.id)
         if user_data['balance'] < apuesta:
             await interaction.followup.send(f"{phrase}No tienes suficiente choskris para esta apuesta.")
             return
@@ -414,20 +343,20 @@ class EconomyCog(commands.Cog):
 
         if multiplier > 0:
             prize = apuesta * multiplier
-            self._update_balance(interaction.user.id, prize - apuesta)
-            self.bot.global_stats.register_roulette_win(interaction.user.id, prize, apuesta)
+            await self.bot.db.economy_update_balance(interaction.user.id, prize - apuesta)
+            await self.bot.global_stats.register_roulette_win(interaction.user.id, prize, apuesta)
 
-            phrase = self.bot.get_random_phrase("spin", "success")
+            phrase = await self.bot.db.global_get_random_phrase("spin", "success")
             await interaction.followup.send(
                 f"{prefix_msg}{phrase}🎰 La bola cayó en **{resultado_num} {color_emoji}**.\n"
                 f"🎉 **{pago_descripcion}** Has ganado **{int(prize)}** choskris."
             )
         else:
-            phrase = self.bot.get_random_phrase("spin", "fail")
-            cashback_pct = self.bot.get_user_job_perk(interaction.user.id, "gambling_cashback", 0.0)
+            phrase = await self.bot.db.global_get_random_phrase("spin", "fail")
+            cashback_pct = await self.bot.db.get_user_job_perk(interaction.user.id, "gambling_cashback", 0.0)
             loss = int(apuesta * (1 - cashback_pct))
-            self._update_balance(interaction.user.id, -loss)
-            self.bot.global_stats.register_roulette_loss(interaction.user.id, apuesta)
+            await self.bot.db.economy_update_balance(interaction.user.id, -loss)
+            await self.bot.global_stats.register_roulette_loss(interaction.user.id, apuesta)
 
             msg = f"{prefix_msg}{phrase}🎰 La bola cayó en **{resultado_num} {color_emoji}**.\n❌ Perdiste **{apuesta}** choskris."
             if cashback_pct > 0:
@@ -451,7 +380,7 @@ class EconomyCog(commands.Cog):
     async def dice(self, interaction: discord.Interaction, apuesta: int, modalidad: str, suma_exacta: Optional[int] = None):
         await interaction.response.defer()
 
-        phrase = self.bot.get_random_phrase("gamble", "error")
+        phrase = await self.bot.db.global_get_random_phrase("gamble", "error")
         if apuesta <= 0:
             await interaction.followup.send(f"{phrase}La apuesta debe ser mayor a 0.")
             return
@@ -461,7 +390,7 @@ class EconomyCog(commands.Cog):
                 await interaction.followup.send(f"{phrase}Para la modalidad 'Suma Exacta', debes indicar un número entre 2 y 12 en el campo `suma_exacta`.")
                 return
 
-        user_data = self._get_user_data(interaction.user.id)
+        user_data = await self.bot.db.economy_get_user_data(interaction.user.id)
         if user_data['balance'] < apuesta:
             await interaction.followup.send(f"{phrase}No tienes suficiente choskris para esta apuesta.")
             return
@@ -505,21 +434,21 @@ class EconomyCog(commands.Cog):
 
         if multiplier > 0:
             prize = apuesta * multiplier
-            self._update_balance(interaction.user.id, prize - apuesta)
-            self.bot.global_stats.register_dice_win(interaction.user.id, prize, apuesta)
+            await self.bot.db.economy_update_balance(interaction.user.id, prize - apuesta)
+            await self.bot.global_stats.register_dice_win(interaction.user.id, prize, apuesta)
 
-            phrase = self.bot.get_random_phrase("dice", "success")
+            phrase = await self.bot.db.global_get_random_phrase("dice", "success")
             await interaction.followup.send(
                 f"{phrase}🎲 Los dados cayeron en: {d1_str} + {d2_str} = **{total}**\n"
                 f"🎉 **{pago_descripcion}** Has ganado **{int(prize)}** choskris. *(Multiplicador {multiplier}x)*"
             )
         else:
-            cashback_pct = self.bot.get_user_job_perk(interaction.user.id, "gambling_cashback", 0.0)
+            cashback_pct = await self.bot.db.get_user_job_perk(interaction.user.id, "gambling_cashback", 0.0)
             loss = int(apuesta * (1 - cashback_pct))
-            self._update_balance(interaction.user.id, -loss)
-            self.bot.global_stats.register_dice_loss(interaction.user.id, apuesta)
+            await self.bot.db.economy_update_balance(interaction.user.id, -loss)
+            await self.bot.global_stats.register_dice_loss(interaction.user.id, apuesta)
 
-            phrase = self.bot.get_random_phrase("dice", "fail")
+            phrase = await self.bot.db.global_get_random_phrase("dice", "fail")
             msg = f"{phrase}🎲 Los dados cayeron en: {d1_str} + {d2_str} = **{total}**\n❌ Perdiste **{apuesta}** choskris."
             if cashback_pct > 0:
                 msg += f" (-**{apuesta - loss}** cashback)"
@@ -528,7 +457,7 @@ class EconomyCog(commands.Cog):
     @economy_group.command(name="crimen", description="Comete un delito. Altas ganancias, alto riesgo.")
     async def crimen(self, interaction: discord.Interaction):
         await interaction.response.defer()
-        user_data = self._get_user_data(interaction.user.id)
+        user_data = await self.bot.db.economy_get_user_data(interaction.user.id)
         now = datetime.datetime.now(datetime.timezone.utc)
 
         if self._check_jail(user_data['jail_until']):
@@ -540,27 +469,24 @@ class EconomyCog(commands.Cog):
         streak = user_data['crime_streak']
         base_reward = 500
 
-        success_boost = self.bot.get_user_job_perk(interaction.user.id, "crime_success_rate", 0.0)
-        payout_boost = self.bot.get_user_job_perk(interaction.user.id, "crime_payout_boost", 0.0)
-        jail_bonus = self.bot.get_user_job_perk(interaction.user.id, "jail_bonus", 0.0)
+        success_boost = await self.bot.db.get_user_job_perk(interaction.user.id, "crime_success_rate", 0.0)
+        payout_boost = await self.bot.db.get_user_job_perk(interaction.user.id, "crime_payout_boost", 0.0)
+        jail_bonus = await self.bot.db.get_user_job_perk(interaction.user.id, "jail_bonus", 0.0)
 
         chance = 0.45 + success_boost - (streak * 0.05)
         chance = max(0.10, chance)
 
-        job = self.bot.get_user_active_job(interaction.user.id)
+        job = await self.bot.db.get_user_active_job(interaction.user.id)
 
         if random.random() < chance:
             reward = int((base_reward * (1 + streak * 0.2)))
             bonus = reward * payout_boost
             reward += bonus
 
-            with sqlite3.connect(self.db_path) as conn:
-                c = conn.cursor()
-                c.execute("UPDATE economy_users SET balance = MAX(0, balance + ?), crime_streak = crime_streak + 1 WHERE user_id = ?", (reward, interaction.user.id))
-                conn.commit()
-            self.bot.global_stats.register_successful_crime(interaction.user.id, reward)
+            await self.bot.db.economy_crime_success(interaction.user.id, reward)
+            await self.bot.global_stats.register_successful_crime(interaction.user.id, reward)
 
-            phrase = self.bot.get_random_phrase("crime_success", job)
+            phrase = await self.bot.db.global_get_random_phrase("crime_success", job)
             await interaction.followup.send(f"{phrase}🥷 **¡Golpe exitoso!** Robaste **{int(reward)}** choskris.{f" (+{int(bonus)}!)" if bonus > 0.0 else ""}\n🔥 Racha criminal: **{streak + 1}**")
         else:
             penalty = base_reward * 1.5
@@ -568,13 +494,10 @@ class EconomyCog(commands.Cog):
             bonus = 72 * (1 + jail_bonus) - 72
             jail_until_str = (now + datetime.timedelta(hours=jail_time)).isoformat()
 
-            with sqlite3.connect(self.db_path) as conn:
-                c = conn.cursor()
-                c.execute("UPDATE economy_users SET balance = MAX(0, balance - ?), crime_streak = 0, jail_until = ? WHERE user_id = ?", (penalty, jail_until_str, interaction.user.id))
-                conn.commit()
-            self.bot.global_stats.register_jail_sentence(interaction.user.id, penalty)
+            await self.bot.db.economy_crime_failure(interaction.user.id, penalty, jail_until_str)
+            await self.bot.global_stats.register_jail_sentence(interaction.user.id, penalty)
 
-            phrase = self.bot.get_random_phrase("crime_fail", job)
+            phrase = await self.bot.db.global_get_random_phrase("crime_fail", job)
             await interaction.followup.send(f"{phrase}🚓 **¡Te atrapó la policía!** Perdiste **{int(penalty)}** choskris y tu racha criminal se reinicia a 0.\nPasarás {jail_time} horas en la cárcel." + (f"(+{bonus} horas...)" if bonus > 0.0 else ""))
 
     @economy_group.command(name="pagar", description="Transfiere choskris de tu cuenta personal a otro usuario.")
@@ -582,7 +505,7 @@ class EconomyCog(commands.Cog):
     async def pagar(self, interaction: discord.Interaction, destinatario: discord.User, cantidad: int):
         await interaction.response.defer()
 
-        phrase = self.bot.get_random_phrase("pay_error")
+        phrase = await self.bot.db.global_get_random_phrase("pay_error")
         if cantidad <= 0:
             await interaction.followup.send(f"{phrase}La cantidad a transferir debe ser mayor a 0.")
             return
@@ -595,21 +518,16 @@ class EconomyCog(commands.Cog):
             await interaction.followup.send(f"{phrase}No puedes transferir choskris a un bot.")
             return
 
-        user_data = self._get_user_data(interaction.user.id)
+        user_data = await self.bot.db.economy_get_user_data(interaction.user.id)
         if user_data['balance'] < cantidad:
             await interaction.followup.send(f"{phrase}Saldo insuficiente. Tienes **{user_data['balance']:,}** choskris y quieres enviar **{cantidad:,}**.")
             return
 
-        with sqlite3.connect(self.db_path) as conn:
-            c = conn.cursor()
-            self._ensure_user(c, destinatario.id)
-            c.execute("UPDATE economy_users SET balance = MAX(0, balance - ?) WHERE user_id = ?",(cantidad, interaction.user.id))
-            c.execute("UPDATE economy_users SET balance = MAX(0, balance + ?) WHERE user_id = ?", (cantidad, destinatario.id))
-            conn.commit()
-        self.bot.global_stats.register_money_gift_give(interaction.user.id, cantidad)
-        self.bot.global_stats.register_money_gift_receive(destinatario.id, cantidad)
+        await self.bot.db.economy_transfer_balance(interaction.user.id, destinatario.id, cantidad)
+        await self.bot.global_stats.register_money_gift_give(interaction.user.id, cantidad)
+        await self.bot.global_stats.register_money_gift_receive(destinatario.id, cantidad)
 
-        phrase = self.bot.get_random_phrase("pay_success")
+        phrase = await self.bot.db.global_get_random_phrase("pay_success")
         await interaction.followup.send(f"{phrase}💸 ¡{interaction.user.mention} le ha enviado **{cantidad:,}** choskris a {destinatario.mention}!")
 
     @economy_group.command(name="generar", description="Genera choskris del aire y se lo otorga a un usuario.")
@@ -627,8 +545,8 @@ class EconomyCog(commands.Cog):
             await interaction.followup.send("No puedes otorgar choskris a un bot.")
             return
 
-        self._update_balance(destinatario.id, cantidad)
-        self.bot.global_stats.register_money_gift_receive(destinatario.id, cantidad)
+        await self.bot.db.economy_update_balance(destinatario.id, cantidad)
+        await self.bot.global_stats.register_money_gift_receive(destinatario.id, cantidad)
 
         await interaction.followup.send(f"✅ Has generado **{cantidad:,}** choskris para {destinatario.mention}.")
 
@@ -636,7 +554,7 @@ class EconomyCog(commands.Cog):
     async def claim_interest(self, interaction: discord.Interaction):
         user_id = interaction.user.id
 
-        phrase = self.bot.get_random_phrase("interest_fail")
+        phrase = await self.bot.db.global_get_random_phrase("interest_fail")
         with sqlite3.connect("bot_data.db") as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
@@ -659,8 +577,8 @@ class EconomyCog(commands.Cog):
             cursor.execute("UPDATE economy_users SET balance = MAX(0, ?), unclaimed_interest = 0 WHERE user_id = ?", (new_balance, user_id))
             conn.commit()
 
-        self.bot.global_stats.register_interest_payout(user_id, unclaimed)
-        phrase = self.bot.get_random_phrase("interest_success")
+        await self.bot.global_stats.register_interest_payout(user_id, unclaimed)
+        phrase = await self.bot.db.global_get_random_phrase("interest_success")
         message = (
             f"{phrase}Has reclamado **+{unclaimed:,}** choskris acumulados de intereses.\n"
             f"Tu nuevo balance total es de **{new_balance:,}** choskris."
@@ -728,16 +646,33 @@ class EconomyCog(commands.Cog):
         reels_display = f"| {reel1} | {reel2} | {reel3} |"
         if winnings > 0:
             result_text = f"🎉 ¡Ganaste **{winnings}** monedas!\n(Multiplicador: {multiplier}x)"
-            self.bot.global_stats.register_slots_win(interaction.user.id, winnings, apuesta)
+            await self.bot.global_stats.register_slots_win(interaction.user.id, winnings, apuesta)
         else:
             result_text = "❌ Has perdido tu apuesta."
-            self.bot.global_stats.register_slots_loss(interaction.user.id, apuesta)
+            await self.bot.global_stats.register_slots_loss(interaction.user.id, apuesta)
 
         embed = discord.Embed(title="🎰 Tragaperras 🎰", color=discord.Color.gold() if winnings > 0 else discord.Color.red())
         embed.add_field(name="Rodillos", value=f"```\n{reels_display}\n```", inline=False)
         embed.add_field(name="Resultado", value=result_text, inline=False)
 
         await interaction.response.send_message(embed=embed)
+
+    @economy_group.command(name="forzardrop", description="Obliga al juego a generar un drop inmediatamente")
+    async def drop(self, interaction: discord.Interaction):
+        if not await self.bot.filter_operators(interaction): return
+
+        channel_id = interaction.channel.id
+        now = datetime.datetime.now(datetime.timezone.utc)
+
+        self.last_drop_time[channel_id] = now
+        amount = random.randint(50, 150)
+
+        embed = discord.Embed(title="¡Han caído unos choskris!", description=f"Alguien ha dejado caer **{amount}** choskris al suelo. ¡Sé el primero en cogerlos!", color=0xf1c40f)
+
+        view = DropView(amount=amount, db=self.bot.db, global_stats=self.bot.global_stats)
+        await interaction.response.send_message("¡Drop en camino!", ephemeral=True)
+        await interaction.channel.send(embed=embed, view=view)
+
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -757,10 +692,10 @@ class EconomyCog(commands.Cog):
 
             embed = discord.Embed(title="¡Han caído unos choskris!", description=f"Alguien ha dejado caer **{amount}** choskris al suelo. ¡Sé el primero en cogerlos!", color=0xf1c40f)
 
-            view = DropView(amount=amount, cog=self)
+            view = DropView(amount=amount, db=self.bot.db, global_stats=self.bot.global_stats)
             await message.channel.send(embed=embed, view=view)
 
-    @tasks.loop(hours=24.0)
+    @tasks.loop(time=datetime.time(hour=0, minute=0, second=0))
     async def daily_interest_task(self):
         with sqlite3.connect("bot_data.db") as conn:
             conn.row_factory = sqlite3.Row
@@ -769,23 +704,24 @@ class EconomyCog(commands.Cog):
             cursor.execute("SELECT user_id, balance, active_job, unclaimed_interest FROM economy_users WHERE balance > 0")
             users = cursor.fetchall()
 
-            for user in users:
-                user_id = user["user_id"]
-                balance = user["balance"]
-                active_job = user["active_job"]
-                current_unclaimed = user["unclaimed_interest"]
+        for user in users:
+            user_id = user["user_id"]
+            balance = user["balance"]
+            active_job = user["active_job"]
+            current_unclaimed = user["unclaimed_interest"]
 
-                perk_bonus = self.bot.get_job_perk(active_job, "bank_interest_bonus", 0.0)
+            perk_bonus = await self.bot.db.get_job_perk(active_job, "bank_interest_bonus", 0.0)
 
-                if perk_bonus <= 0:
-                    continue
+            if perk_bonus <= 0:
+                continue
 
-                daily_interest = math.floor(balance * perk_bonus)
+            daily_interest = math.floor(balance * perk_bonus)
 
+            with sqlite3.connect("bot_data.db") as conn:
                 if daily_interest > 0:
                     new_unclaimed = current_unclaimed + daily_interest
                     cursor.execute("UPDATE economy_users SET unclaimed_interest = ? WHERE user_id = ?", (new_unclaimed, user_id))
-            conn.commit()
+                conn.commit()
 
     @daily_interest_task.before_loop
     async def before_daily_interest(self):
