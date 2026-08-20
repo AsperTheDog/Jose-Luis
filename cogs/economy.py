@@ -281,6 +281,7 @@ class EconomyCog(commands.Cog):
         penalty = self.bot.get_user_job_perk(interaction.user.id, "job_penalty", 0.0)
         salary = random.randint(150, 250) + (level * 20) + bonus
         salary *= 1 - penalty
+        salary = int(salary)
 
         with sqlite3.connect(self.db_path) as conn:
             c = conn.cursor()
