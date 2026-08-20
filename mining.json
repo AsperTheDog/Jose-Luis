@@ -12,7 +12,7 @@
     "cavernas": {
       "name": "Cavernas Profundas",
       "hardness": 15,
-      "energy_cost": 20,
+      "energy_cost": 10,
       "drops": [
         "carbon",
         "plata"
@@ -21,7 +21,7 @@
     "profundidades": {
       "name": "Manto Profundo",
       "hardness": 40,
-      "energy_cost": 25,
+      "energy_cost": 20,
       "drops": [
         "oro",
         "diamante_bruto"
@@ -30,7 +30,7 @@
     "nucleo": {
       "name": "Núcleo del Planeta",
       "hardness": 60,
-      "energy_cost": 50,
+      "energy_cost": 25,
       "drops": [
         "obsidiana",
         "pavonita"
