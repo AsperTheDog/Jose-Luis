@@ -332,7 +332,7 @@ class EconomyCog(commands.Cog):
             c.execute("UPDATE economy_users SET balance = MAX(0, balance + ?), daily_streak = ?, last_daily = ? WHERE user_id = ?", (final_paga, streak + 1, now.isoformat(), interaction.user.id))
             conn.commit()
 
-        self.bot.global_stats.register_allowance_claim(interaction.user.id, final_paga)
+        self.bot.global_stats.register_allowance_claim(interaction.user.id, final_paga, streak)
         phrase = self.bot.get_random_phrase("allowance", "success")
         msg = f"{phrase}💸Could you give me an allowence?\n Has obtenido **{final_paga}** choskris.\n🔥 Racha diaria: **{streak + 1}** días."
         if job_boost > 0.0:
