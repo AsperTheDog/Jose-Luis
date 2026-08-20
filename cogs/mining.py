@@ -5,6 +5,7 @@ import discord
 from discord.ext import commands, tasks
 from discord import app_commands
 import sqlite3
+import aiosqlite
 import json
 import random
 from typing import Optional
@@ -120,13 +121,13 @@ class MiningSystemCog(commands.Cog):
         self.active_miners.add(user_id)
 
         try:
-            with sqlite3.connect(DB_PATH) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT energy, current_depth_id, xp, level FROM mining_users WHERE user_id = ?", (user_id,))
-                energy, depth_id, current_xp, user_lvl = cursor.fetchone()
+            async with aiosqlite.connect(DB_PATH, timeout=30.0) as db:
+                async with db.execute("SELECT energy, current_depth_id, xp, level FROM mining_users WHERE user_id = ?", (user_id,)) as cursor:
+                    row = await cursor.fetchone()
+                    energy, depth_id, current_xp, user_lvl = row
 
-                cursor.execute("SELECT id, pickaxe_id, durability FROM mining_inv_pickaxes WHERE user_id = ? AND is_equipped = 1", (user_id,))
-                equipped_pick = cursor.fetchone()
+                async with db.execute("SELECT id, pickaxe_id, durability FROM mining_inv_pickaxes WHERE user_id = ? AND is_equipped = 1", (user_id,)) as cursor:
+                    equipped_pick = await cursor.fetchone()
 
             if not equipped_pick:
                 await interaction.response.send_message("No tienes ningún pico equipado. Usa `/equipar` o `/obtenerpico`.", ephemeral=True)
@@ -141,13 +142,13 @@ class MiningSystemCog(commands.Cog):
 
             db_pick_id, pickaxe_key, durability = equipped_pick
             pickaxe_data = self.game_data["pickaxes"][pickaxe_key]
-
             net_power = pickaxe_data["efficiency"] - level_data["hardness"] + user_lvl
 
             if net_power <= 0:
-                with sqlite3.connect(DB_PATH) as conn:
-                    conn.cursor().execute("UPDATE mining_users SET energy = energy - ? WHERE user_id = ?", (energy_cost, user_id))
-                    conn.commit()
+                async with aiosqlite.connect(DB_PATH, timeout=30.0) as db:
+                    await db.execute("UPDATE mining_users SET energy = energy - ? WHERE user_id = ?",(energy_cost, user_id),)
+                    await db.commit()
+
                 await interaction.response.send_message(
                     f"⚠️ La roca en **{level_data['name']}** es demasiado dura para tu nivel y pico actual.\n"
                     f"*Pierdes {energy_cost} de energía, pero tu pico no sufre desgaste.*",
@@ -159,6 +160,37 @@ class MiningSystemCog(commands.Cog):
             total_yield = max(1, round(raw_yield))
             dropped_material = random.choice(level_data["drops"])
             mat_data = self.game_data["materials"][dropped_material]
+
+            new_durability = durability - 1
+            durability_msg = f"Durabilidad pico: {new_durability}/{pickaxe_data['max_durability']}"
+
+            async with aiosqlite.connect(DB_PATH, timeout=30.0) as db:
+                await db.execute("UPDATE mining_users SET energy = energy - ? WHERE user_id = ?", (energy_cost, user_id))
+
+                if new_durability <= 0:
+                    await db.execute("DELETE FROM mining_inv_pickaxes WHERE id = ?", (db_pick_id,))
+                    durability_msg = f"💥 **¡Tu {pickaxe_data['name']} se ha roto!**"
+                    self.bot.global_stats.register_pickaxe_broken(interaction.user.id)
+                else:
+                    await db.execute("UPDATE mining_inv_pickaxes SET durability = ? WHERE id = ?",(new_durability, db_pick_id),)
+
+                await db.execute("""
+                    INSERT INTO mining_inv_materials (user_id, material_id, amount)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(user_id, material_id) DO UPDATE SET amount = amount + ?
+                    """, (user_id, dropped_material, total_yield, total_yield),)
+
+                new_xp = current_xp + 10
+                required_xp = int(100 * (user_lvl ** 1.5))
+                lvl_up_msg = ""
+
+                if new_xp >= required_xp:
+                    await db.execute("UPDATE mining_users SET xp = ?, level = level + 1 WHERE user_id = ?", (new_xp - required_xp, user_id))
+                    lvl_up_msg = f"\n⬆️ **¡Has subido al Nivel Minero {user_lvl + 1}!**"
+                else:
+                    await db.execute("UPDATE mining_users SET xp = ? WHERE user_id = ?", (new_xp, user_id))
+
+                await db.commit()
 
             hit_1 = total_yield // 3
             hit_2 = total_yield // 3
@@ -189,40 +221,6 @@ class MiningSystemCog(commands.Cog):
                     f"⛏️ **Recolectado:** +{accumulated_yield}x {mat_data['name']} {mat_data['emoji']}"
                 )
                 await interaction.edit_original_response(embed=embed)
-
-            durability -= 1
-            durability_msg = f"Durabilidad pico: {durability}/{pickaxe_data['max_durability']}"
-
-            with sqlite3.connect(DB_PATH) as conn:
-                cursor = conn.cursor()
-                cursor.execute("UPDATE mining_users SET energy = energy - ? WHERE user_id = ?", (energy_cost, user_id))
-
-                if durability <= 0:
-                    cursor.execute("DELETE FROM mining_inv_pickaxes WHERE id = ?", (db_pick_id,))
-                    durability_msg = f"💥 **¡Tu {pickaxe_data['name']} se ha roto!**"
-                    self.bot.global_stats.register_pickaxe_broken(interaction.user.id)
-                else:
-                    cursor.execute("UPDATE mining_inv_pickaxes SET durability = ? WHERE id = ?", (durability, db_pick_id))
-
-                cursor.execute("""
-                               INSERT INTO mining_inv_materials (user_id, material_id, amount)
-                               VALUES (?, ?, ?)
-                               ON CONFLICT(user_id, material_id) DO UPDATE SET amount = amount + ?
-                               """, (user_id, dropped_material, total_yield, total_yield))
-
-                new_xp = current_xp + 10
-                required_xp = int(100 * (user_lvl ** 1.5))
-                lvl_up_msg = ""
-
-                if new_xp >= required_xp:
-                    cursor.execute("UPDATE mining_users SET xp = ?, level = level + 1 WHERE user_id = ?", (new_xp - required_xp, user_id))
-                    lvl_up_msg = f"\n⬆️ **¡Has subido al Nivel Minero {user_lvl + 1}!**"
-                else:
-                    cursor.execute("UPDATE mining_users SET xp = ? WHERE user_id = ?", (new_xp, user_id))
-
-                conn.commit()
-
-            await asyncio.sleep(1)
 
             self.bot.global_stats.register_mine_action(interaction.user.id, energy_cost, total_yield)
             final_embed = discord.Embed(
@@ -265,11 +263,11 @@ class MiningSystemCog(commands.Cog):
 
             if modo == "full":
                 needed_energy = 100 - energy
-                total_cost = needed_energy * final_cost
+                total_cost = int(needed_energy * final_cost)
                 gain = needed_energy
             else:
                 gain = min(50, 100 - energy)
-                total_cost = gain * final_cost
+                total_cost = int(gain * final_cost)
 
             if choskris < total_cost:
                 await interaction.response.send_message(f"No tienes suficientes Choskris. Necesitas **{total_cost} Choskris** para restaurar +{gain} de energía *(Tienes: {choskris})*.", ephemeral=True)
