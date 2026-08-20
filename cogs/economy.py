@@ -228,11 +228,11 @@ class EconomyCog(commands.Cog):
                 await interaction.followup.send(f"{phrase}Debes esperar **{delta.days} días y {delta.seconds // 3600}h** para volver a cambiar de trabajo.")
                 return
 
-        self.bot.global_stats.register_job_switch(interaction.user.id)
         with sqlite3.connect(self.db_path) as conn:
             c = conn.cursor()
             c.execute("UPDATE economy_users SET active_job = ?, last_job_switch = ? WHERE user_id = ?", (empleo, datetime.datetime.now(datetime.timezone.utc).isoformat(), interaction.user.id))
             conn.commit()
+        self.bot.global_stats.register_job_switch(interaction.user.id)
 
         j_data = self.bot.job_registry[empleo]
         phrase = self.bot.get_random_phrase("job_obtain_success", empleo)
@@ -603,11 +603,11 @@ class EconomyCog(commands.Cog):
         with sqlite3.connect(self.db_path) as conn:
             c = conn.cursor()
             self._ensure_user(c, destinatario.id)
-            self.bot.global_stats.register_money_gift_give(interaction.user.id, cantidad)
-            self.bot.global_stats.register_money_gift_receive(destinatario.id, cantidad)
             c.execute("UPDATE economy_users SET balance = MAX(0, balance - ?) WHERE user_id = ?",(cantidad, interaction.user.id))
             c.execute("UPDATE economy_users SET balance = MAX(0, balance + ?) WHERE user_id = ?", (cantidad, destinatario.id))
             conn.commit()
+        self.bot.global_stats.register_money_gift_give(interaction.user.id, cantidad)
+        self.bot.global_stats.register_money_gift_receive(destinatario.id, cantidad)
 
         phrase = self.bot.get_random_phrase("pay_success")
         await interaction.followup.send(f"{phrase}💸 ¡{interaction.user.mention} le ha enviado **{cantidad:,}** choskris a {destinatario.mention}!")
@@ -656,10 +656,10 @@ class EconomyCog(commands.Cog):
 
             new_balance = row["balance"] + unclaimed
 
-            self.bot.global_stats.register_interest_payout(user_id, unclaimed)
             cursor.execute("UPDATE economy_users SET balance = MAX(0, ?), unclaimed_interest = 0 WHERE user_id = ?", (new_balance, user_id))
             conn.commit()
 
+        self.bot.global_stats.register_interest_payout(user_id, unclaimed)
         phrase = self.bot.get_random_phrase("interest_success")
         message = (
             f"{phrase}Has reclamado **+{unclaimed:,}** choskris acumulados de intereses.\n"
