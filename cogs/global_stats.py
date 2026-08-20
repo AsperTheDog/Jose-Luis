@@ -54,7 +54,6 @@ class GlobalStatsCog(commands.Cog):
             inline=True,
         )
 
-        # Dice
         d_win = data.get("dice_bets_won", 0)
         d_loss = data.get("dice_bets_lost", 0)
         d_gained = data.get("dice_money_gained", 0)
@@ -63,16 +62,15 @@ class GlobalStatsCog(commands.Cog):
         embed.add_field(
             name="🎲 Dados",
             value=(
-                f"**Seguimiento:** {r_win}W / {r_loss}L\n"
-                f"**Obtenido:** ${r_gained:,}\n"
-                f"**Perdido:** ${r_lost:,}\n"
-                f"**Beneficios:** ${(r_gained - r_lost):,}\n"
-                f"**Mayor Apuesta:** ${r_max:,}"
+                f"**Seguimiento:** {d_win}W / {d_loss}L\n"
+                f"**Obtenido:** ${d_gained:,}\n"
+                f"**Perdido:** ${d_lost:,}\n"
+                f"**Beneficios:** ${(d_gained - d_lost):,}\n"
+                f"**Mayor Apuesta:** ${d_max:,}"
             ),
             inline=True,
         )
 
-        # Slots
         s_win = data.get("slots_bets_won", 0)
         s_loss = data.get("slots_bets_lost", 0)
         s_gained = data.get("slots_money_gained", 0)
@@ -81,11 +79,11 @@ class GlobalStatsCog(commands.Cog):
         embed.add_field(
             name="🎰 Tragaperras",
             value=(
-                f"**Seguimiento:** {r_win}W / {r_loss}L\n"
-                f"**Obtenido:** ${r_gained:,}\n"
-                f"**Perdido:** ${r_lost:,}\n"
-                f"**Beneficios:** ${(r_gained - r_lost):,}\n"
-                f"**Mayor Apuesta:** ${r_max:,}"
+                f"**Seguimiento:** {s_win}W / {s_loss}L\n"
+                f"**Obtenido:** ${s_gained:,}\n"
+                f"**Perdido:** ${s_lost:,}\n"
+                f"**Beneficios:** ${(s_gained - s_lost):,}\n"
+                f"**Mayor Apuesta:** ${s_max:,}"
             ),
             inline=True,
         )
