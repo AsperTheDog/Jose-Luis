@@ -23,7 +23,7 @@ class ModerationCog(commands.Cog):
     async def honeypot(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
 
-        self.bot.config.set_death_channel_id(interaction.guild.id, interaction.channel.id)
+        await self.bot.config.set_death_channel_id(interaction.guild.id, interaction.channel.id)
         embed = discord.Embed(
             title="⚠️ ¡CANAL TRAMPA! ⚠️",
             description=(
@@ -35,7 +35,7 @@ class ModerationCog(commands.Cog):
         )
 
         embed.add_field(
-            name=":borjapMie2: ¿Eres un usuario real?",
+            name="¿Eres un usuario real?",
             value="Si has entrado aquí por error, simplemente ignora o silencia este canal y ve a disfrutar de los otros 20000 canales que tiene el server.",
             inline=False
         )
@@ -48,25 +48,25 @@ class ModerationCog(commands.Cog):
     async def nohoneypot(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
 
-        channel = self.bot.get_channel(int(self.bot.config.get_death_channel_id(interaction.guild.id)))
+        channel = self.bot.get_channel(int(await self.bot.config.get_death_channel_id(interaction.guild.id)))
         if channel is None:
             await interaction.response.send_message("No hay ningún honeypot configurado", ephemeral=True)
             return
-        self.bot.config.set_death_channel_id(interaction.guild.id, 0)
-        await interaction.response.send_message("Eliminado el canal honeypot: ", ephemeral=True)
+        await self.bot.config.set_death_channel_id(interaction.guild.id, 0)
+        await interaction.response.send_message(f"Eliminado el canal honeypot: {interaction.channel.mention}", ephemeral=True)
 
     @moderation_group.command(name="setadminchannel", description="Establece este canal como el canal de administración")
     async def setadminchannel(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
 
-        self.bot.config.set_admin_channel_id(interaction.guild.id, interaction.channel.id)
+        await self.bot.config.set_admin_channel_id(interaction.guild.id, interaction.channel.id)
         await interaction.response.send_message("Establecido este canal como canal de administración")
 
     @moderation_group.command(name="addoperator", description="Añade a un usuario como operador")
     async def addoperator(self, interaction: discord.Interaction, user: discord.Member):
         if await self.bot.filter_owner(interaction): return
 
-        if await self.bot.is_owner(user) or not self.bot.config.add_operator(interaction.guild.id, user.id):
+        if await self.bot.is_owner(user) or not await self.bot.config.add_operator(interaction.guild.id, user.id):
             await interaction.response.send_message("Esta persona ya es operadora")
             return
         await interaction.response.send_message(f"Añadido {user.mention} como operador")
@@ -79,7 +79,7 @@ class ModerationCog(commands.Cog):
             await interaction.response.send_message("¿Qué haces, payaso? No puedes quitar como operador al dueño del bot ¿Te crees que esto es una democracia?")
             return
 
-        if not self.bot.config.remove_operator(interaction.guild.id, user.id):
+        if not await self.bot.config.remove_operator(interaction.guild.id, user.id):
             await interaction.response.send_message("Esta persona no es operadora")
             return
         await interaction.response.send_message(f"Quitado {user.mention} como operador")
@@ -88,7 +88,7 @@ class ModerationCog(commands.Cog):
     async def whitelist(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
 
-        if not self.bot.config.add_to_channel_whitelist(interaction.guild.id, interaction.channel.id):
+        if not await self.bot.config.add_to_channel_whitelist(interaction.guild.id, interaction.channel.id):
             await interaction.response.send_message("Este canal ya está en la lista blanca")
             return
         await interaction.response.send_message("Ahora estaré activo en este canal")
@@ -97,7 +97,7 @@ class ModerationCog(commands.Cog):
     async def unwhitelist(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
 
-        if not self.bot.config.remove_from_channel_whitelist(interaction.guild.id, interaction.channel.id):
+        if not await self.bot.config.remove_from_channel_whitelist(interaction.guild.id, interaction.channel.id):
             await interaction.response.send_message("Este canal no está en la lista blanca")
             return
         await interaction.response.send_message("Ya no estaré activo en este canal")
@@ -106,7 +106,7 @@ class ModerationCog(commands.Cog):
     async def operators(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
 
-        operators = [int(userID) for userID in self.bot.config.get_operators(interaction.guild.id)]
+        operators = [int(userID) for userID in await self.bot.config.get_operators(interaction.guild.id)]
 
         users = []
         for userID in operators:
@@ -216,15 +216,15 @@ class ModerationCog(commands.Cog):
         if message.author.bot or not message.guild:
             return
 
-        death_channel_id = int(self.bot.config.get_death_channel_id(message.guild.id))
+        death_channel_id = int(await self.bot.config.get_death_channel_id(message.guild.id))
         if message.channel.id != death_channel_id:
             return
 
-        grace_seconds = self.bot.config.get_death_grace_seconds(message.guild.id)
+        grace_seconds = await self.bot.config.get_death_grace_seconds(message.guild.id)
         duration = datetime.timedelta(seconds=grace_seconds)
         unban_deadline = datetime.datetime.now(datetime.timezone.utc) + duration
 
-        admin_channel_id = int(self.bot.config.get_admin_channel_id(message.guild.id))
+        admin_channel_id = int(await self.bot.config.get_admin_channel_id(message.guild.id))
         admin_channel = message.guild.get_channel(admin_channel_id)
 
         try:

@@ -13,55 +13,55 @@ class GuildConfigManager:
         await self.db.ensure_guild_exists(guild_id)
         async with self.db.db.execute("SELECT admin_channel_id FROM guild_config WHERE guild_id = ?", (guild_id,)) as cursor:
             res = await cursor.fetchone()
-            return res["admin_channel_id"] if res else 0
+            return res[0] if res else 0
 
     async def get_log_channel_id(self, guild_id: int) -> Optional[int]:
         await self.db.ensure_guild_exists(guild_id)
         async with self.db.db.execute("SELECT log_channel_id FROM guild_config WHERE guild_id = ?", (guild_id,)) as cursor:
             res = await cursor.fetchone()
-            return res["log_channel_id"] if res else None
+            return res[0] if res else None
 
     async def get_death_channel_id(self, guild_id: int) -> int:
         await self.db.ensure_guild_exists(guild_id)
         async with self.db.db.execute("SELECT death_channel_id FROM guild_config WHERE guild_id = ?", (guild_id,)) as cursor:
             res = await cursor.fetchone()
-            return res["death_channel_id"] if res else 0
+            return res[0] if res else 0
 
     async def get_death_grace_seconds(self, guild_id: int) -> float:
         await self.db.ensure_guild_exists(guild_id)
         async with self.db.db.execute("SELECT death_grace_seconds FROM guild_config WHERE guild_id = ?", (guild_id,)) as cursor:
             res = await cursor.fetchone()
-            return res["death_grace_seconds"] if res else 60.0
+            return res[0] if res else 60.0
 
     async def get_global_cooldown_seconds(self, guild_id: int) -> float:
         await self.db.ensure_guild_exists(guild_id)
         async with self.db.db.execute("SELECT global_cooldown_seconds FROM guild_config WHERE guild_id = ?", (guild_id,)) as cursor:
             res = await cursor.fetchone()
-            return res["global_cooldown_seconds"] if res else 600.0
+            return res[0] if res else 600.0
 
     async def get_event_mensajes(self, guild_id: int) -> bool:
         await self.db.ensure_guild_exists(guild_id)
         async with self.db.db.execute("SELECT event_mensajes FROM guild_config WHERE guild_id = ?", (guild_id,)) as cursor:
             res = await cursor.fetchone()
-            return bool(res["event_mensajes"]) if res else True
+            return bool(res[0]) if res else True
 
     async def get_event_miembros(self, guild_id: int) -> bool:
         await self.db.ensure_guild_exists(guild_id)
         async with self.db.db.execute("SELECT event_miembros FROM guild_config WHERE guild_id = ?", (guild_id,)) as cursor:
             res = await cursor.fetchone()
-            return bool(res["event_miembros"]) if res else True
+            return bool(res[0]) if res else True
 
     async def get_event_moderacion(self, guild_id: int) -> bool:
         await self.db.ensure_guild_exists(guild_id)
         async with self.db.db.execute("SELECT event_moderacion FROM guild_config WHERE guild_id = ?", (guild_id,)) as cursor:
             res = await cursor.fetchone()
-            return bool(res["event_moderacion"]) if res else True
+            return bool(res[0]) if res else True
 
     async def get_event_canales(self, guild_id: int) -> bool:
         await self.db.ensure_guild_exists(guild_id)
         async with self.db.db.execute("SELECT event_canales FROM guild_config WHERE guild_id = ?", (guild_id,)) as cursor:
             res = await cursor.fetchone()
-            return bool(res["event_canales"]) if res else True
+            return bool(res[0]) if res else True
 
     # Setters
     async def set_admin_channel_id(self, guild_id: int, channel_id: int) -> None:
@@ -114,7 +114,7 @@ class GuildConfigManager:
         await self.db.ensure_guild_exists(guild_id)
         async with self.db.db.execute("SELECT operator_id FROM guild_operators WHERE guild_id = ?", (guild_id,)) as cursor:
             rows = await cursor.fetchall()
-            return [row["operator_id"] for row in rows]
+            return [row[0] for row in rows]
 
     async def add_operator(self, guild_id: int, operator_id: int) -> bool:
         await self.db.ensure_guild_exists(guild_id)
@@ -139,7 +139,7 @@ class GuildConfigManager:
         await self.db.ensure_guild_exists(guild_id)
         async with self.db.db.execute("SELECT channel_id FROM guild_channel_whitelist WHERE guild_id = ?", (guild_id,)) as cursor:
             rows = await cursor.fetchall()
-            return [row["channel_id"] for row in rows]
+            return [row[0] for row in rows]
 
     async def add_to_channel_whitelist(self, guild_id: int, channel_id: int) -> bool:
         await self.db.ensure_guild_exists(guild_id)
