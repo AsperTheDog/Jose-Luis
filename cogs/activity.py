@@ -41,6 +41,10 @@ class StatsCog(commands.Cog):
         emoji_count = len(EMOJI_REGEX.findall(content))
 
         xp_gained = 10 + min(word_count, 25)
+
+        if not message.guild:
+            print(f"Mensaje enviado sin gremio por {message.author.name} en {message.channel.id}")
+            return
         await self.bot.db.activity_update_user_stats(message.guild.id, message.author.id, xp_gained, word_count, char_count, attachment_count, emoji_count)
 
     @stats_group.command(name="stats", description="Muestra las estadísticas de un usuario")
