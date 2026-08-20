@@ -34,6 +34,7 @@ class AscensorView(discord.ui.View):
         self.add_item(self.select)
 
     async def select_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("Estos botones no son para ti.", ephemeral=True)
             return
@@ -44,7 +45,7 @@ class AscensorView(discord.ui.View):
             cursor.execute("UPDATE mining_users SET current_depth_id = ? WHERE user_id = ?", (selected_level, self.user_id))
             conn.commit()
 
-        await interaction.response.edit_message(content=f"🛗 El ascensor te ha llevado a: **{selected_level}**", view=None)
+        await interaction.followup.send(content=f"🛗 El ascensor te ha llevado a: **{selected_level}**", view=None)
 
 
 class MiningSystemCog(commands.Cog):
@@ -256,15 +257,15 @@ class MiningSystemCog(commands.Cog):
             cursor.execute("SELECT balance FROM economy_users WHERE user_id = ?", (user_id,))
             choskris = cursor.fetchone()[0]
 
-            cost_per_energy = min(8, int(2 + (0.5 * ((user_lvl - 1) ** 1.2))))
-            final_cost = cost_per_energy * (1.5 ** refills)
+            cost_per_energy = min(8, int(2 + (0.5 * ((user_lvl - 1) ** 1.1))))
+            final_cost = cost_per_energy * (1.2 ** refills)
             cost_perc = int(((final_cost / cost_per_energy) - 1) * 100)
 
             if energy >= 100:
                 await interaction.response.send_message("Tu energía ya está al máximo (100/100).", ephemeral=True)
                 return
 
-            if modo == "full":
+            if modo != "single":
                 needed_energy = 100 - energy
                 total_cost = int(needed_energy * final_cost)
                 gain = needed_energy
