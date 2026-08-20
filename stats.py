@@ -97,6 +97,7 @@ class StatsTracker:
         self._increment_stat(user_id, "roulette_money_gained", money_gained)
         self.register_money_obtained(user_id, money_gained)
         self._increment_stat(user_id, "roulette_bets_won", 1)
+        self._increment_stat(user_id, "roulette_money_lost", bet_amount)
         self._update_max_stat(user_id, "roulette_biggest_bet", bet_amount)
         self.register_money_spent(user_id, bet_amount)
 
@@ -110,6 +111,7 @@ class StatsTracker:
         self._increment_stat(user_id, "dice_money_gained", money_gained)
         self.register_money_obtained(user_id, money_gained)
         self._increment_stat(user_id, "dice_bets_won", 1)
+        self._increment_stat(user_id, "dice_money_lost", bet_amount)
         self._update_max_stat(user_id, "dice_biggest_bet", bet_amount)
         self.register_money_spent(user_id, bet_amount)
 
@@ -123,6 +125,7 @@ class StatsTracker:
         self._increment_stat(user_id, "slots_money_gained", money_gained)
         self.register_money_obtained(user_id, money_gained)
         self._increment_stat(user_id, "slots_bets_won", 1)
+        self._increment_stat(user_id, "slots_money_lost", bet_amount)
         self._update_max_stat(user_id, "slots_biggest_bet", bet_amount)
         self.register_money_spent(user_id, bet_amount)
 
