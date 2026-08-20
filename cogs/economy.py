@@ -13,7 +13,7 @@ from main import JoseLuisBot
 
 SYMBOLS = {
     "🍒": {"weight": 45, "payout_3": 3.0, "payout_2": 0.5},
-    "🍋": {"weight": 28, "payout_3": 5.0, "payout_2": 0.8},
+    "🍋": {"weight": 28, "payout_3": 5.0, "payout_2": 1.0},
     "🔔": {"weight": 15, "payout_3": 12.0, "payout_2": 1.2},
     "💎": {"weight": 8,  "payout_3": 30.0, "payout_2": 2.0},
     "7️⃣": {"weight": 4,  "payout_3": 100.0, "payout_2": 4.0},
