@@ -118,6 +118,11 @@
       "value": 800,
       "emoji": "👑"
     },
+    "cetro_real": {
+      "name": "Cetro Real",
+      "value": 750,
+      "emoji": "🪄"
+    },
     "cristal_mistico": {
       "name": "Cristal Místico",
       "value": 2000,
@@ -154,6 +159,14 @@
       "ingredients": {
         "oro": 15,
         "diamante_bruto": 5
+      }
+    },
+    "cetro_real": {
+      "type": "valuable",
+      "result": "cetro_real",
+      "ingredients": {
+        "diamante_bruto": 15,
+        "hierro": 5
       }
     },
     "cristal_mistico": {
