@@ -115,12 +115,12 @@
     },
     "corona_oro": {
       "name": "Corona de Oro",
-      "value": 900,
+      "value": 800,
       "emoji": "👑"
     },
     "cristal_mistico": {
       "name": "Cristal Místico",
-      "value": 2400,
+      "value": 2000,
       "emoji": "🔮"
     }
   },
@@ -152,17 +152,17 @@
       "type": "valuable",
       "result": "corona_oro",
       "ingredients": {
-        "oro": 10,
-        "diamante_bruto": 1
+        "oro": 15,
+        "diamante_bruto": 5
       }
     },
     "cristal_mistico": {
       "type": "valuable",
       "result": "cristal_mistico",
       "ingredients": {
-        "obsidiana": 10,
-        "pavonita": 5,
-        "diamante_bruto": 2
+        "obsidiana": 20,
+        "pavonita": 15,
+        "diamante_bruto": 5
       }
     },
     "craft_pico_hierro": {
