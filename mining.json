@@ -29,7 +29,7 @@
     },
     "nucleo": {
       "name": "Núcleo del Planeta",
-      "hardness": 60,
+      "hardness": 80,
       "energy_cost": 25,
       "drops": [
         "obsidiana",
@@ -58,7 +58,7 @@
     },
     "pico_diamante": {
       "name": "Pico de Diamante",
-      "efficiency": 100,
+      "efficiency": 85,
       "max_durability": 300,
       "emoji": "💎"
     }
@@ -125,7 +125,7 @@
     },
     "cristal_mistico": {
       "name": "Cristal Místico",
-      "value": 1400,
+      "value": 1000,
       "emoji": "🔮"
     }
   },
