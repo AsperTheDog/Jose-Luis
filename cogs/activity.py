@@ -104,7 +104,7 @@ class StatsCog(commands.Cog):
             "attachments": "Archivos Adjuntos",
         }
 
-        rows = await self.bot.db.activity_get_top_users_by_category(interaction.guild, category)
+        rows = await self.bot.db.activity_get_top_users_by_category(interaction.guild.id, category)
 
         if not rows:
             await interaction.response.send_message("Aún no hay datos para el leaderboard.", ephemeral=True)
