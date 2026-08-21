@@ -357,11 +357,11 @@ class EconomyCog(commands.Cog):
         phrase = await self.bot.db.global_get_random_phrase("allowance", "success")
         msg = f"{phrase}💸Could you give me an allowence?\n Has obtenido **{final_paga}** choskris.\n🔥 Racha diaria: **{streak + 1}** días."
 
-        current_balance = await self.bot.db.economy_get_balance(interaction.user.id)
-        msg += f"\n💰 Saldo actual: **{current_balance}**"
         if job_boost > 0.0:
             msg += f" *(+{int(job_boost * 100)}%!)*"
 
+        current_balance = await self.bot.db.economy_get_balance(interaction.user.id)
+        msg += f"\n💰 Saldo actual: **{current_balance}**"
         await interaction.followup.send(msg)
 
     @economy_group.command(name="ruleta", description="Juega a la ruleta. Puedes apostar a color, a número, o a ambos (ej. 0 Verde o 17 Negro).")
