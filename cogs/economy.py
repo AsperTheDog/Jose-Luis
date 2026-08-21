@@ -155,6 +155,77 @@ class JobSelectView(discord.ui.View):
             pass
 
 
+import discord
+import random
+from discord.ext import commands
+
+
+class MayorMenorView(discord.ui.View):
+    def __init__(self, user, bet_amount, bot):
+        super().__init__(timeout=60)
+        self.user = user
+        self.bet = bet_amount
+        self.current_win = bet_amount
+        self.bot = bot
+
+        self.current_card = random.randint(1, 13)
+        self.deck_names = {1: "A", 11: "J", 12: "Q", 13: "K"}
+
+    def get_card_name(self, value):
+        return self.deck_names.get(value, str(value))
+
+    async def update_embed(self, interaction, result_msg):
+        embed = discord.Embed(
+            title="🃏 Mayor o Menor",
+            description=f"Carta actual: **{self.get_card_name(self.current_card)}**",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="Apuesta acumulada", value=f"`{self.current_win:,}` choskris", inline=False)
+        embed.set_footer(text=result_msg)
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="Mayor", style=discord.ButtonStyle.success)
+    async def mayor(self, interaction: discord.Interaction, button: discord.ui.Button):
+        next_card = self.current_card
+        while next_card == self.current_card:
+            next_card = random.randint(1, 13)
+        if next_card > self.current_card:
+            self.current_win = int(self.current_win * 1.5)
+            self.current_card = next_card
+            await self.update_embed(interaction, "¡Correcto! La carta era mayor.")
+        else:
+            await self.end_game(interaction, False, next_card)
+
+    @discord.ui.button(label="Menor", style=discord.ButtonStyle.danger)
+    async def menor(self, interaction: discord.Interaction, button: discord.ui.Button):
+        next_card = self.current_card
+        while next_card == self.current_card:
+            next_card = random.randint(1, 13)
+        if next_card < self.current_card:
+            self.current_win = int(self.current_win * 1.5)
+            self.current_card = next_card
+            await self.update_embed(interaction, "¡Correcto! La carta era menor.")
+        else:
+            await self.end_game(interaction, False, next_card)
+
+    @discord.ui.button(label="Retirarse (Cobrar)", style=discord.ButtonStyle.primary)
+    async def stop_game(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.end_game(interaction, True)
+
+    async def end_game(self, interaction, won, card=None):
+        self.stop()
+        for child in self.children:
+            child.disabled = True
+
+        if won:
+            await self.bot.db.economy_update_balance(self.user.id, self.current_win)
+            msg = f"✅ ¡Has cobrado **{self.current_win:,}** choskris!"
+        else:
+            msg = f"❌ ¡Perdiste! La carta era {self.get_card_name(card)}."
+
+        await interaction.response.edit_message(content=msg, embed=None, view=self)
+
+
 class EconomyCog(commands.Cog):
     def __init__(self, bot: JoseLuisBot):
         self.bot = bot
@@ -745,6 +816,28 @@ class EconomyCog(commands.Cog):
         embed.add_field(name=f"", value=f"💰 Saldo actual: **{current_balance}**")
 
         await interaction.response.send_message(embed=embed)
+
+    @economy_group.command(name="mayoromenor",
+                           description="Jose Luis muestra una carta, tú dices si es mayor o menor. Rachas de aciertos mayores dan más botín.")
+    async def mayoromenor(self, interaction: discord.Interaction, cantidad: int):
+        await interaction.response.defer()
+
+        balance = await self.bot.db.economy_get_balance(interaction.user.id)
+        if cantidad > balance or cantidad <= 0:
+            await interaction.followup.send("No tienes suficientes choskris.")
+            return
+
+        await self.bot.db.economy_update_balance(interaction.user.id, -cantidad)
+
+        view = MayorMenorView(interaction.user, cantidad, self.bot)
+        embed = discord.Embed(
+            title="🃏 Mayor o Menor",
+            description=f"Carta actual: **{view.get_card_name(view.current_card)}**",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="Apuesta acumulada", value=f"`{cantidad:,}` choskris")
+
+        await interaction.followup.send(embed=embed, view=view)
 
     @economy_group.command(name="forzardrop", description="Obliga al juego a generar un drop inmediatamente")
     async def drop(self, interaction: discord.Interaction):
