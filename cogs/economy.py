@@ -765,7 +765,7 @@ class EconomyCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        if message.author.bot or not self.bot.is_channel_whitelisted(message.guild.id, message.channel.id):
+        if message.author.bot or not await self.bot.db.is_channel_whitelisted(message.guild.id, message.channel.id):
             return
 
         channel_id = message.channel.id

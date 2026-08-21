@@ -65,9 +65,6 @@ class JoseLuisBot(commands.Bot):
             return True
         return False
 
-    def is_channel_whitelisted(self, guild_id, channel_id):
-        return self.config.is_channel_whitelisted(guild_id, channel_id)
-
 
 if __name__ == "__main__":
     twitchClient = os.getenv("TWITCH_CLIENT")
