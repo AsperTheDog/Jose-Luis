@@ -104,23 +104,35 @@ class StatsCog(commands.Cog):
             "attachments": "Archivos Adjuntos",
         }
 
-        rows = await self.bot.db.activity_get_top_users_by_category(interaction.guild.id, category)
+        rows = await self.bot.db.activity_get_top_users_by_category(
+            interaction.guild.id, category
+        )
 
         if not rows:
             await interaction.response.send_message("Aún no hay datos para el leaderboard.", ephemeral=True)
             return
 
-        embed = discord.Embed(
-            title=f"Top 10 - {title_map[category]}",
-            color=discord.Color.gold(),
-        )
+        embed = discord.Embed(title=f"Top 10 - {title_map[category]}", color=discord.Color.gold())
 
         description = ""
         medals = ["🥇", "🥈", "🥉"]
+        human_rank = 1
 
-        for idx, (user_id, value, total_xp) in enumerate(rows, start=1):
-            icon = medals[idx - 1] if idx <= 3 else f"`#{idx}`"
+        for user_id, value, total_xp in rows:
             member = interaction.guild.get_member(user_id)
+
+            is_bot = member.bot if member else False
+
+            if is_bot:
+                icon = "🤖"
+            else:
+                icon = (
+                    medals[human_rank - 1]
+                    if human_rank <= len(medals)
+                    else f"`#{human_rank}`"
+                )
+                human_rank += 1
+
             user_name = member.mention if member else f"Usuario ({user_id})"
 
             if category == "xp":
