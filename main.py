@@ -1,9 +1,5 @@
 import asyncio
-import json
 import os
-import random
-import sqlite3
-from typing import Any, Dict, List, Optional
 
 import discord
 from discord.ext import commands

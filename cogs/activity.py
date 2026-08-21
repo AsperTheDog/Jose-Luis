@@ -1,6 +1,4 @@
-import asyncio
 import re
-import sqlite3
 from typing import Optional, Tuple
 import discord
 from discord import app_commands

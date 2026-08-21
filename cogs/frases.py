@@ -1,6 +1,5 @@
 import discord
 import random
-import sqlite3
 from typing import List, Dict
 from discord import app_commands
 from discord.ext import commands

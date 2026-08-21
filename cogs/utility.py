@@ -1,6 +1,10 @@
 import asyncio
 import os
-import sqlite3
+
+from sqlite3 import Row
+from typing import Any
+
+import aiosqlite
 
 import discord
 from discord import app_commands
@@ -62,26 +66,26 @@ class UtilityCog(commands.Cog):
     @utility_group.command(name="execsql", description="Ejecuta una consulta SQL en bot_data.db con formato de tabla alineada.")
     @app_commands.describe(query="La sentencia SQL a ejecutar (SELECT, UPDATE, INSERT, DELETE, etc.)")
     async def exec_sql(self, interaction: discord.Interaction, query: str):
-        if await self.bot.filter_owner(interaction): return
+        if await self.bot.filter_owner(interaction):
+            return
 
         await interaction.response.defer(ephemeral=True)
 
-        def run_db_query(sql: str, db_path: str = "bot_data.db"):
-            with sqlite3.connect(db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                cursor.execute(sql)
-
+        async def run_db_query(sql: str) -> tuple[str, Any, Any]:
+            async with self.bot.db.execute(sql) as cursor:
                 if cursor.description:
                     columns = [desc[0] for desc in cursor.description]
-                    rows = cursor.fetchall()
-                    return ("SELECT", columns, [dict(row) for row in rows])
-                else:
-                    conn.commit()
-                    return ("MUTATION", cursor.rowcount, None)
+                    rows = await cursor.fetchall()
+                    dict_rows = [dict(zip(columns, row)) for row in rows]
+                    return "SELECT", columns, dict_rows
+
+                affected_rows = cursor.rowcount
+
+            await self.bot.db.commit()
+            return "MUTATION", affected_rows, None
 
         try:
-            query_type, result_data, rows = await asyncio.to_thread(run_db_query, query)
+            query_type, result_data, rows = await run_db_query(query)
 
             if query_type == "MUTATION":
                 await interaction.followup.send(
@@ -90,7 +94,8 @@ class UtilityCog(commands.Cog):
                 )
             else:
                 if not rows:
-                    return await interaction.followup.send("La consulta no devolvió resultados (0 filas).")
+                    await interaction.followup.send("La consulta no devolvió resultados (0 filas).")
+                    return
 
                 columns = result_data
                 display_rows = rows[:15]

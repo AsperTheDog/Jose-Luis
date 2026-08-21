@@ -1,4 +1,4 @@
-from typing import Optional, Callable, Dict
+from typing import Optional, Callable, Dict, Awaitable
 import discord
 from discord import app_commands, DMChannel
 from discord.ext import commands
@@ -20,7 +20,7 @@ class LoggingCog(commands.Cog):
         if not log_channel_id:
             return None
 
-        category_map: Dict[str, Callable[[int], bool]] = {
+        category_map: Dict[str, Callable[[int], Awaitable[bool]]] = {
             "messages": self.bot.config.get_event_mensajes,
             "mensajes": self.bot.config.get_event_mensajes,
             "members": self.bot.config.get_event_miembros,
@@ -32,7 +32,7 @@ class LoggingCog(commands.Cog):
         }
 
         checker = category_map.get(category)
-        if checker and not checker(guild.id):
+        if checker and not await checker(guild.id):
             return None
 
         return await guild.fetch_channel(log_channel_id)

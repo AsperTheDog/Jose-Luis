@@ -231,6 +231,52 @@ class DBManager:
         await self.db.execute("UPDATE economy_users SET active_job = ?, last_job_switch = ? WHERE user_id = ?", (selected_job_id, last_job_switch_iso, user_id))
         await self.db.commit()
 
+    async def economy_claim_interest(self, user_id: int) -> int:
+        async with self.db.execute("SELECT unclaimed_interest FROM economy_users WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+
+        if not row:
+            return 0
+
+        unclaimed = row[0]
+        if unclaimed <= 0:
+            return 0
+
+        await self.db.execute("UPDATE economy_users SET balance = MAX(0, balance + ?), unclaimed_interest = 0 WHERE user_id = ?", (int(unclaimed), user_id))
+        await self.db.commit()
+
+        return unclaimed
+
+    async def economy_process_slots_bet(self, user_id: int, bet_amount: int, net_change: int, default_balance: int = 1000) -> \
+    tuple[bool, int]:
+        async with self.db.execute("SELECT balance FROM economy_users WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+
+        if not row:
+            balance = default_balance
+            await self.db.execute("INSERT INTO economy_users (user_id, balance) VALUES (?, ?)", (user_id, balance))
+        else:
+            balance = row[0]
+
+        if balance < bet_amount:
+            return False, balance
+
+        new_balance = max(0, balance + net_change)
+        await self.db.execute("UPDATE economy_users SET balance = ? WHERE user_id = ?", (int(new_balance), user_id))
+        await self.db.commit()
+
+        return True, new_balance
+
+    async def economy_get_active_users(self) -> list[tuple[int, int, str | None, int]]:
+        async with self.db.execute("SELECT user_id, balance, active_job, unclaimed_interest FROM economy_users WHERE balance > 0") as cursor:
+            return await cursor.fetchall()
+
+    async def economy_add_unclaimed_interest(self, user_id: int, current_unclaimed: int, daily_interest: int) -> None:
+        if daily_interest > 0:
+            new_unclaimed = current_unclaimed + daily_interest
+            await self.db.execute("UPDATE economy_users SET unclaimed_interest = ? WHERE user_id = ?", (int(new_unclaimed), user_id))
+            await self.db.commit()
+
     async def phrases_pick_random(self, category: str, history_ratio: float) -> List[str] | None:
         async with self.db.execute("SELECT content FROM text_lists WHERE category = ?", (category,)) as cursor:
             rows = await cursor.fetchall()

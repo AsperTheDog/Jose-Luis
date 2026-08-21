@@ -1,5 +1,4 @@
 import math
-import sqlite3
 
 import discord
 import random
@@ -669,34 +668,20 @@ class EconomyCog(commands.Cog):
         user_id = interaction.user.id
 
         phrase = await self.bot.db.global_get_random_phrase("interest_fail")
-        with sqlite3.connect("bot_data.db") as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
+        claimed_amount = await self.bot.db.economy_claim_interest(user_id)
 
-            cursor.execute("SELECT balance, unclaimed_interest FROM economy_users WHERE user_id = ?", (user_id,))
-            row = cursor.fetchone()
+        if claimed_amount is None:
+            await interaction.response.send_message(f"{phrase}No tienes una cuenta de economía registrada.", ephemeral=True)
+            return
 
-            if not row:
-                await interaction.response.send_message(f"{phrase}No tienes una cuenta de economía registrada.", ephemeral=True)
-                return
+        if claimed_amount <= 0:
+            await interaction.response.send_message( f"{phrase}No tienes intereses pendientes por reclamar.", ephemeral=True)
+            return
 
-            unclaimed = row["unclaimed_interest"]
-
-            if unclaimed <= 0:
-                await interaction.response.send_message(f"{phrase}No tienes intereses pendientes por reclamar.", ephemeral=True)
-                return
-
-            new_balance = row["balance"] + unclaimed
-
-            cursor.execute("UPDATE economy_users SET balance = MAX(0, ?), unclaimed_interest = 0 WHERE user_id = ?", (new_balance, user_id))
-            conn.commit()
-
-        await self.bot.global_stats.register_interest_payout(user_id, unclaimed)
+        await self.bot.global_stats.register_interest_payout(user_id, claimed_amount)
         phrase = await self.bot.db.global_get_random_phrase("interest_success")
-        message = (
-            f"{phrase}Has reclamado **+{unclaimed:,}** choskris acumulados de intereses.\n"
-            f"Tu nuevo balance total es de **{new_balance:,}** choskris."
-        )
+        message = f"{phrase}Has reclamado **+{claimed_amount:,}** choskris acumulados de intereses."
+
         current_balance = await self.bot.db.economy_get_balance(interaction.user.id)
         message += f"\n💰 Saldo actual: **{current_balance}**"
         await interaction.response.send_message(message)
@@ -704,10 +689,7 @@ class EconomyCog(commands.Cog):
     @economy_group.command(name="meterfrase", description="Inserta una frase customizada para las acciones de economía")
     async def meterfrase(self, interaction: discord.Interaction, frase: str, categoria: str, tag: Optional[str] = None):
         if await self.bot.filter_operators(interaction): return
-        with sqlite3.connect("bot_data.db") as conn:
-            cursor = conn.cursor()
-            cursor.execute("INSERT INTO economy_phrases (phrase, category, tag) VALUES (?, ?, ?)", (frase, categoria, tag))
-            conn.commit()
+        await self.bot.db.economy_add_phrase(frase, categoria, tag)
 
         await interaction.response.send_message(f"Añadido '{frase}' a la lista de frases.", ephemeral=True)
 
@@ -739,25 +721,13 @@ class EconomyCog(commands.Cog):
             multiplier = SYMBOLS[reel2]["payout_2"]
 
         winnings = int(apuesta * multiplier)
-        net_change = winnings - apuesta  # Net balance shift
+        net_change = winnings - apuesta
 
-        with sqlite3.connect("bot_data.db") as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT balance FROM economy_users WHERE user_id = ?", (user_id,))
-            row = cursor.fetchone()
+        success, current_balance = await self.bot.db.economy_process_slots_bet(interaction.user.id, apuesta, net_change)
 
-            if not row:
-                balance = 1000
-                cursor.execute("INSERT INTO economy_users (user_id, balance) VALUES (?, ?)", (user_id, balance))
-            else:
-                balance = row[0]
-
-            if balance < apuesta:
-                await interaction.response.send_message(f"No tienes suficientes monedas. Saldo actual: {balance}", ephemeral=True)
-                return
-
-            cursor.execute("UPDATE economy_users SET balance = MAX(0, balance + ?) WHERE user_id = ?", (net_change, user_id))
-            conn.commit()
+        if not success:
+            await interaction.response.send_message(f"No tienes suficientes monedas. Saldo actual: **{current_balance}**", ephemeral=True)
+            return
 
         reels_display = f"| {reel1} | {reel2} | {reel3} |"
         if winnings > 0:
@@ -816,31 +786,16 @@ class EconomyCog(commands.Cog):
 
     @tasks.loop(time=datetime.time(hour=0, minute=0, second=0))
     async def daily_interest_task(self):
-        with sqlite3.connect("bot_data.db") as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
+        users = await self.bot.db.economy_get_active_users()
 
-            cursor.execute("SELECT user_id, balance, active_job, unclaimed_interest FROM economy_users WHERE balance > 0")
-            users = cursor.fetchall()
-
-        for user in users:
-            user_id = user["user_id"]
-            balance = user["balance"]
-            active_job = user["active_job"]
-            current_unclaimed = user["unclaimed_interest"]
-
+        for user_id, balance, active_job, current_unclaimed in users:
             perk_bonus = await self.bot.db.get_job_perk(active_job, "bank_interest_bonus", 0.0)
 
             if perk_bonus <= 0:
                 continue
 
             daily_interest = math.floor(balance * perk_bonus)
-
-            with sqlite3.connect("bot_data.db") as conn:
-                if daily_interest > 0:
-                    new_unclaimed = current_unclaimed + daily_interest
-                    cursor.execute("UPDATE economy_users SET unclaimed_interest = ? WHERE user_id = ?", (new_unclaimed, user_id))
-                conn.commit()
+            await self.bot.db.economy_add_unclaimed_interest(user_id, daily_interest)
 
     @daily_interest_task.before_loop
     async def before_daily_interest(self):
