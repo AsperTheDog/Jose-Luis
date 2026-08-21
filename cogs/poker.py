@@ -10,19 +10,12 @@ from discord.ext import commands
 
 from main import JoseLuisBot
 
-# ==========================================
-# MOTOR LÓGICO Y EVALUADOR DE MANOS
-# ==========================================
-
-# Mapeo de valores para evaluar
-RANK_VALUES = {'2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13,
-               'A': 14}
+RANK_VALUES = {'2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14}
 SUITS = ['♠', '♥', '♦', '♣']
 RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
 
 
 def evaluate_hand(cards: List[str]) -> Tuple:
-    """Evalúa 7 cartas y devuelve una tupla con la puntuación (para comparar ganadores)."""
     parsed_cards = []
     for card in cards:
         suit = card[-1]
@@ -30,7 +23,6 @@ def evaluate_hand(cards: List[str]) -> Tuple:
         parsed_cards.append((RANK_VALUES[rank], suit))
 
     best_rank = (0,)
-    # Probar todas las combinaciones posibles de 5 cartas de las 7 disponibles
     for combo in itertools.combinations(parsed_cards, 5):
         combo = sorted(combo, key=lambda x: x[0], reverse=True)
         vals = [c[0] for c in combo]
@@ -39,13 +31,11 @@ def evaluate_hand(cards: List[str]) -> Tuple:
         is_flush = len(set(suits)) == 1
         is_straight = False
 
-        # Comprobar escalera (Straight)
         if len(set(vals)) == 5 and vals[0] - vals[-1] == 4:
             is_straight = True
-        # Caso especial: Escalera A-5 (A, 5, 4, 3, 2)
         elif vals == [14, 5, 4, 3, 2]:
             is_straight = True
-            vals = [5, 4, 3, 2, 1]  # Modificar valores para que ordene bien
+            vals = [5, 4, 3, 2, 1]
 
         counts = Counter(vals)
         counts_sorted = sorted(counts.items(), key=lambda x: (x[1], x[0]), reverse=True)
@@ -55,23 +45,23 @@ def evaluate_hand(cards: List[str]) -> Tuple:
 
         score = 0
         if is_straight and is_flush:
-            score = 8  # Straight Flush
+            score = 8
         elif pattern == (4, 1):
-            score = 7  # Poker (Quads)
+            score = 7
         elif pattern == (3, 2):
-            score = 6  # Full House
+            score = 6
         elif is_flush:
-            score = 5  # Color (Flush)
+            score = 5
         elif is_straight:
-            score = 4  # Escalera (Straight)
+            score = 4
         elif pattern == (3, 1, 1):
-            score = 3  # Trío (Three of a kind)
+            score = 3
         elif pattern == (2, 2, 1):
-            score = 2  # Doble Pareja (Two Pair)
+            score = 2
         elif pattern == (2, 1, 1, 1):
-            score = 1  # Pareja (Pair)
+            score = 1
         else:
-            score = 0  # Carta Alta
+            score = 0
 
         current_rank = (score,) + primary_vals
         if current_rank > best_rank:
@@ -110,19 +100,16 @@ class PokerGame:
 
         self.community_cards = []
         self.pot = 0
-        self.current_bet = 0  # Apuesta máxima de la ronda actual a igualar
+        self.current_bet = 0
 
-        self.phase = 0  # 0: Pre-flop, 1: Flop, 2: Turn, 3: River, 4: Showdown
+        self.phase = 0
         self.turn_idx = 0
-        self.players_acted = 0  # Contador para saber cuándo termina la ronda de apuestas
+        self.players_acted = 0
 
     def start_game(self):
         # Repartir 2 cartas a cada jugador
         for p in self.players:
             p.hand = [self.deck.pop(), self.deck.pop()]
-
-        # Opcional: Ciegas pequeñas y grandes podrían ir aquí.
-        # Para simplificar en Discord, empezamos sin ciegas, turno del Host.
 
     def active_players(self):
         return [p for p in self.players if not p.folded]
@@ -137,13 +124,10 @@ class PokerGame:
         self.players_acted += 1
         active = self.active_players()
 
-        # Si todos menos uno se han retirado, fin del juego
         if len(active) == 1:
             self.phase = 4
             return
 
-        # Comprobar si la ronda de apuestas ha terminado
-        # Condición: Todos han actuado al menos una vez Y todos los que no están all-in han igualado la apuesta
         can_act = self.players_can_act()
         if self.players_acted >= len(can_act):
             all_matched = all(p.bet == self.current_bet for p in can_act)
@@ -151,7 +135,6 @@ class PokerGame:
                 self.next_phase()
                 return
 
-        # Pasar al siguiente jugador que pueda actuar
         attempts = 0
         while attempts < len(self.players):
             self.turn_idx = (self.turn_idx + 1) % len(self.players)
@@ -161,7 +144,6 @@ class PokerGame:
             attempts += 1
 
     def next_phase(self):
-        # Recoger apuestas al bote central y resetear apuestas de ronda
         for p in self.players:
             self.pot += p.bet
             p.bet = 0
@@ -169,7 +151,6 @@ class PokerGame:
         self.players_acted = 0
         self.phase += 1
 
-        # Repartir comunitarias según la fase
         if self.phase == 1:  # Flop
             self.community_cards.extend([self.deck.pop(), self.deck.pop(), self.deck.pop()])
         elif self.phase == 2:  # Turn
@@ -177,21 +158,14 @@ class PokerGame:
         elif self.phase == 3:  # River
             self.community_cards.append(self.deck.pop())
 
-        # Si ya es showdown, fin.
         if self.phase == 4:
             return
 
-        # Mover turno al primer jugador activo
         self.turn_idx = 0
         while self.players[self.turn_idx].folded or self.players[self.turn_idx].all_in:
             self.turn_idx = (self.turn_idx + 1) % len(self.players)
-            # Prevención de bucle infinito (debería estar cubierto por can_act checks)
             if self.turn_idx == 0: break
 
-
-# ==========================================
-# INTERFACES UI (MODALES Y VISTAS)
-# ==========================================
 
 class RaiseModal(discord.ui.Modal, title='Subir Apuesta'):
     amount_input = discord.ui.TextInput(
