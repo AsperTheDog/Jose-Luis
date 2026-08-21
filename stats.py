@@ -114,8 +114,8 @@ class StatsTracker:
     async def register_pickaxe_broken(self, user_id: int) -> None:
         await self.db.increment_stat(user_id, "pickaxes_broken", 1)
 
-    async def register_item_crafted(self, user_id: int) -> None:
-        await self.db.increment_stat(user_id, "items_crafted", 1)
+    async def register_item_crafted(self, user_id: int, amount: int) -> None:
+        await self.db.increment_stat(user_id, "items_crafted", amount)
 
     async def register_item_sale(self, user_id: int, items_sold_count: int, money_gained: int) -> None:
         await self.db.increment_stat(user_id, "items_sold", items_sold_count)

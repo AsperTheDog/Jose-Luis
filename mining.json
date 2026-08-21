@@ -198,8 +198,8 @@
       "type": "pickaxe",
       "result": "pico_diamante",
       "ingredients": {
-        "oro": 20,
-        "diamante_bruto": 5
+        "oro": 15,
+        "diamante_bruto": 10
       }
     }
   }

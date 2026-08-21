@@ -27,6 +27,7 @@ class UtilityCog(commands.Cog):
         if await self.bot.filter_owner(interaction): return
 
         await interaction.response.send_message("Shutting down...", ephemeral=True)
+        await self.bot.db.close()
         await interaction.client.close()
 
     @utility_group.command(name="dumpconfig", description="Dumps the contents of config.cfg")

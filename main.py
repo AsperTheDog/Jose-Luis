@@ -65,8 +65,7 @@ class JoseLuisBot(commands.Bot):
 
     async def filter_owner(self, interaction):
         if not await bot.is_owner(interaction.user):
-            await interaction.response.send_message(
-                "Esta acción solo la puede hacer el dueño del bot (avisa a Asper si quieres hacer algo)", ephemeral=True)
+            await interaction.response.send_message("Esta acción solo la puede hacer el dueño del bot (avisa a Asper si quieres hacer algo)", ephemeral=True)
             return True
         return False
 

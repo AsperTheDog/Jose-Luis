@@ -26,6 +26,10 @@ class DBManager:
 
         self.job_registry: Dict[str, Dict[str, Any]] = self._load_json("jobs.json")
 
+    async def close(self):
+        if self.db:
+            await self.db.close()
+
     async def start_db(self):
         self.db = await aiosqlite.connect(self.db_path, timeout=30.0)
         await self.db.execute("PRAGMA journal_mode=WAL;")
@@ -170,6 +174,11 @@ class DBManager:
     async def economy_ensure_user(self, user_id: int):
         await self.db.execute("INSERT OR IGNORE INTO economy_users (user_id) VALUES (?)", (user_id,))
 
+    async def economy_get_balance(self, user_id: int) -> int:
+        await self.economy_ensure_user(user_id)
+        async with self.db.execute("SELECT balance FROM economy_users WHERE user_id = ?", (user_id,)) as c:
+            return (await c.fetchone())[0]
+
     async def economy_update_balance(self, user_id: int, amount: int):
         await self.economy_ensure_user(user_id)
         await self.db.execute("UPDATE economy_users SET balance = MAX(0, balance + ?) WHERE user_id = ?", (int(amount), user_id))
@@ -216,6 +225,10 @@ class DBManager:
     async def economy_update_work_and_job(self, user_id: int, salary: int, last_work_iso: str, job_id: str, level: int, new_xp: int) -> None:
         await self.db.execute("UPDATE economy_users SET balance = MAX(0, balance + ?), last_work = ? WHERE user_id = ?", (int(salary), last_work_iso, user_id))
         await self.db.execute("INSERT OR REPLACE INTO economy_jobs (user_id, job_id, level, xp) VALUES (?, ?, ?, ?)", (user_id, job_id, level, new_xp))
+        await self.db.commit()
+
+    async def economy_update_active_job(self, user_id: int, selected_job_id: str, last_job_switch_iso: str) -> None:
+        await self.db.execute("UPDATE economy_users SET active_job = ?, last_job_switch = ? WHERE user_id = ?", (selected_job_id, last_job_switch_iso, user_id))
         await self.db.commit()
 
     async def phrases_pick_random(self, category: str, history_ratio: float) -> List[str] | None:
@@ -333,20 +346,22 @@ class DBManager:
         async with self.db.execute("SELECT material_id, amount FROM mining_inv_materials WHERE user_id = ?", (user_id,)) as cursor:
             return dict(await cursor.fetchall())
 
-    async def mining_craft_item(self, user_id: int, ingredients: dict[str, int], result_id: str, item_type: str, max_durability: int | None = None) -> None:
+    async def mining_craft_item(self, user_id: int, ingredients: dict[str, int], result_id: str, item_type: str, amount: int, max_durability: int | None = None) -> None:
         await self.mining_ensure_user(user_id)
         for mat_id, req_amount in ingredients.items():
-            await self.db.execute("UPDATE mining_inv_materials SET amount = amount - ? WHERE user_id = ? AND material_id = ?", (req_amount, user_id, mat_id))
+            await self.db.execute("UPDATE mining_inv_materials SET amount = amount - ? WHERE user_id = ? AND material_id = ?", (req_amount * amount, user_id, mat_id))
 
         await self.db.execute("DELETE FROM mining_inv_materials WHERE amount <= 0 AND user_id = ?", (user_id,))
 
+
         if item_type == "pickaxe":
-            await self.db.execute("INSERT INTO mining_inv_pickaxes (user_id, pickaxe_id, durability) VALUES (?, ?, ?)", (user_id, result_id, max_durability))
+            for _ in range(amount):
+                await self.db.execute("INSERT INTO mining_inv_pickaxes (user_id, pickaxe_id, durability) VALUES (?, ?, ?)", (user_id, result_id, max_durability))
         else:
             await self.db.execute("""INSERT INTO mining_inv_valuables (user_id, valuable_id, amount)
                                         VALUES (?, ?, 1)
-                                        ON CONFLICT(user_id, valuable_id) DO UPDATE SET amount = amount + 1
-                                  """, (user_id, result_id), )
+                                        ON CONFLICT(user_id, valuable_id) DO UPDATE SET amount = amount + ?
+                                  """, (user_id, result_id, amount))
 
         await self.db.commit()
 
