@@ -1,10 +1,6 @@
-import asyncio
 import os
 
-from sqlite3 import Row
 from typing import Any
-
-import aiosqlite
 
 import discord
 from discord import app_commands

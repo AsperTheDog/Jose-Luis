@@ -247,8 +247,7 @@ class DBManager:
 
         return unclaimed
 
-    async def economy_process_slots_bet(self, user_id: int, bet_amount: int, net_change: int, default_balance: int = 1000) -> \
-    tuple[bool, int]:
+    async def economy_process_slots_bet(self, user_id: int, bet_amount: int, net_change: int, default_balance: int = 1000) -> tuple[bool, int]:
         async with self.db.execute("SELECT balance FROM economy_users WHERE user_id = ?", (user_id,)) as cursor:
             row = await cursor.fetchone()
 
@@ -490,3 +489,31 @@ class DBManager:
                                        WHERE guild_id = ? ORDER BY {category} DESC
                                        LIMIT 10""", (guild_id,)) as cursor:
             return await cursor.fetchall()
+
+    async def poker_get_balance(self, user_id: int) -> int:
+        async with self.db.execute("SELECT balance FROM economy_users WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+        return row[0] if row else 0
+
+    async def poker_remove_balance(self, user_id: int, amount: int) -> bool:
+        async with self.db.execute("SELECT balance FROM economy_users WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+
+        if not row or row[0] < amount:
+            return False
+
+        new_balance = row[0] - amount
+        await self.db.execute("UPDATE economy_users SET balance = ? WHERE user_id = ?", (new_balance, user_id))
+        await self.db.commit()
+        return True
+
+    async def poker_add_balance(self, user_id: int, amount: int) -> None:
+        async with self.db.execute("SELECT balance FROM economy_users WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+
+        if not row:
+            await self.db.execute("INSERT INTO economy_users (user_id, balance) VALUES (?, ?)", (user_id, amount))
+        else:
+            new_balance = row[0] + amount
+            await self.db.execute("UPDATE economy_users SET balance = ? WHERE user_id = ?", (new_balance, user_id))
+        await self.db.commit()
