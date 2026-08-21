@@ -159,69 +159,131 @@ import discord
 import random
 from discord.ext import commands
 
+import discord
+import random
+
 
 class MayorMenorView(discord.ui.View):
-    def __init__(self, user, bet_amount, bot):
+    def __init__(self, user: discord.User, bet_amount: int, bot):
         super().__init__(timeout=60)
         self.user = user
         self.bet = bet_amount
         self.current_win = bet_amount
         self.bot = bot
+        self.streak = 0
 
         self.current_card = random.randint(1, 13)
         self.deck_names = {1: "A", 11: "J", 12: "Q", 13: "K"}
 
-    def get_card_name(self, value):
+        self.stop_game.disabled = True
+
+    def get_card_name(self, value: int) -> str:
         return self.deck_names.get(value, str(value))
 
-    async def update_embed(self, interaction, result_msg):
+    def calculate_multipliers(self, card_val: int):
+        higher_prob = (13 - card_val) / 13.0
+        lower_prob = (card_val - 1) / 13.0
+
+        mult_higher = round((1 / higher_prob) * 0.95, 2) if higher_prob > 0 else 0
+        mult_lower = round((1 / lower_prob) * 0.95, 2) if lower_prob > 0 else 0
+
+        return mult_higher, mult_lower
+
+    def update_button_labels(self):
+        mult_higher, mult_lower = self.calculate_multipliers(self.current_card)
+
+        if mult_higher > 0:
+            self.mayor.label = f"Mayor (x{mult_higher})"
+            self.mayor.disabled = False
+        else:
+            self.mayor.label = "Mayor (Imposible)"
+            self.mayor.disabled = True
+
+        if mult_lower > 0:
+            self.menor.label = f"Menor (x{mult_lower})"
+            self.menor.disabled = False
+        else:
+            self.menor.label = "Menor (Imposible)"
+            self.menor.disabled = True
+
+        if self.streak >= 2:
+            self.stop_game.disabled = False
+            self.stop_game.label = f"💰 Retirarse ({self.current_win:,} choskris)"
+        else:
+            self.stop_game.disabled = True
+            self.stop_game.label = f"🔒 Retirarse (Racha: {self.streak}/2)"
+
+    async def update_embed(self, interaction: discord.Interaction, result_msg: str):
+        self.update_button_labels()
+
         embed = discord.Embed(
-            title="🃏 Mayor o Menor",
-            description=f"Carta actual: **{self.get_card_name(self.current_card)}**",
-            color=discord.Color.blue()
+            title="🃏 Mayor o Menor (Modo Desafío)",
+            description=f"Carta actual: **[{self.get_card_name(self.current_card)}]**",
+            color=discord.Color.gold()
         )
-        embed.add_field(name="Apuesta acumulada", value=f"`{self.current_win:,}` choskris", inline=False)
+        embed.add_field(name="💰 Acumulado", value=f"`{self.current_win:,}` choskris", inline=True)
+        embed.add_field(name="🔥 Racha", value=f"`{self.streak}` aciertos", inline=True)
         embed.set_footer(text=result_msg)
+
         await interaction.response.edit_message(embed=embed, view=self)
 
     @discord.ui.button(label="Mayor", style=discord.ButtonStyle.success)
     async def mayor(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user.id:
+            await interaction.response.send_message("❌ No es tu partida.", ephemeral=True)
+            return
+
+        mult_higher, _ = self.calculate_multipliers(self.current_card)
         next_card = self.current_card
         while next_card == self.current_card:
             next_card = random.randint(1, 13)
+
         if next_card > self.current_card:
-            self.current_win = int(self.current_win * 1.5)
+            self.streak += 1
+            self.current_win = int(self.current_win * mult_higher)
             self.current_card = next_card
-            await self.update_embed(interaction, "¡Correcto! La carta era mayor.")
+            await self.update_embed(interaction, f"✅ ¡Correcto! Salió un {self.get_card_name(next_card)}.")
         else:
-            await self.end_game(interaction, False, next_card)
+            await self.end_game(interaction, won=False, card=next_card)
 
     @discord.ui.button(label="Menor", style=discord.ButtonStyle.danger)
     async def menor(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user.id:
+            await interaction.response.send_message("❌ No es tu partida.", ephemeral=True)
+            return
+
+        _, mult_lower = self.calculate_multipliers(self.current_card)
         next_card = self.current_card
         while next_card == self.current_card:
             next_card = random.randint(1, 13)
+
         if next_card < self.current_card:
-            self.current_win = int(self.current_win * 1.5)
+            self.streak += 1
+            self.current_win = int(self.current_win * mult_lower)
             self.current_card = next_card
-            await self.update_embed(interaction, "¡Correcto! La carta era menor.")
+            await self.update_embed(interaction, f"✅ ¡Correcto! Salió un {self.get_card_name(next_card)}.")
         else:
-            await self.end_game(interaction, False, next_card)
+            await self.end_game(interaction, won=False, card=next_card)
 
-    @discord.ui.button(label="Retirarse (Cobrar)", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="🔒 Retirarse", style=discord.ButtonStyle.primary)
     async def stop_game(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.end_game(interaction, True)
+        if interaction.user.id != self.user.id:
+            await interaction.response.send_message("❌ No es tu partida.", ephemeral=True)
+            return
 
-    async def end_game(self, interaction, won, card=None):
+        await self.end_game(interaction, won=True)
+
+    async def end_game(self, interaction: discord.Interaction, won: bool, card: int = None):
         self.stop()
         for child in self.children:
             child.disabled = True
 
         if won:
             await self.bot.db.economy_update_balance(self.user.id, self.current_win)
-            msg = f"✅ ¡Has cobrado **{self.current_win:,}** choskris!"
+            msg = f"🏆 **{self.user.display_name}** se retira con **{self.current_win:,}** choskris tras {self.streak} aciertos."
         else:
-            msg = f"❌ ¡Perdiste! La carta era {self.get_card_name(card)}."
+            reason = "Empate" if card == self.current_card else f"Salió un {self.get_card_name(card)}"
+            msg = f"💥 **{self.user.display_name}** falló. ({reason}). Ha perdido la apuesta."
 
         await interaction.response.edit_message(content=msg, embed=None, view=self)
 
