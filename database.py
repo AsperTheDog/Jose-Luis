@@ -405,9 +405,9 @@ class DBManager:
                 await self.db.execute("INSERT INTO mining_inv_pickaxes (user_id, pickaxe_id, durability) VALUES (?, ?, ?)", (user_id, result_id, max_durability))
         else:
             await self.db.execute("""INSERT INTO mining_inv_valuables (user_id, valuable_id, amount)
-                                        VALUES (?, ?, 1)
+                                        VALUES (?, ?, ?)
                                         ON CONFLICT(user_id, valuable_id) DO UPDATE SET amount = amount + ?
-                                  """, (user_id, result_id, amount))
+                                  """, (user_id, result_id, amount, amount))
 
         await self.db.commit()
 
