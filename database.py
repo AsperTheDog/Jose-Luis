@@ -408,7 +408,6 @@ class DBManager:
                                         VALUES (?, ?, ?)
                                         ON CONFLICT(user_id, valuable_id) DO UPDATE SET amount = amount + ?
                                   """, (user_id, result_id, amount, amount))
-
         await self.db.commit()
 
     async def mining_get_user_valuables(self, user_id: int) -> list[tuple[str, int]]:

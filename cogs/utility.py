@@ -72,7 +72,7 @@ class UtilityCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         async def run_db_query(sql: str) -> tuple[str, Any, Any]:
-            async with self.bot.db.execute(sql) as cursor:
+            async with self.bot.db.db.execute(sql) as cursor:
                 if cursor.description:
                     columns = [desc[0] for desc in cursor.description]
                     rows = await cursor.fetchall()
@@ -81,7 +81,7 @@ class UtilityCog(commands.Cog):
 
                 affected_rows = cursor.rowcount
 
-            await self.bot.db.commit()
+            await self.bot.db.db.commit()
             return "MUTATION", affected_rows, None
 
         try:
