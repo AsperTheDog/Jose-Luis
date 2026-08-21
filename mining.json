@@ -58,7 +58,7 @@
     },
     "pico_diamante": {
       "name": "Pico de Diamante",
-      "efficiency": 85,
+      "efficiency": 90,
       "max_durability": 300,
       "emoji": "💎"
     }

@@ -102,7 +102,6 @@ class DrinkConfirmView(discord.ui.View):
 
 
 class EquipPickaxeView(discord.ui.View):
-
     def __init__(self, bot, user_id: int, pickaxes: list, pickaxes_game_data: dict):
         super().__init__(timeout=60.0)
         self.bot = bot
@@ -493,7 +492,7 @@ class MiningSystemCog(commands.Cog):
             return
 
         cost_per_energy = min(8, int(2 + (0.5 * ((user_lvl - 1) ** 1.1))))
-        final_cost = cost_per_energy * (1.2 ** refills)
+        final_cost = cost_per_energy * (1.3 ** refills)
         cost_perc = int(((final_cost / cost_per_energy) - 1) * 100)
 
         if modo == "full":
@@ -646,8 +645,8 @@ class MiningSystemCog(commands.Cog):
         await interaction.response.send_message(msg)
 
     @mining_group.command(name="inventario", description="Revisa tus Choskris, Energía, Materiales y Valiosos.")
-    async def inventory(self, interaction: discord.Interaction):
-        user_id = interaction.user.id
+    async def inventory(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
+        user_id = user or interaction.user
 
         profile = await self.bot.db.mining_get_full_profile(user_id)
 
