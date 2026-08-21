@@ -147,7 +147,9 @@ class StreamerNotifierCog(commands.Cog):
 
         streamers = await self.bot.db.twitch_get_tracked_streamers()
 
-        for (twitch_user,) in streamers:
+        for row in streamers:
+            twitch_user = row[0] if isinstance(row, (tuple, list)) else row
+
             broadcaster_id = await self._get_broadcaster_id(twitch_user)
             if broadcaster_id:
                 await self._subscribe_to_streamer(broadcaster_id, session_id)
@@ -155,22 +157,29 @@ class StreamerNotifierCog(commands.Cog):
     async def _eventsub_listener_loop(self):
         await self.bot.wait_until_ready()
 
+        base_delay = 15
+        current_delay = base_delay
+        ws_url = self.EVENTSUB_WS_URL
+
         while not self.bot.is_closed():
             self.active_session_id = None
             try:
                 await self._get_user_access_token()
 
-                async with self.session.ws_connect(self.EVENTSUB_WS_URL) as ws:
-                    # print("Conectado a Twitch EventSub WebSocket")
+                async with self.session.ws_connect(ws_url) as ws:
+                    current_delay = base_delay
+                    ws_url = self.EVENTSUB_WS_URL
 
-                    async for msg in ws:
+                    while not ws.closed:
+                        msg = await ws.receive()
+
                         if msg.type == aiohttp.WSMsgType.TEXT:
                             data = json.loads(msg.data)
                             message_type = data["metadata"]["message_type"]
 
                             if message_type == "session_welcome":
                                 session_id = data["payload"]["session"]["id"]
-                                # print(f"EventSub session welcome recibido. Session ID: {session_id}")
+                                self.active_session_id = session_id
                                 await self.sync_all_subscriptions(session_id)
 
                             elif message_type == "notification":
@@ -184,15 +193,27 @@ class StreamerNotifierCog(commands.Cog):
                             elif message_type == "session_reconnect":
                                 reconnect_url = data["payload"]["session"]["reconnect_url"]
                                 print(f"EventSub solicitó reconexión a {reconnect_url}")
+                                ws_url = reconnect_url
                                 break
 
-                        elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
-                            print("EventSub WebSocket cerrado o encontró un error")
+                        elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.CLOSING, aiohttp.WSMsgType.ERROR):
+                            print("EventSub WebSocket cerrado de forma normal.")
                             break
 
+            except aiohttp.WSServerHandshakeError as e:
+                print(f"Error Handshake EventSub (HTTP {e.status}): {e.message}")
+                if e.status == 429:
+                    print("Twitch rate limit (429). Aumentando tiempo de espera...")
+                    current_delay = min(current_delay * 2, 120)
+
+                ws_url = self.EVENTSUB_WS_URL
+
             except Exception as e:
-                print(f"Error en Twitch EventSub: {e}. Reconectando en 15 segundos...")
-                await asyncio.sleep(15)
+                print(f"Error general en Twitch EventSub: {e}")
+                ws_url = self.EVENTSUB_WS_URL
+
+            print(f"Reconectando a Twitch en {current_delay} segundos...")
+            await asyncio.sleep(current_delay)
 
     async def _dispatch_stream_alert(self, event_data: dict):
         twitch_user = event_data.get("broadcaster_user_login", "").lower()
@@ -274,7 +295,7 @@ class StreamerNotifierCog(commands.Cog):
 
     @streamer_group.command(name="lista", description="Muestra los streamers configurados")
     async def list_streamers(self, interaction: discord.Interaction):
-        rows = await self.bot.db.get_guild_tracked_streamers(interaction.guild_id)
+        rows = await self.bot.db.twitch_get_guild_tracked_streamers(interaction.guild_id)
 
         if not rows:
             await interaction.response.send_message("No hay streamers configurados en este servidor.", ephemeral=True)

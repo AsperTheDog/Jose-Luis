@@ -748,7 +748,7 @@ class EconomyCog(commands.Cog):
 
     @economy_group.command(name="forzardrop", description="Obliga al juego a generar un drop inmediatamente")
     async def drop(self, interaction: discord.Interaction):
-        if not await self.bot.filter_operators(interaction): return
+        if await self.bot.filter_operators(interaction): return
 
         channel_id = interaction.channel.id
         now = datetime.datetime.now(datetime.timezone.utc)
