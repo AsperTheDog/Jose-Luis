@@ -412,7 +412,7 @@ class PokerTableControl(discord.ui.View):
                 sign = "+" if net_change >= 0 else ""
                 refunds_text.append(f"• **{p.user.display_name}**: Devueltos `{p.stack:,}` ({sign}{net_change})")
 
-        embed.add_field(name="Resumen de Stacks Deueltos", value="\n".join(refunds_text), inline=False)
+        embed.add_field(name="Resumen de Stacks Devueltos", value="\n".join(refunds_text), inline=False)
 
         content = "🏁 **¡La partida ha finalizado!**"
 
@@ -427,6 +427,7 @@ class PokerLobbyView(discord.ui.View):
         super().__init__(timeout=300.0)
         self.game = game
         self.bot = bot
+        self.message: discord.Message | None = None
 
     @discord.ui.button(label="Unirse a la Mesa", style=discord.ButtonStyle.primary, emoji="🎲")
     async def join(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -474,6 +475,35 @@ class PokerLobbyView(discord.ui.View):
         embed = table_view.build_embed()
         await interaction.response.edit_message(embed=embed, view=table_view)
 
+    async def on_timeout(self):
+        self.stop()
+
+        refunds_text = []
+        for p in self.game.players:
+            await self.bot.db.poker_add_balance(p.user.id, self.game.buy_in)
+            refunds_text.append(f"• {p.user.mention}: Devueltos `{self.game.buy_in:,}` choskris")
+
+        embed = discord.Embed(
+            title="⏳ Sala Cancelada por Inactividad",
+            description="La sala de Texas Hold'em ha expirado porque la partida no se inició a tiempo.",
+            color=discord.Color.red()
+        )
+        if refunds_text:
+            embed.add_field(
+                name="💰 Reembolsos Realizados",
+                value="\n".join(refunds_text),
+                inline=False
+            )
+
+        mentions = " ".join(p.user.mention for p in self.game.players)
+        content = f"⚠️ {mentions} La partida fue cancelada por inactividad." if mentions else ""
+
+        if self.message:
+            try:
+                await self.message.edit(content=content, embed=embed, view=None)
+            except discord.HTTPException:
+                pass
+
 class PokerCog(commands.Cog):
     def __init__(self, bot: JoseLuisBot):
         self.bot = bot
@@ -508,7 +538,7 @@ class PokerCog(commands.Cog):
         embed.add_field(name="Jugadores (1/6)", value=f"• {interaction.user.mention}", inline=False)
 
         view = PokerLobbyView(game, self.bot)
-        await interaction.followup.send(embed=embed, view=view)
+        view.message = await interaction.followup.send(embed=embed, view=view)
 
 
 async def setup(bot: JoseLuisBot):
