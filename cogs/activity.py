@@ -50,7 +50,7 @@ class StatsCog(commands.Cog):
     async def stats(self, interaction: discord.Interaction, user: Optional[discord.User] = None):
         target = user or interaction.user
 
-        row = await self.bot.db.activity_get_user_stats(interaction.guild, interaction.user)
+        row = await self.bot.db.activity_get_user_stats(interaction.guild.id, interaction.user)
         if not row:
             await interaction.response.send_message(f"**{target.display_name}** aún no tiene estadísticas registradas.", ephemeral=True)
             return
