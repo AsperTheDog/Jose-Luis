@@ -29,7 +29,7 @@
     },
     "nucleo": {
       "name": "Núcleo del Planeta",
-      "hardness": 80,
+      "hardness": 75,
       "energy_cost": 25,
       "drops": [
         "obsidiana",
@@ -115,12 +115,12 @@
     },
     "cetro_real": {
       "name": "Cetro Real",
-      "value": 600,
+      "value": 500,
       "emoji": "🪄"
     },
     "corona_oro": {
       "name": "Corona de Oro",
-      "value": 650,
+      "value": 550,
       "emoji": "👑"
     },
     "cristal_mistico": {
@@ -173,8 +173,8 @@
       "type": "valuable",
       "result": "cristal_mistico",
       "ingredients": {
-        "obsidiana": 20,
-        "pavonita": 15,
+        "obsidiana": 15,
+        "pavonita": 10,
         "diamante_bruto": 5
       }
     },
