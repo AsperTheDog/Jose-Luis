@@ -646,7 +646,8 @@ class MiningSystemCog(commands.Cog):
 
     @mining_group.command(name="inventario", description="Revisa tus Choskris, Energía, Materiales y Valiosos.")
     async def inventory(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
-        user_id = user.id if user else interaction.user.id
+        user = user if user else interaction.user
+        user_id = user.id
 
         profile = await self.bot.db.mining_get_full_profile(user_id)
 
@@ -656,7 +657,7 @@ class MiningSystemCog(commands.Cog):
         valuables = profile["valuables"]
         equipped_pick = profile["equipped_pick"]
 
-        embed = discord.Embed(title=f"🎒 Inventario de {interaction.user.display_name}", color=discord.Color.green())
+        embed = discord.Embed(title=f"🎒 Inventario de {user.display_name}", color=discord.Color.green())
 
         depth_name = self.game_data["levels"][depth]["name"]
         pick_str = "Ninguno"
