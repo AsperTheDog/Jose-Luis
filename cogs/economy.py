@@ -184,8 +184,8 @@ class MayorMenorView(discord.ui.View):
         higher_prob = (13 - card_val) / 13.0
         lower_prob = (card_val - 1) / 13.0
 
-        mult_higher = round((1 / higher_prob) * 0.95, 2) if higher_prob > 0 else 0
-        mult_lower = round((1 / lower_prob) * 0.95, 2) if lower_prob > 0 else 0
+        mult_higher = min(5.0, max(1.05, round((1 / higher_prob) * 0.85, 2))) if higher_prob > 0 else 0
+        mult_lower = min(5.0, max(1.05, round((1 / lower_prob) * 0.85, 2))) if lower_prob > 0 else 0
 
         return mult_higher, mult_lower
 
@@ -426,7 +426,7 @@ class EconomyCog(commands.Cog):
         level = job_stats['level']
         xp = job_stats['xp']
 
-        xp_gained = random.randint(20, 35)
+        xp_gained = random.randint(30, 45)
         new_xp = xp + xp_gained
         xp_needed = level * 100
 
@@ -438,7 +438,7 @@ class EconomyCog(commands.Cog):
 
         bonus = await self.bot.db.get_user_job_perk(interaction.user.id, "flat_work_bonus", 0.0)
         penalty = await self.bot.db.get_user_job_perk(interaction.user.id, "job_penalty", 0.0)
-        salary = random.randint(150, 250) + (level * 20) + bonus
+        salary = random.randint(450, 650) + (level * 20) + bonus
         salary *= 1 - penalty
         salary = int(salary)
 
@@ -479,7 +479,7 @@ class EconomyCog(commands.Cog):
             elif delta > datetime.timedelta(hours=48):
                 streak = 0
 
-        base_paga = 200
+        base_paga = 400
         streak_bonus = min(streak * 25, 500)
 
         job_boost = await self.bot.db.get_user_job_perk(interaction.user.id, "passive_daily_income", 0.0)
