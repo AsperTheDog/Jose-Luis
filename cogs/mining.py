@@ -492,7 +492,7 @@ class MiningSystemCog(commands.Cog):
             return
 
         cost_per_energy = 2
-        final_cost = cost_per_energy * (1.1 ** refills)
+        final_cost = cost_per_energy * (1.25 ** refills)
         cost_perc = int(((final_cost / cost_per_energy) - 1) * 100)
 
         if modo == "full":
