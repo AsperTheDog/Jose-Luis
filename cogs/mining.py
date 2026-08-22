@@ -491,8 +491,8 @@ class MiningSystemCog(commands.Cog):
             await interaction.response.send_message("Tu energía ya está al máximo (100/100).", ephemeral=True)
             return
 
-        cost_per_energy = min(8, int(2 + (0.5 * ((user_lvl - 1) ** 1.1))))
-        final_cost = cost_per_energy * (1.3 ** refills)
+        cost_per_energy = 2
+        final_cost = cost_per_energy * (1.1 ** refills)
         cost_perc = int(((final_cost / cost_per_energy) - 1) * 100)
 
         if modo == "full":
@@ -646,7 +646,7 @@ class MiningSystemCog(commands.Cog):
 
     @mining_group.command(name="inventario", description="Revisa tus Choskris, Energía, Materiales y Valiosos.")
     async def inventory(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
-        user_id = user or interaction.user
+        user_id = user.id if user else interaction.user.id
 
         profile = await self.bot.db.mining_get_full_profile(user_id)
 

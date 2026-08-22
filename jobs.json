@@ -12,7 +12,7 @@
         "emoji": "💼",
         "desc": "Acceso privilegiado al sistema financiero. Obtienes un pequeño interés sobre los fondos guardados en tu banco.",
         "perks": {
-            "bank_interest_bonus": 0.015
+            "bank_interest_bonus": 0.005
         }
     },
     "dealer": {
