@@ -296,6 +296,11 @@ class EconomyCog(commands.Cog):
 
         self.last_drop_time = {}
 
+        self._interest_last_run: Optional[datetime.datetime] = None
+        self._interest_last_iterations: int = 0
+        self._interest_last_payouts: int = 0
+        self._interest_last_error: Optional[str] = None
+
     economy_group = app_commands.Group(
         name="choskris",
         description="Comandos para ganar choskris"
@@ -917,6 +922,58 @@ class EconomyCog(commands.Cog):
         await interaction.response.send_message("¡Drop en camino!", ephemeral=True)
         await interaction.channel.send(embed=embed, view=view)
 
+    @economy_group.command(name="debuginteres", description="Muestra información de depuración sobre el sistema de intereses diarios.")
+    async def debug_daily_interest(self, interaction: discord.Interaction):
+        if await self.bot.filter_operators(interaction): return
+
+        await interaction.response.defer(ephemeral=True)
+
+        task = self.daily_interest_task
+        is_running = task.is_running()
+        is_being_cancelled = task.is_being_cancelled()
+        failed = task.failed()
+        next_iteration = task.next_iteration
+
+        if next_iteration is not None:
+            next_iteration_utc = next_iteration.astimezone(datetime.timezone.utc)
+            next_iteration_str = discord.utils.format_dt(next_iteration_utc, "F")
+            next_iteration_relative = discord.utils.format_dt(next_iteration_utc, "R")
+        else:
+            next_iteration_str = "N/A"
+            next_iteration_relative = "N/A"
+
+        last_run_str = (
+            discord.utils.format_dt(self._interest_last_run.astimezone(datetime.timezone.utc), "F")
+            if self._interest_last_run else "Nunca"
+        )
+        last_run_relative = (
+            discord.utils.format_dt(self._interest_last_run.astimezone(datetime.timezone.utc), "R")
+            if self._interest_last_run else "N/A"
+        )
+
+        status = "🟢 Activa" if is_running and not is_being_cancelled else "🔴 Inactiva"
+        if failed:
+            status = "⚠️ Falló (ver logs)"
+
+        embed = discord.Embed(
+            title="Debug: Sistema de Intereses Diarios",
+            color=0x3498DB,
+        )
+        embed.add_field(name="Estado del Loop", value=status, inline=False)
+        embed.add_field(name="Próxima Ejecución", value=f"{next_iteration_str}\n({next_iteration_relative})", inline=False)
+        embed.add_field(name="Última Ejecución", value=f"{last_run_str}\n({last_run_relative})", inline=False)
+        embed.add_field(
+            name="Estadísticas Última Ejecución",
+            value=(
+                f"Usuarios evaluados: **{self._interest_last_iterations}**\n"
+                f"Pagos realizados: **{self._interest_last_payouts}**\n"
+                f"Último Error: **{self._interest_last_error or 'Ninguno'}**"
+            ),
+            inline=False,
+        )
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -941,20 +998,49 @@ class EconomyCog(commands.Cog):
 
     @tasks.loop(time=datetime.time(hour=0, minute=0, second=0))
     async def daily_interest_task(self):
-        users = await self.bot.db.economy_get_active_users()
-
-        for user_id, balance, active_job, current_unclaimed in users:
-            perk_bonus = await self.bot.db.get_job_perk(active_job, "bank_interest_bonus", 0.0)
-
-            if perk_bonus <= 0:
-                continue
-
-            daily_interest = math.floor(balance * perk_bonus)
-            await self.bot.db.economy_add_unclaimed_interest(user_id, daily_interest)
+        await self._run_daily_interest()
 
     @daily_interest_task.before_loop
     async def before_daily_interest(self):
         await self.bot.wait_until_ready()
+
+    async def _run_daily_interest(self) -> None:
+        self._interest_last_run = datetime.datetime.now(datetime.timezone.utc)
+        self._interest_last_iterations = 0
+        self._interest_last_payouts = 0
+        self._interest_last_error = None
+
+        try:
+            users = await self.bot.db.economy_get_active_users()
+            self._interest_last_iterations = len(users)
+
+            for user_id, balance, active_job, current_unclaimed in users:
+                perk_bonus = await self.bot.db.get_job_perk(active_job, "bank_interest_bonus", 0.0)
+
+                if perk_bonus <= 0:
+                    continue
+
+                daily_interest = math.floor(balance * perk_bonus)
+                if daily_interest <= 0:
+                    continue
+
+                await self.bot.db.economy_add_unclaimed_interest(user_id, daily_interest)
+                self._interest_last_payouts += 1
+        except Exception as e:
+            self._interest_last_error = f"{type(e).__name__}: {e}"
+
+    @economy_group.command(name="forzarinteres", description="Fuerza una ejecución inmediata del sistema de intereses diarios.")
+    async def force_daily_interest(self, interaction: discord.Interaction):
+        if await self.bot.filter_operators(interaction): return
+
+        await interaction.response.defer(ephemeral=True)
+        await self._run_daily_interest()
+
+        if self._interest_last_error:
+            await interaction.followup.send(f"❌ Ejecución forzada falló: **{self._interest_last_error}**", ephemeral=True)
+            return
+
+        await interaction.followup.send(f"✅ Intereses ejecutados. Usuarios evaluados: **{self._interest_last_iterations}**, pagos: **{self._interest_last_payouts}**.", ephemeral=True)
 
 
 async def setup(bot: JoseLuisBot):

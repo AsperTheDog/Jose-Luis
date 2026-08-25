@@ -270,10 +270,9 @@ class DBManager:
         async with self.db.execute("SELECT user_id, balance, active_job, unclaimed_interest FROM economy_users WHERE balance > 0") as cursor:
             return await cursor.fetchall()
 
-    async def economy_add_unclaimed_interest(self, user_id: int, current_unclaimed: int, daily_interest: int) -> None:
+    async def economy_add_unclaimed_interest(self, user_id: int, daily_interest: int) -> None:
         if daily_interest > 0:
-            new_unclaimed = current_unclaimed + daily_interest
-            await self.db.execute("UPDATE economy_users SET unclaimed_interest = ? WHERE user_id = ?", (int(new_unclaimed), user_id))
+            await self.db.execute("UPDATE economy_users SET unclaimed_interest = unclaimed_interest + ? WHERE user_id = ?", (int(daily_interest), user_id))
             await self.db.commit()
 
     async def phrases_pick_random(self, category: str, history_ratio: float) -> List[str] | None:
