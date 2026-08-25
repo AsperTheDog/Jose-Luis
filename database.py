@@ -578,6 +578,7 @@ class DBManager:
     async def waifu_claim_target(self, claimer_id: int, target_id: int, new_target_value: int) -> None:
         await self.waifu_ensure_user(claimer_id)
         await self.waifu_ensure_user(target_id)
+        await self.db.execute("UPDATE waifu_users SET claim = NULL WHERE claim = ?", (target_id,))
         await self.db.execute("UPDATE waifu_users SET claim = ? WHERE user_id = ?", (target_id, claimer_id))
         await self.db.execute("UPDATE waifu_users SET value = ? WHERE user_id = ?", (new_target_value, target_id))
         await self.db.commit()
