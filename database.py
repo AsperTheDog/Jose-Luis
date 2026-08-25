@@ -3,7 +3,7 @@ import json
 import os
 import random
 from sqlite3 import Row
-from typing import Optional, Dict, Any, List
+from typing import Optional, Any
 
 import aiosqlite
 
@@ -24,7 +24,7 @@ class DBManager:
         self.db_path = "bot_data.db"
         self.db: aiosqlite.Connection = None
 
-        self.job_registry: Dict[str, Dict[str, Any]] = self._load_json("jobs.json")
+        self.job_registry: dict[str, dict[str, Any]] = self._load_json("jobs.json")
 
     async def close(self):
         if self.db:
@@ -58,7 +58,7 @@ class DBManager:
             await self.db.executescript(sql_script)
         await self.db.commit()
 
-    async def get_user_global_stats(self, user_id: int) -> Optional[Dict[str, Any]]:
+    async def get_user_global_stats(self, user_id: int) -> Optional[dict[str, Any]]:
         query = "SELECT * FROM user_global_stats WHERE user_id = ?;"
         self.db.row_factory = aiosqlite.Row
         async with self.db.execute(query, (user_id,)) as cursor:
@@ -286,7 +286,7 @@ class DBManager:
             await self.db.execute("UPDATE economy_users SET unclaimed_interest = unclaimed_interest + ? WHERE user_id = ?", (int(daily_interest), user_id))
             await self.db.commit()
 
-    async def phrases_pick_random(self, category: str, history_ratio: float) -> List[str] | None:
+    async def phrases_pick_random(self, category: str, history_ratio: float) -> list[str] | None:
         async with self.db.execute("SELECT content FROM text_lists WHERE category = ?", (category,)) as cursor:
             rows = await cursor.fetchall()
 
@@ -527,3 +527,125 @@ class DBManager:
             new_balance = row[0] + amount
             await self.db.execute("UPDATE economy_users SET balance = ? WHERE user_id = ?", (new_balance, user_id))
         await self.db.commit()
+
+    async def waifu_ensure_user(self, user_id: int, default_value: int = 1000) -> None:
+        await self.db.execute(
+            "INSERT OR IGNORE INTO waifu_users (user_id, pronoun, value, claim) VALUES (?, 'waifu', ?, NULL)",
+            (user_id, default_value),
+        )
+        await self.db.commit()
+
+    async def waifu_get_user(self, user_id: int) -> Optional[dict[str, Any]]:
+        await self.waifu_ensure_user(user_id)
+        self.db.row_factory = aiosqlite.Row
+        async with self.db.execute("SELECT * FROM waifu_users WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def waifu_set_pronoun(self, user_id: int, pronoun: str) -> None:
+        await self.waifu_ensure_user(user_id)
+        await self.db.execute("UPDATE waifu_users SET pronoun = ? WHERE user_id = ?", (pronoun, user_id))
+        await self.db.commit()
+
+    async def waifu_get_owner(self, user_id: int) -> Optional[dict[str, Any]]:
+        self.db.row_factory = aiosqlite.Row
+        async with self.db.execute("SELECT * FROM waifu_users WHERE claim = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def waifu_is_affinity_active(self, user_id_1: int, user_id_2: int) -> bool:
+        u1 = await self.waifu_get_user(user_id_1)
+        u2 = await self.waifu_get_user(user_id_2)
+        if u1 and u2 and u1.get("claim") == user_id_2 and u2.get("claim") == user_id_1:
+            return True
+        return False
+
+    async def waifu_get_effective_value(self, user_id: int, ignoreAffinity: bool = False) -> tuple[int, bool]:
+        u_data = await self.waifu_get_user(user_id)
+        if not u_data:
+            return 1000, False
+
+        base_val = u_data["value"]
+        owner = await self.waifu_get_owner(user_id)
+        is_affinity = False
+
+        if owner and not ignoreAffinity:
+            is_affinity = await self.waifu_is_affinity_active(user_id, owner["user_id"])
+
+        effective_val = base_val * 2 if is_affinity else base_val
+        return effective_val, is_affinity
+
+    async def waifu_claim_target(self, claimer_id: int, target_id: int, new_target_value: int) -> None:
+        await self.waifu_ensure_user(claimer_id)
+        await self.waifu_ensure_user(target_id)
+        await self.db.execute("UPDATE waifu_users SET claim = ? WHERE user_id = ?", (target_id, claimer_id))
+        await self.db.execute("UPDATE waifu_users SET value = ? WHERE user_id = ?", (new_target_value, target_id))
+        await self.db.commit()
+
+    async def waifu_divorce(self, claimer_id: int) -> None:
+        await self.waifu_ensure_user(claimer_id)
+        await self.db.execute("UPDATE waifu_users SET claim = NULL WHERE user_id = ?", (claimer_id,))
+        await self.db.commit()
+
+    async def waifu_force_unclaim(self, waifu_id: int, owner_id: int) -> None:
+        await self.db.execute("UPDATE waifu_users SET claim = NULL WHERE user_id = ?", (owner_id,))
+        await self.db.execute("INSERT OR IGNORE INTO waifu_blocks (blocker_id, blocked_id) VALUES (?, ?)", (waifu_id, owner_id))
+        await self.db.commit()
+
+    async def waifu_is_blocked(self, blocker_id: int, blocked_id: int) -> bool:
+        async with self.db.execute("SELECT 1 FROM waifu_blocks WHERE blocker_id = ? AND blocked_id = ?", (blocker_id, blocked_id)) as cursor:
+            return await cursor.fetchone() is not None
+
+    async def waifu_add_block(self, blocker_id: int, blocked_id: int) -> None:
+        await self.db.execute("INSERT OR IGNORE INTO waifu_blocks (blocker_id, blocked_id) VALUES (?, ?)", (blocker_id, blocked_id))
+        await self.db.commit()
+
+    async def waifu_remove_block(self, blocker_id: int, blocked_id: int) -> bool:
+        async with self.db.execute("DELETE FROM waifu_blocks WHERE blocker_id = ? AND blocked_id = ?", (blocker_id, blocked_id)) as cursor:
+            deleted = cursor.rowcount > 0
+            await self.db.commit()
+            return deleted
+
+    async def waifu_get_blocks(self, blocker_id: int) -> list[int]:
+        async with self.db.execute("SELECT blocked_id FROM waifu_blocks WHERE blocker_id = ?", (blocker_id,)) as cursor:
+            rows = await cursor.fetchall()
+            return [r[0] for r in rows]
+
+    async def waifu_add_gift(self, waifu_id: int, item_name: str, cost_per_unit: int, amount: int = 1) -> None:
+        await self.waifu_ensure_user(waifu_id)
+        total_cost = cost_per_unit * amount
+        await self.db.execute(
+            """INSERT INTO waifu_gifts (user_id, item_name, amount)
+               VALUES (?, ?, ?)
+               ON CONFLICT(user_id, item_name) DO UPDATE SET amount = amount + ?""",
+            (waifu_id, item_name, amount, amount),
+        )
+        await self.db.execute("UPDATE waifu_users SET value = value + ? WHERE user_id = ?", (total_cost, waifu_id))
+        await self.db.commit()
+
+    async def waifu_get_gifts(self, user_id: int) -> list[tuple[str, int]]:
+        async with self.db.execute("SELECT item_name, amount FROM waifu_gifts WHERE user_id = ?", (user_id,)) as cursor:
+            return await cursor.fetchall()
+
+    async def waifu_get_top_users(self, limit: int = 10) -> list[dict[str, Any]]:
+        self.db.row_factory = aiosqlite.Row
+        async with self.db.execute("SELECT * FROM waifu_users") as cursor:
+            rows = await cursor.fetchall()
+            users = [dict(r) for r in rows]
+
+        # Calculamos el valor efectivo de cada uno (incluyendo Afinidad activa)
+        results = []
+        for u in users:
+            eff_val, is_affinity = await self.waifu_get_effective_value(u["user_id"])
+            results.append({
+                "user_id": u["user_id"],
+                "pronoun": u.get("pronoun", "waifu"),
+                "base_value": u["value"],
+                "effective_value": eff_val,
+                "is_affinity": is_affinity,
+                "claim": u.get("claim"),
+            })
+
+        # Ordenar por valor efectivo descendente
+        results.sort(key=lambda x: x["effective_value"], reverse=True)
+        return results[:limit]

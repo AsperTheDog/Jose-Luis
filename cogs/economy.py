@@ -867,7 +867,7 @@ class EconomyCog(commands.Cog):
         weights = [SYMBOLS[s]["weight"] for s in symbols]
         return random.choices(symbols, weights=weights, k=1)[0]
 
-    @economy_group.command(name="slots", description="Juega a la máquina tragaperras")
+    @economy_group.command(name="tragaperras", description="Juega a la máquina tragaperras")
     @app_commands.describe(apuesta="Cantidad de monedas a apostar")
     async def slots(self, interaction: discord.Interaction, apuesta: int):
         if apuesta <= 0:
