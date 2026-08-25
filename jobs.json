@@ -47,7 +47,8 @@
         "emoji": "🏠",
         "desc": "Vives de las rentas. Recibes un pequeño estipendio diario automático sin necesidad de ejecutar comandos, pero no puedes trabajar para ganarte el pan.",
         "perks": {
-            "passive_daily_income": 1.2,
+            "passive_daily_income": 200,
+            "daily_allowance_multiplier": 1.2,
             "job_penalty": 1.0
         }
     }

@@ -21,6 +21,32 @@ CREATE TABLE IF NOT EXISTS economy_jobs
     PRIMARY KEY (user_id, job_id)
 );
 
+CREATE TABLE IF NOT EXISTS economy_balance_log
+(
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL,
+    delta        INTEGER NOT NULL,
+    prev_balance INTEGER NOT NULL,
+    new_balance  INTEGER NOT NULL,
+    created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_balance_log_user_time
+    ON economy_balance_log (user_id, id DESC);
+
+CREATE TRIGGER IF NOT EXISTS economy_balance_log_trigger
+AFTER UPDATE OF balance ON economy_users
+WHEN OLD.balance != NEW.balance
+BEGIN
+    INSERT INTO economy_balance_log (user_id, delta, prev_balance, new_balance)
+    VALUES (
+        NEW.user_id,
+        NEW.balance - OLD.balance,
+        OLD.balance,
+        NEW.balance
+    );
+END;
+
 CREATE TABLE IF NOT EXISTS economy_phrases
 (
     phrase TEXT NOT NULL,

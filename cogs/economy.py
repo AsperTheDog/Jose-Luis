@@ -299,6 +299,7 @@ class EconomyCog(commands.Cog):
         self._interest_last_run: Optional[datetime.datetime] = None
         self._interest_last_iterations: int = 0
         self._interest_last_payouts: int = 0
+        self._interest_last_passive_payouts: int = 0
         self._interest_last_error: Optional[str] = None
 
     economy_group = app_commands.Group(
@@ -487,7 +488,7 @@ class EconomyCog(commands.Cog):
         base_paga = 400
         streak_bonus = min(streak * 25, 500)
 
-        job_boost = await self.bot.db.get_user_job_perk(interaction.user.id, "passive_daily_income", 0.0)
+        job_boost = await self.bot.db.get_user_job_perk(interaction.user.id, "daily_allowance_multiplier", 0.0)
         final_paga = int((base_paga + streak_bonus) * (1 + job_boost))
 
         await self.bot.db.economy_daily_claim(interaction.user.id, final_paga, streak, now.isoformat())
@@ -824,6 +825,35 @@ class EconomyCog(commands.Cog):
         message += f"\n💰 Saldo actual: **{current_balance}**"
         await interaction.response.send_message(message)
 
+    @economy_group.command(name="historial", description="Muestra tus últimos 10 movimientos de saldo.")
+    async def balance_history(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+
+        entries = await self.bot.db.economy_get_balance_log(interaction.user.id, limit=10)
+
+        if not entries:
+            await interaction.followup.send("No tienes movimientos de saldo registrados.")
+            return
+
+        lines = []
+        for e in entries:
+            delta = e["delta"]
+            sign = "+" if delta >= 0 else ""
+            emoji = "🟢" if delta >= 0 else "🔴"
+            ts = e["created_at"]
+            try:
+                dt = datetime.datetime.fromisoformat(ts)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=datetime.timezone.utc)
+                when = discord.utils.format_dt(dt, "R")
+            except (ValueError, TypeError):
+                when = ts
+            lines.append(
+                f"{emoji} {sign}{delta:,} choskris · {e['prev_balance']:,} → {e['new_balance']:,} · {when}"
+            )
+
+        await interaction.followup.send("\n".join(lines))
+
     @economy_group.command(name="meterfrase", description="Inserta una frase customizada para las acciones de economía")
     async def meterfrase(self, interaction: discord.Interaction, frase: str, categoria: str, tag: Optional[str] = None):
         if await self.bot.filter_operators(interaction): return
@@ -966,7 +996,8 @@ class EconomyCog(commands.Cog):
             name="Estadísticas Última Ejecución",
             value=(
                 f"Usuarios evaluados: **{self._interest_last_iterations}**\n"
-                f"Pagos realizados: **{self._interest_last_payouts}**\n"
+                f"Pagos de interés: **{self._interest_last_payouts}**\n"
+                f"Pagos pasivos: **{self._interest_last_passive_payouts}**\n"
                 f"Último Error: **{self._interest_last_error or 'Ninguno'}**"
             ),
             inline=False,
@@ -1008,6 +1039,7 @@ class EconomyCog(commands.Cog):
         self._interest_last_run = datetime.datetime.now(datetime.timezone.utc)
         self._interest_last_iterations = 0
         self._interest_last_payouts = 0
+        self._interest_last_passive_payouts = 0
         self._interest_last_error = None
 
         try:
@@ -1017,15 +1049,19 @@ class EconomyCog(commands.Cog):
             for user_id, balance, active_job, current_unclaimed in users:
                 perk_bonus = await self.bot.db.get_job_perk(active_job, "bank_interest_bonus", 0.0)
 
-                if perk_bonus <= 0:
-                    continue
+                if perk_bonus > 0:
+                    daily_interest = math.floor(balance * perk_bonus)
+                    if daily_interest > 0:
+                        await self.bot.db.economy_add_unclaimed_interest(user_id, daily_interest)
+                        self._interest_last_payouts += 1
 
-                daily_interest = math.floor(balance * perk_bonus)
-                if daily_interest <= 0:
-                    continue
+                passive_income = await self.bot.db.get_job_perk(active_job, "passive_daily_income", 0.0)
 
-                await self.bot.db.economy_add_unclaimed_interest(user_id, daily_interest)
-                self._interest_last_payouts += 1
+                if passive_income > 0:
+                    payout = int(passive_income)
+                    await self.bot.db.economy_update_balance(user_id, payout)
+                    await self.bot.global_stats.register_money_obtained(user_id, payout)
+                    self._interest_last_passive_payouts += 1
         except Exception as e:
             self._interest_last_error = f"{type(e).__name__}: {e}"
 
@@ -1040,7 +1076,11 @@ class EconomyCog(commands.Cog):
             await interaction.followup.send(f"❌ Ejecución forzada falló: **{self._interest_last_error}**", ephemeral=True)
             return
 
-        await interaction.followup.send(f"✅ Intereses ejecutados. Usuarios evaluados: **{self._interest_last_iterations}**, pagos: **{self._interest_last_payouts}**.", ephemeral=True)
+        await interaction.followup.send(
+            f"✅ Ejecución completada. Usuarios evaluados: **{self._interest_last_iterations}**, "
+            f"intereses: **{self._interest_last_payouts}**, pasivos: **{self._interest_last_passive_payouts}**.",
+            ephemeral=True,
+        )
 
 
 async def setup(bot: JoseLuisBot):

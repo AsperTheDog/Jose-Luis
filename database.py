@@ -222,6 +222,17 @@ class DBManager:
         await self.db.execute("INSERT INTO economy_phrases (phrase, category, tag) VALUES (?, ?, ?)", (phrase, category, tag))
         await self.db.commit()
 
+    async def economy_get_balance_log(self, user_id: int, limit: int = 10) -> list[dict]:
+        await self.economy_ensure_user(user_id)
+        self.db.row_factory = aiosqlite.Row
+        async with self.db.execute(
+            "SELECT delta, prev_balance, new_balance, created_at FROM economy_balance_log "
+            "WHERE user_id = ? ORDER BY id DESC LIMIT ?",
+            (user_id, int(limit)),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
     async def economy_update_work_and_job(self, user_id: int, salary: int, last_work_iso: str, job_id: str, level: int, new_xp: int) -> None:
         await self.db.execute("UPDATE economy_users SET balance = MAX(0, balance + ?), last_work = ? WHERE user_id = ?", (int(salary), last_work_iso, user_id))
         await self.db.execute("INSERT OR REPLACE INTO economy_jobs (user_id, job_id, level, xp) VALUES (?, ?, ?, ?)", (user_id, job_id, level, new_xp))
