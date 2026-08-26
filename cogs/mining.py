@@ -546,7 +546,7 @@ class MiningSystemCog(commands.Cog):
                 await interaction.response.send_message(f"El herrero está descansando. Vuelve {time_dialog}", ephemeral=True)
                 return
 
-            await self.bot.db.mining_claim_basic_pickaxe(user_id, pick_id, max_dur)
+        await self.bot.db.mining_claim_basic_pickaxe(user_id, pick_id, max_dur)
 
         await self.bot.global_stats.register_basic_pickaxe_claim(interaction.user.id)
         await interaction.response.send_message("🪨 Has recibido tu **Pico de Piedra** gratuito.")

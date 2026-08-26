@@ -211,6 +211,49 @@ class ModerationCog(commands.Cog):
 
         await interaction.response.send_message("Mensaje enviado.", ephemeral=True, delete_after=0.1)
 
+    @moderation_group.command(name="cuarentenar", description="Añade a un usuario a la lista de cuarentena.")
+    @app_commands.describe(usuario="El usuario que entrará en cuarentena", razon="Razón opcional de la cuarentena")
+    async def cuarentena_agregar(self, interaction: discord.Interaction, usuario: discord.User, razon: str | None = None):
+        if await self.bot.filter_operators(interaction): return
+
+        await self.bot.db.quarantine_add_quarantine(usuario.id, razon)
+
+        msg = f"El usuario {usuario.mention} ha sido puesto en cuarentena."
+        if razon:
+            msg += f"\n**Razón:** {razon}"
+
+        await interaction.response.send_message(msg, ephemeral=True)
+
+    @moderation_group.command(name="descuarentenar", description="Remueve a un usuario de la lista de cuarentena.")
+    @app_commands.describe(usuario="El usuario a remover de cuarentena")
+    async def cuarentena_quitar(self, interaction: discord.Interaction, usuario: discord.User):
+        if await self.bot.filter_operators(interaction): return
+
+        removed = await self.bot.db.quarantine_remove_quarantine(usuario.id)
+
+        if removed:
+            await interaction.response.send_message(f"Se ha removido a {usuario.mention} de la cuarentena.", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"El usuario {usuario.mention} no estaba en cuarentena.", ephemeral=True)
+
+    @moderation_group.command(name="vercuarentena", description="Comprueba si un usuario está en cuarentena.")
+    @app_commands.describe(usuario="El usuario a consultar")
+    async def cuarentena_verificar(self, interaction: discord.Interaction, usuario: discord.User):
+        if await self.bot.filter_operators(interaction): return
+
+        is_in_quarantine = await self.bot.db.quarantine_is_quarantined(usuario.id)
+
+        if is_in_quarantine:
+            reason = await self.bot.db.quarantine_get_quarantine_reason(usuario.id)
+            msg = f" El usuario {usuario.mention} **está en cuarentena**."
+            if reason:
+                msg += f"\n**Razón:** {reason}"
+            else:
+                msg += "\n*Sin razón especificada.*"
+            await interaction.response.send_message(msg, ephemeral=True)
+        else:
+            await interaction.response.send_message(f" El usuario {usuario.mention} **no está** en cuarentena.", ephemeral=True)
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot or not message.guild:

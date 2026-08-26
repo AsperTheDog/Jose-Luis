@@ -366,6 +366,7 @@ class DBManager:
         await self.db.commit()
 
     async def mining_get_last_basic_pick(self, user_id: int) -> datetime.datetime | None:
+        await self.mining_ensure_user(user_id)
         async with self.db.execute("SELECT last_basic_pick FROM mining_users WHERE user_id = ?", (user_id,)) as cursor:
             row = await cursor.fetchone()
             if row and row[0]:
@@ -429,6 +430,7 @@ class DBManager:
         await self.db.commit()
 
     async def mining_get_full_profile(self, user_id: int) -> dict[str, Any]:
+        await self.mining_ensure_user(user_id)
         async with self.db.execute("SELECT xp, level, energy, current_depth_id FROM mining_users WHERE user_id = ?", (user_id,)) as cursor:
             user_row = await cursor.fetchone()
 
@@ -647,6 +649,28 @@ class DBManager:
                 "claim": u.get("claim"),
             })
 
-        # Ordenar por valor efectivo descendente
         results.sort(key=lambda x: x["effective_value"], reverse=True)
         return results[:limit]
+
+    async def quarantine_is_quarantined(self, user_id: int) -> bool:
+        async with self.db.execute("SELECT 1 FROM quarantine WHERE user_id = ?", (user_id,)) as cursor:
+            return await cursor.fetchone() is not None
+
+    async def quarantine_add_quarantine(self, user_id: int, reason: str | None = None) -> None:
+        await self.db.execute(
+            "INSERT INTO quarantine (user_id, reason) VALUES (?, ?) "
+            "ON CONFLICT(user_id) DO UPDATE SET reason = excluded.reason",
+            (user_id, reason)
+        )
+        await self.db.commit()
+
+    async def quarantine_remove_quarantine(self, user_id: int) -> bool:
+        async with self.db.execute("DELETE FROM quarantine WHERE user_id = ?", (user_id,)) as cursor:
+            deleted = cursor.rowcount > 0
+            await self.db.commit()
+            return deleted
+
+    async def quarantine_get_quarantine_reason(self, user_id: int) -> str | None:
+        async with self.db.execute("SELECT reason FROM quarantine WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else None

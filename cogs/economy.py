@@ -752,6 +752,13 @@ class EconomyCog(commands.Cog):
         await interaction.response.defer()
 
         phrase = await self.bot.db.global_get_random_phrase("pay_error")
+
+        is_in_quarantine = await self.bot.db.quarantine_is_quarantined(interaction.user.id)
+        if is_in_quarantine:
+            reason = await self.bot.db.quarantine_get_quarantine_reason(interaction.user.id)
+            await interaction.followup.send(f"{phrase}Esta cuenta no tiene permitido dar dinero porque está en cuarentena.\nRazón: {reason}")
+            return
+
         if cantidad <= 0:
             await interaction.followup.send(f"{phrase}La cantidad a transferir debe ser mayor a 0.")
             return
