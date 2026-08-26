@@ -539,11 +539,11 @@ class MiningSystemCog(commands.Cog):
         last_pick = await self.bot.db.mining_get_last_basic_pick(user_id)
 
         if last_pick:
-            cooldown = last_pick - now
-            if cooldown < datetime.timedelta(days=1):
-                h, r = divmod(cooldown.seconds, 3600)
-                m, s = divmod(r, 60)
-                await interaction.response.send_message(f"El herrero está descansando. Vuelve en {h}h {m}m.", ephemeral=True)
+            next_time = last_pick + datetime.timedelta(days=1)
+            if next_time > now:
+
+                time_dialog = discord.utils.format_dt(next_time, "R")
+                await interaction.response.send_message(f"El herrero está descansando. Vuelve {time_dialog}", ephemeral=True)
                 return
 
             await self.bot.db.mining_claim_basic_pickaxe(user_id, pick_id, max_dur)
@@ -562,7 +562,6 @@ class MiningSystemCog(commands.Cog):
             await interaction.followup.send("⛏️ No tienes picos en tu inventario. Usa `/obtenerpico` o `/forjar`.", ephemeral=True,)
             return
 
-        # Crear Embed con la lista de picos
         embed = discord.Embed(
             title="⛏️ Tu Inventario de Picos",
             description="Selecciona en el menú desplegable el pico que deseas equipar.",

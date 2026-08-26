@@ -491,7 +491,7 @@ class EconomyCog(commands.Cog):
         job_boost = await self.bot.db.get_user_job_perk(interaction.user.id, "daily_allowance_multiplier", 0.0)
         final_paga = int((base_paga + streak_bonus) * (1 + job_boost))
 
-        await self.bot.db.economy_daily_claim(interaction.user.id, final_paga, streak, now.isoformat())
+        await self.bot.db.economy_daily_claim(interaction.user.id, final_paga, streak + 1, now.isoformat())
         await self.bot.global_stats.register_allowance_claim(interaction.user.id, final_paga, streak)
         phrase = await self.bot.db.global_get_random_phrase("allowance", "success")
         msg = f"{phrase}💸Could you give me an allowence?\n Has obtenido **{final_paga}** choskris.\n🔥 Racha diaria: **{streak + 1}** días."
