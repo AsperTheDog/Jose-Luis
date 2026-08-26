@@ -650,7 +650,12 @@ class MiningSystemCog(commands.Cog):
 
         profile = await self.bot.db.mining_get_full_profile(user_id)
 
-        energy, depth = profile["user"]
+        xp, level, energy, depth = profile["user"]
+
+        xp_needed = int(100 * (level ** 1.5))
+        progress_pct = min(1.0, xp / xp_needed)
+        filled_blocks = int(progress_pct * 8)
+        bar = "█" * filled_blocks + "░" * (8 - filled_blocks)
 
         materials = profile["materials"]
         valuables = profile["valuables"]
@@ -664,6 +669,7 @@ class MiningSystemCog(commands.Cog):
             p_data = self.game_data["pickaxes"][equipped_pick[0]]
             pick_str = f"{p_data['emoji']} {p_data['name']} (Dur: {equipped_pick[1]}/{p_data['max_durability']})"
 
+        embed.add_field(name=f"👷🏻‍♂️ Nivel {level}", value=f"`[{bar}]` {xp}/{xp_needed} XP", inline=False)
         embed.add_field(name="Estadísticas", value=f"⚡ **Energía:** {energy}/100\n🛗 **Capa:** {depth_name}\n⛏️ **Pico:** {pick_str}", inline=False)
 
         mat_str = "\n".join([f"{self.game_data['materials'][m]['emoji']} {val}x {self.game_data['materials'][m]['name']}" for m, val in materials.items()])

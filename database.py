@@ -429,7 +429,7 @@ class DBManager:
         await self.db.commit()
 
     async def mining_get_full_profile(self, user_id: int) -> dict[str, Any]:
-        async with self.db.execute("SELECT energy, current_depth_id FROM mining_users WHERE user_id = ?", (user_id,)) as cursor:
+        async with self.db.execute("SELECT xp, level, energy, current_depth_id FROM mining_users WHERE user_id = ?", (user_id,)) as cursor:
             user_row = await cursor.fetchone()
 
         async with self.db.execute("SELECT material_id, amount FROM mining_inv_materials WHERE user_id = ?", (user_id,)) as cursor:
