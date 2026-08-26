@@ -40,7 +40,7 @@ DIFFICULTIES = {
         "width": 21, "height": 11,
         "proxies": 4,
         "loop_chance": 0.25,
-        "time_mult": 0.7, "time_base": 20,
+        "time_mult": 1.0, "time_base": 20,
         "timed_payout": 900, "perfect_payout": 500,
         "max_speed_bonus": 900
     }
