@@ -301,7 +301,7 @@ class WaifuCog(commands.Cog):
 
         owner_data = await self.bot.db.waifu_get_user(interaction.user.id)
         if not owner_data or not owner_data.get("claim"):
-            await interaction.response.send_message("No has reclamado a nadie aún, debes tener a alguien reclamado para poder regalar", ephemeral=True)
+            await interaction.followup.send("No has reclamado a nadie aún, debes tener a alguien reclamado para poder regalar", ephemeral=True)
             return
 
         user = await interaction.guild.fetch_member(owner_data["claim"])
