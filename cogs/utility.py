@@ -62,8 +62,7 @@ class UtilityCog(commands.Cog):
     @utility_group.command(name="execsql", description="Ejecuta una consulta SQL en bot_data.db con formato de tabla alineada.")
     @app_commands.describe(query="La sentencia SQL a ejecutar (SELECT, UPDATE, INSERT, DELETE, etc.)")
     async def exec_sql(self, interaction: discord.Interaction, query: str):
-        if await self.bot.filter_owner(interaction):
-            return
+        if await self.bot.filter_owner(interaction): return
 
         await interaction.response.defer(ephemeral=True)
 
@@ -134,6 +133,8 @@ class UtilityCog(commands.Cog):
     @app_commands.command(name="executesqlscript", description="Ejecuta un script SQL en la base de datos")
     @app_commands.checks.has_permissions(administrator=True)
     async def execute_sql(self, interaction: discord.Interaction, script: str):
+        if await self.bot.filter_owner(interaction): return
+        
         await self.bot.db.db.executescript(script)
         await self.bot.db.db.commit()
 
