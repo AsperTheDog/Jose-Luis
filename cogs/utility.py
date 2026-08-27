@@ -130,11 +130,10 @@ class UtilityCog(commands.Cog):
         except Exception as e:
             await interaction.followup.send(f"**Error al ejecutar SQL:**\n```py\n{e}\n```")
 
-    @app_commands.command(name="executesqlscript", description="Ejecuta un script SQL en la base de datos")
-    @app_commands.checks.has_permissions(administrator=True)
+    @utility_group.command(name="execsqlscript", description="Ejecuta un script SQL en la base de datos")
     async def execute_sql(self, interaction: discord.Interaction, script: str):
         if await self.bot.filter_owner(interaction): return
-        
+
         await self.bot.db.db.executescript(script)
         await self.bot.db.db.commit()
 
