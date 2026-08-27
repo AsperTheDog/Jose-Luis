@@ -1,7 +1,7 @@
 import time
 import asyncio
 import random
-from datetime import datetime, timezone, timedelta, time
+import datetime
 from collections import deque
 import discord
 from discord import app_commands
@@ -358,7 +358,7 @@ class CyberHackCog(commands.Cog):
             engine = CyberHackEngine(diff_val, mode_val, self.bot, user_id)
             start_time = time.time()
 
-            end_dt = datetime.now(timezone.utc) + timedelta(seconds=engine.time_limit)
+            end_dt = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=engine.time_limit)
             timer_display = discord.utils.format_dt(end_dt, style='R') if mode_val == "timed" else "`MODO PERFECTO` (Sin límite de tiempo)"
 
             embed = discord.Embed(
@@ -419,8 +419,8 @@ class CyberHackCog(commands.Cog):
 
                     daily_deduct_msg = ""
                     if await self.bot.db.hacking_is_over_threshold(user_id, 3000):
-                        payout *= 0.1
-                        daily_deduct_msg = " (Has pasado los 3000 choskris hoy, recompensa reducida)"
+                        payout = int(payout * 0.1)
+                        daily_deduct_msg = "\n⚠️ Has pasado los 3000 choskris de recompensa hoy, recompensa reducida"
 
                     result_embed.title = "🎉 ¡NÚCLEO INFILTRADO CON ÉXITO!"
                     result_embed.colour = discord.Color.green()
@@ -479,7 +479,7 @@ class CyberHackCog(commands.Cog):
         view = TutorialView(author_id=interaction.user.id)
         await interaction.response.send_message(embed=embed_main, view=view)
 
-    @tasks.loop(time=time(hour=0, minute=0, second=0))
+    @tasks.loop(time=datetime.time(hour=0, minute=0, second=0))
     async def daily_reset_task(self):
         await self.bot.db.hacking_reset_daily()
 

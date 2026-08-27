@@ -677,7 +677,7 @@ class DBManager:
     async def hacking_add_win(self, user_id: int, profit: int):
         await self.db.execute(
             """INSERT INTO hacking_daily (user_id, profit) VALUES (?, ?) 
-               ON CONFLICT(user_id, profit) DO UPDATE SET profit = profit + ?"""), (user_id, profit, profit)
+               ON CONFLICT(user_id) DO UPDATE SET profit = profit + excluded.profit""", (user_id, profit))
         await self.db.commit()
 
     async def hacking_is_over_threshold(self, user_id: int, threshold: int) -> bool:
