@@ -78,6 +78,23 @@ class GlobalStatsCog(commands.Cog):
             inline=True,
         )
 
+        c_win = data.get("cards_bets_won", 0)
+        c_loss = data.get("cards_bets_lost", 0)
+        c_gained = data.get("cards_money_gained", 0)
+        c_lost = data.get("cards_money_lost", 0)
+        c_max = data.get("cards_biggest_bet", 0)
+        embed.add_field(
+            name="🃏 Cartas",
+            value=(
+                f"**Vi/De:** {c_win} / {c_loss}\n"
+                f"**Obtenido:** ${c_gained:,}\n"
+                f"**Perdido:** ${c_lost:,}\n"
+                f"**Beneficios:** ${(c_gained - c_lost):,}\n"
+                f"**Mayor Apuesta:** ${c_max:,}"
+            ),
+            inline=True,
+        )
+
         await interaction.response.send_message(embed=embed)
 
     @stats_group.command(name="economia", description="Mira estadísticas de flujo de dinero y movimientos")
@@ -202,6 +219,69 @@ class GlobalStatsCog(commands.Cog):
             value=(
                 f"**Objetos Vendidos:** {sold:,}\n"
                 f"**Ganancias:** ${sales_cash:,}"
+            ),
+            inline=False,
+        )
+
+        await interaction.response.send_message(embed=embed)
+
+    @stats_group.command(name="hackeo", description="Mira estadísticas de los ataques informáticos")
+    async def stats_hacking(self, interaction: discord.Interaction, target: Optional[discord.User] = None):
+        user = target or interaction.user
+        data = await self.bot.db.global_fetch_user_stats(user.id)
+
+        embed = discord.Embed(
+            title=f"💻 Hackeo - {user.display_name}",
+            color=discord.Color.purple(),
+        )
+        embed.set_thumbnail(url=user.display_avatar.url)
+
+        easy = data.get("hacking_times_hacked_easy", 0)
+        normal = data.get("hacking_times_hacked_normal", 0)
+        hard = data.get("hacking_times_hacked_hard", 0)
+        veryhard = data.get("hacking_times_hacked_very_hard", 0)
+        total_success = easy + normal + hard + veryhard
+
+        embed.add_field(
+            name="✅ Éxitos",
+            value=(
+                f"**Fácil:** {easy:,}\n"
+                f"**Normal:** {normal:,}\n"
+                f"**Difícil:** {hard:,}\n"
+                f"**Muy Difícil:** {veryhard:,}\n"
+                f"**Total:** {total_success:,}"
+            ),
+            inline=True,
+        )
+
+        timeout = data.get("hacking_times_failed_timeout", 0)
+        firewall = data.get("hacking_times_failed_firewall", 0)
+        lost = data.get("hacking_times_failed_lost", 0)
+        total_failed = timeout + firewall + lost
+
+        embed.add_field(
+            name="❌ Fallos",
+            value=(
+                f"**Tiempo Agotado:** {timeout:,}\n"
+                f"**Bloqueo Firewall:** {firewall:,}\n"
+                f"**Fallo del objetivo:** {lost:,}\n"
+                f"**Total:** {total_failed:,}"
+            ),
+            inline=True,
+        )
+
+        time_elapsed = data.get("hacking_time_spent", 0.0)
+        money_gained = data.get("hacking_money_gained", 0)
+        total_attempts = total_success + total_failed
+        win_rate = (total_success / total_attempts * 100) if total_attempts > 0 else 0.0
+
+        embed.add_field(
+            name="📊 Balance General",
+            value=(
+                f"**Ganancias Totales:** ${money_gained:,}\n"
+                f"**Ataques Totales:** {total_attempts:,}\n"
+                f"**Tasa de Éxito:** {win_rate:.1f}%\n"
+                f"**Tiempo jugado:** {time_elapsed:.1f}s"
             ),
             inline=False,
         )

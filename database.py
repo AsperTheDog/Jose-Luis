@@ -65,7 +65,7 @@ class DBManager:
             row = await cursor.fetchone()
             return dict(row) if row else None
 
-    async def increment_stat(self, user_id: int, column_name: str, amount: int = 1) -> None:
+    async def increment_stat(self, user_id: int, column_name: str, amount: int | float = 1) -> None:
         query = f"""INSERT INTO user_global_stats (user_id, {column_name})
                     VALUES (?, ?)
                     ON CONFLICT(user_id) DO UPDATE SET
@@ -618,8 +618,7 @@ class DBManager:
         await self.waifu_ensure_user(waifu_id)
         total_cost = cost_per_unit * amount
         await self.db.execute(
-            """INSERT INTO waifu_gifts (user_id, item_name, amount)
-               VALUES (?, ?, ?)
+            """INSERT INTO waifu_gifts (user_id, item_name, amount) VALUES (?, ?, ?)
                ON CONFLICT(user_id, item_name) DO UPDATE SET amount = amount + ?""",
             (waifu_id, item_name, amount, amount),
         )
@@ -674,3 +673,18 @@ class DBManager:
         async with self.db.execute("SELECT reason FROM quarantine WHERE user_id = ?", (user_id,)) as cursor:
             row = await cursor.fetchone()
             return row[0] if row else None
+
+    async def hacking_add_win(self, user_id: int, profit: int):
+        await self.db.execute(
+            """INSERT INTO hacking_daily (user_id, profit) VALUES (?, ?) 
+               ON CONFLICT(user_id, profit) DO UPDATE SET profit = profit + ?"""), (user_id, profit, profit)
+        await self.db.commit()
+
+    async def hacking_is_over_threshold(self, user_id: int, threshold: int) -> bool:
+        async with self.db.execute("SELECT profit from hacking_daily WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            return row[0] > threshold if row else False
+
+    async def hacking_reset_daily(self):
+        await self.db.execute("UPDATE hacking_daily SET profit = 0")
+        await self.db.commit()

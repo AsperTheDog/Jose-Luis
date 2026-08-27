@@ -5,12 +5,14 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 
+from cogs.hacking import CyberHackCog
+from cogs.economy import EconomyCog
+from cogs.mining import MiningSystemCog
 from config import GuildConfigManager
 from database import DBManager
 from stats import StatsTracker
 
 load_dotenv()
-
 
 class JoseLuisBot(commands.Bot):
     def __init__(self, twitchClient, twitchSecret):
@@ -64,7 +66,6 @@ class JoseLuisBot(commands.Bot):
             await interaction.response.send_message("Esta acción solo la puede hacer el dueño del bot (avisa a Asper si quieres hacer algo)", ephemeral=True)
             return True
         return False
-
 
 if __name__ == "__main__":
     twitchClient = os.getenv("TWITCH_CLIENT")

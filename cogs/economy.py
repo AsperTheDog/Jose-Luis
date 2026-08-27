@@ -155,14 +155,6 @@ class JobSelectView(discord.ui.View):
             pass
 
 
-import discord
-import random
-from discord.ext import commands
-
-import discord
-import random
-
-
 class MayorMenorView(discord.ui.View):
     def __init__(self, user: discord.User, bet_amount: int, bot):
         super().__init__(timeout=60)
@@ -279,9 +271,11 @@ class MayorMenorView(discord.ui.View):
             child.disabled = True
 
         if won:
+            await self.bot.global_stats.register_cards_win(self.user.id, self.current_win, self.bet)
             await self.bot.db.economy_update_balance(self.user.id, self.current_win)
             msg = f"🏆 **{self.user.display_name}** se retira con **{self.current_win:,}** choskris tras {self.streak} aciertos."
         else:
+            await self.bot.global_stats.register_cards_loss(self.user.id, self.bet)
             reason = "Empate" if card == self.current_card else f"Salió un {self.get_card_name(card)}"
             msg = f"💥 **{self.user.display_name}** falló. ({reason}). Ha perdido la apuesta."
 

@@ -47,6 +47,20 @@ class StatsTracker:
         await self.db.update_max_stat(user_id, "slots_biggest_bet", bet_amount)
         await self.register_money_spent(user_id, bet_amount)
 
+    async def register_cards_win(self, user_id: int, money_gained: int, bet_amount: int) -> None:
+        await self.db.increment_stat(user_id, "cards_money_gained", money_gained)
+        await self.register_money_obtained(user_id, money_gained)
+        await self.db.increment_stat(user_id, "cards_bets_won", 1)
+        await self.db.increment_stat(user_id, "cards_money_lost", bet_amount)
+        await self.db.update_max_stat(user_id, "cards_biggest_bet", bet_amount)
+        await self.register_money_spent(user_id, bet_amount)
+
+    async def register_cards_loss(self, user_id: int, bet_amount: int) -> None:
+        await self.db.increment_stat(user_id, "cards_money_lost", bet_amount)
+        await self.db.increment_stat(user_id, "cards_bets_lost", 1)
+        await self.db.update_max_stat(user_id, "cards_biggest_bet", bet_amount)
+        await self.register_money_spent(user_id, bet_amount)
+
     async def register_money_gift_give(self, user_id: int, amount: int) -> None:
         await self.db.increment_stat(user_id, "money_given", amount)
         await self.db.update_max_stat(user_id, "biggest_money_gift", amount)
@@ -122,3 +136,28 @@ class StatsTracker:
         await self.db.increment_stat(user_id, "item_sales_money_gained", money_gained)
         await self.register_money_obtained(user_id, money_gained)
 
+    async def register_hack_win(self, user_id: int, difficulty: str, money_gained: int, time_spent: float) -> None:
+        valid_difficulties = ["easy", "normal", "hard", "very_hard"]
+        diff_key = difficulty.lower().replace(" ", "")
+
+        if diff_key in valid_difficulties:
+            await self.db.increment_stat(user_id, f"hacking_times_hacked_{diff_key}", 1)
+
+        await self.db.increment_stat(user_id, "hacking_time_spent", time_spent)
+
+        if money_gained > 0:
+            await self.db.increment_stat(user_id, "hacking_money_gained", money_gained)
+            await self.register_money_obtained(user_id, money_gained)
+
+    async def register_hack_loss(self, user_id: int, reason: str, time_spent: float) -> None:
+        valid_reasons = {
+            "timeout": "hacking_times_failed_timeout",
+            "firewall": "hacking_times_failed_firewall",
+            "lost": "hacking_times_failed_lost"
+        }
+
+        column_name = valid_reasons.get(reason.lower())
+        if column_name:
+            await self.db.increment_stat(user_id, column_name, 1)
+
+        await self.db.increment_stat(user_id, "hacking_time_spent", time_spent)

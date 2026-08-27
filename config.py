@@ -8,7 +8,6 @@ class GuildConfigManager:
 
     from typing import List, Optional
 
-    # Getters
     async def get_admin_channel_id(self, guild_id: int) -> int:
         await self.db.ensure_guild_exists(guild_id)
         async with self.db.db.execute("SELECT admin_channel_id FROM guild_config WHERE guild_id = ?", (guild_id,)) as cursor:
@@ -63,7 +62,6 @@ class GuildConfigManager:
             res = await cursor.fetchone()
             return bool(res[0]) if res else True
 
-    # Setters
     async def set_admin_channel_id(self, guild_id: int, channel_id: int) -> None:
         await self.db.ensure_guild_exists(guild_id)
         await self.db.db.execute("UPDATE guild_config SET admin_channel_id = ? WHERE guild_id = ?", (channel_id, guild_id))
@@ -109,7 +107,6 @@ class GuildConfigManager:
         await self.db.db.execute("UPDATE guild_config SET event_canales = ? WHERE guild_id = ?", (int(enabled), guild_id))
         await self.db.db.commit()
 
-    # Operators
     async def get_operators(self, guild_id: int) -> List[int]:
         await self.db.ensure_guild_exists(guild_id)
         async with self.db.db.execute("SELECT operator_id FROM guild_operators WHERE guild_id = ?", (guild_id,)) as cursor:
@@ -134,7 +131,6 @@ class GuildConfigManager:
             row = await cursor.fetchone()
             return row is not None
 
-    # Channel Whitelist
     async def get_channel_whitelist(self, guild_id: int) -> List[int]:
         await self.db.ensure_guild_exists(guild_id)
         async with self.db.db.execute("SELECT channel_id FROM guild_channel_whitelist WHERE guild_id = ?", (guild_id,)) as cursor:

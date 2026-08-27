@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS hacking_daily
+(
+    user_id INTEGER NOT NULL PRIMARY KEY,
+    profit  INTEGER NOT NULL DEFAULT 0
+);

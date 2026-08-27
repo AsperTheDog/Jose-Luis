@@ -1,11 +1,13 @@
 import time
 import asyncio
 import random
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, time
 from collections import deque
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
+
+from main import JoseLuisBot
 
 DIFFICULTIES = {
     "easy": {
@@ -15,7 +17,7 @@ DIFFICULTIES = {
         "loop_chance": 0.05,
         "time_mult": 1.3, "time_base": 10,
         "timed_payout": 100, "perfect_payout": 50,
-        "max_speed_bonus": 100
+        "max_speed_bonus": 50
     },
     "normal": {
         "name": "Normal",
@@ -23,8 +25,8 @@ DIFFICULTIES = {
         "proxies": 2,
         "loop_chance": 0.10,
         "time_mult": 1.3, "time_base": 10,
-        "timed_payout": 250, "perfect_payout": 200,
-        "max_speed_bonus": 250
+        "timed_payout": 150, "perfect_payout": 80,
+        "max_speed_bonus": 100
     },
     "hard": {
         "name": "Difícil",
@@ -32,8 +34,8 @@ DIFFICULTIES = {
         "proxies": 3,
         "loop_chance": 0.15,
         "time_mult": 1.2, "time_base": 20,
-        "timed_payout": 400, "perfect_payout": 400,
-        "max_speed_bonus": 400
+        "timed_payout": 200, "perfect_payout": 150,
+        "max_speed_bonus": 200
     },
     "very_hard": {
         "name": "Muy Difícil",
@@ -41,8 +43,8 @@ DIFFICULTIES = {
         "proxies": 4,
         "loop_chance": 0.25,
         "time_mult": 1.0, "time_base": 20,
-        "timed_payout": 900, "perfect_payout": 500,
-        "max_speed_bonus": 900
+        "timed_payout": 600, "perfect_payout": 300,
+        "max_speed_bonus": 400
     }
 }
 
@@ -152,8 +154,9 @@ class TutorialView(discord.ui.View):
 
 
 class CyberHackEngine:
-    def __init__(self, diff_key: str, mode: str):
+    def __init__(self, diff_key: str, mode: str, bot: JoseLuisBot, user_id: int):
         cfg = DIFFICULTIES[diff_key]
+        self.bot = bot
         self.diff_key = diff_key
         self.diff_name = cfg["name"]
         self.mode = mode
@@ -162,6 +165,7 @@ class CyberHackEngine:
         self.num_proxies = cfg["proxies"]
         self.loop_chance = cfg["loop_chance"]
         self.base_payout = cfg["timed_payout"] if mode == "timed" else cfg["perfect_payout"]
+        self.user = user_id
 
         self.grid = []
         self.start_pos = (1, 1)
@@ -273,7 +277,7 @@ class CyberHackEngine:
         lines.append("+" + "-" * (self.width * 2 + 1) + "+")
         return "\n".join(lines)
 
-    def simulate(self, sequence: str):
+    async def simulate(self, sequence: str, elapsed_time: float):
         x, y = self.start_pos
         collected = set()
         steps = 0
@@ -288,6 +292,7 @@ class CyberHackEngine:
             steps += 1
 
             if not (0 <= nx < self.width and 0 <= ny < self.height) or self.grid[ny][nx] == WALL:
+                await self.bot.global_stats.register_hack_loss(self.user, "firewall", elapsed_time)
                 return False, f"💥 **¡FALLO CRÍTICO!** La sonda chocó contra un Cortafuegos en el paso `{steps}`.", visited_path, (nx, ny)
 
             x, y = nx, ny
@@ -297,20 +302,24 @@ class CyberHackEngine:
                 collected.add((x, y))
 
         if (x, y) != self.target_pos:
+            await self.bot.global_stats.register_hack_loss(self.user, "lost", elapsed_time)
             return False, f"⛔ **¡ACCESO DENEGADO!** La secuencia terminó en `({x}, {y})`, no en el Núcleo (`T`).", visited_path, None
 
         if len(collected) < len(self.proxies):
+            await self.bot.global_stats.register_hack_loss(self.user, "lost", elapsed_time)
             return False, f"⛔ **¡ACCESO DENEGADO!** Se alcanzó el Núcleo, pero faltaron proxies de datos (`{len(collected)}/{len(self.proxies)}`).", visited_path, None
 
         if self.mode == "perfect" and steps > self.optimal_steps:
+            await self.bot.global_stats.register_hack_loss(self.user, "lost", elapsed_time)
             return False, f"⚠️ **¡FALLO EN MODO PERFECTO!** Se usaron `{steps}` pasos (El óptimo era `{self.optimal_steps}`).", visited_path, None
 
         return True, steps, visited_path, None
 
 class CyberHackCog(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: JoseLuisBot):
         self.bot = bot
         self.active_hacks = set()
+        self.daily_reset_task.start()
 
     hacking_group = app_commands.Group(
         name="hacking",
@@ -346,7 +355,7 @@ class CyberHackCog(commands.Cog):
             diff_val = difficulty.value
             mode_val = mode.value if mode else "timed"
 
-            engine = CyberHackEngine(diff_val, mode_val)
+            engine = CyberHackEngine(diff_val, mode_val, self.bot, user_id)
             start_time = time.time()
 
             end_dt = datetime.now(timezone.utc) + timedelta(seconds=engine.time_limit)
@@ -385,7 +394,7 @@ class CyberHackCog(commands.Cog):
                     pass
 
                 raw_seq = user_msg.content
-                success, result_data, visited_path, crash_coord = engine.simulate(raw_seq)
+                success, result_data, visited_path, crash_coord = await engine.simulate(raw_seq, elapsed_time)
 
                 result_embed = discord.Embed()
 
@@ -408,6 +417,11 @@ class CyberHackCog(commands.Cog):
                     else:
                         payout = engine.base_payout
 
+                    daily_deduct_msg = ""
+                    if await self.bot.db.hacking_is_over_threshold(user_id, 3000):
+                        payout *= 0.1
+                        daily_deduct_msg = " (Has pasado los 3000 choskris hoy, recompensa reducida)"
+
                     result_embed.title = "🎉 ¡NÚCLEO INFILTRADO CON ÉXITO!"
                     result_embed.colour = discord.Color.green()
                     result_embed.description = (
@@ -415,8 +429,12 @@ class CyberHackCog(commands.Cog):
                             f"**¡Acceso al sistema concedido!**\n\n"
                             f"⏱️ **Tiempo tardado:** `{elapsed_time:.1f}s`" + (f" / `{engine.time_limit}s`\n" if mode_val == "timed" else "\n") +
                             f"🐾 **Pasos usados:** `{player_steps}` (Óptimo: `{engine.optimal_steps}`)\n"
-                            f"💰 **Recompensa:** **${payout:,}** choskris"
+                            f"💰 **Recompensa:** **${payout:,}** choskris{daily_deduct_msg}"
                     )
+
+                    await self.bot.db.economy_update_balance(user_id, payout)
+                    await self.bot.db.hacking_add_win(user_id, payout)
+                    await self.bot.global_stats.register_hack_win(user_id, diff_val, payout, elapsed_time)
                 else:
                     result_embed.title = "💥 BLOQUEO DEL SISTEMA"
                     result_embed.colour = discord.Color.red()
@@ -430,6 +448,7 @@ class CyberHackCog(commands.Cog):
                 await interaction.edit_original_response(embed=result_embed)
 
             except asyncio.TimeoutError:
+                await self.bot.global_stats.register_hack_loss(user_id, "timeout", elapsed_time)
                 timeout_embed = discord.Embed(
                     title="⏱️ TIEMPO AGOTADO - SISTEMA BLOQUEADO",
                     color=discord.Color.dark_red(),
@@ -460,6 +479,14 @@ class CyberHackCog(commands.Cog):
         view = TutorialView(author_id=interaction.user.id)
         await interaction.response.send_message(embed=embed_main, view=view)
 
+    @tasks.loop(time=time(hour=0, minute=0, second=0))
+    async def daily_reset_task(self):
+        await self.bot.db.hacking_reset_daily()
 
-async def setup(bot: commands.Bot):
+    @daily_reset_task.before_loop
+    async def before_daily_interest(self):
+        await self.bot.wait_until_ready()
+
+
+async def setup(bot: JoseLuisBot):
     await bot.add_cog(CyberHackCog(bot))

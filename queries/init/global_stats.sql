@@ -23,6 +23,13 @@ CREATE TABLE IF NOT EXISTS user_global_stats
     slots_bets_lost           BIGINT DEFAULT 0,
     slots_biggest_bet         BIGINT DEFAULT 0,
 
+    -- Cards
+    cards_money_gained        BIGINT DEFAULT 0,
+    cards_money_lost          BIGINT DEFAULT 0,
+    cards_bets_won            BIGINT DEFAULT 0,
+    cards_bets_lost           BIGINT DEFAULT 0,
+    cards_biggest_bet         BIGINT DEFAULT 0,
+
     -- Economy & Transfers
     money_given               BIGINT DEFAULT 0,
     money_received            BIGINT DEFAULT 0,
@@ -56,5 +63,16 @@ CREATE TABLE IF NOT EXISTS user_global_stats
     pickaxes_broken           BIGINT DEFAULT 0,
     items_crafted             BIGINT DEFAULT 0,
     items_sold                BIGINT DEFAULT 0,
-    item_sales_money_gained   BIGINT DEFAULT 0
+    item_sales_money_gained   BIGINT DEFAULT 0,
+
+    -- Hacking
+    hacking_times_hacked_easy         BIGINT DEFAULT 0,
+    hacking_times_hacked_normal       BIGINT DEFAULT 0,
+    hacking_times_hacked_hard         BIGINT DEFAULT 0,
+    hacking_times_hacked_very_hard    BIGINT DEFAULT 0,
+    hacking_times_failed_timeout      BIGINT DEFAULT 0,
+    hacking_times_failed_firewall     BIGINT DEFAULT 0,
+    hacking_times_failed_lost         BIGINT DEFAULT 0,
+    hacking_money_gained              BIGINT DEFAULT 0,
+    hacking_time_spent                FLOAT  DEFAULT 0.0
 );
