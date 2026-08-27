@@ -362,6 +362,64 @@ class EconomyCog(commands.Cog):
         embed.set_footer(text=f"'{phrase}' - {target_user.display_name}")
         await interaction.followup.send(embed=embed)
 
+    @economy_group.command(name="cooldowns", description="Muestra el tiempo restante de tus cooldowns activos (paga, trabajo, cárcel, intereses...)")
+    async def cooldowns(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+
+        user_id = interaction.user.id
+        user_data = await self.bot.db.economy_get_user_data(user_id)
+        now = datetime.datetime.now(datetime.timezone.utc)
+
+        embed = discord.Embed(title="⏳ Tus Cooldowns", color=discord.Color.blurple())
+
+        if user_data['last_daily']:
+            next_daily = datetime.datetime.fromisoformat(user_data['last_daily']) + datetime.timedelta(hours=24)
+            daily_value = "✅ Disponible" if now >= next_daily else discord.utils.format_dt(next_daily, "R")
+        else:
+            daily_value = "✅ Disponible"
+        embed.add_field(name="💰 Paga Diaria", value=daily_value, inline=False)
+
+        active_job = user_data['active_job']
+        if not active_job or active_job not in self.bot.db.job_registry:
+            work_value = "❌ Necesitas un trabajo (`/choskris buscartrabajo`)"
+        elif user_data['last_work']:
+            reduction = await self.bot.db.get_user_job_perk(user_id, "cooldown_reduction_pct", 0.0)
+            reduction_flat = await self.bot.db.get_user_job_perk(user_id, "work_cooldown_seconds", 0.0)
+            work_cooldown = datetime.timedelta(hours=12 * (1.0 - reduction)) - datetime.timedelta(seconds=reduction_flat)
+            next_work = datetime.datetime.fromisoformat(user_data['last_work']) + work_cooldown
+            work_value = "✅ Disponible" if now >= next_work else discord.utils.format_dt(next_work, "R")
+        else:
+            work_value = "✅ Disponible"
+        embed.add_field(name="💼 Trabajar", value=work_value, inline=False)
+
+        if user_data['last_job_switch']:
+            next_switch = datetime.datetime.fromisoformat(user_data['last_job_switch']) + datetime.timedelta(days=3)
+            switch_value = "✅ Disponible" if now >= next_switch else discord.utils.format_dt(next_switch, "R")
+        else:
+            switch_value = "✅ Disponible"
+        embed.add_field(name="🔁 Cambiar de Empleo", value=switch_value, inline=False)
+
+        if self._check_jail(user_data['jail_until']):
+            jail_until = datetime.datetime.fromisoformat(user_data['jail_until'])
+            jail_value = discord.utils.format_dt(jail_until, "R")
+        else:
+            jail_value = "✅ Libre"
+        embed.add_field(name="🚓 Cárcel", value=jail_value, inline=False)
+
+        last_pick = await self.bot.db.mining_get_last_basic_pick(user_id)
+        if last_pick:
+            next_pick = last_pick + datetime.timedelta(days=1)
+            pick_value = "✅ Disponible" if datetime.datetime.now() >= next_pick else discord.utils.format_dt(next_pick, "R")
+        else:
+            pick_value = "✅ Disponible"
+        embed.add_field(name="⛏️ Pico Gratuito", value=pick_value, inline=False)
+
+        next_interest = self.daily_interest_task.next_iteration
+        interest_value = discord.utils.format_dt(next_interest.astimezone(datetime.timezone.utc), "R") if next_interest else "N/A"
+        embed.add_field(name="📈 Próximo Pago de Intereses (Global)", value=interest_value, inline=False)
+
+        await interaction.followup.send(embed=embed)
+
     @economy_group.command(name="buscartrabajo", description="Muestra la lista de trabajos y te permite cambiarte a uno.")
     async def buscartrabajo(self, interaction: discord.Interaction):
         await interaction.response.defer()

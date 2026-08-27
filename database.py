@@ -688,3 +688,59 @@ class DBManager:
     async def hacking_reset_daily(self):
         await self.db.execute("UPDATE hacking_daily SET profit = 0")
         await self.db.commit()
+
+    async def reminder_create(self, guild_id: int, channel_id: int, author_id: int, note: str, trigger_at: str) -> int:
+        cursor = await self.db.execute(
+            "INSERT INTO reminders (guild_id, channel_id, author_id, note, trigger_at) VALUES (?, ?, ?, ?, ?)",
+            (guild_id, channel_id, author_id, note, trigger_at),
+        )
+        await self.db.commit()
+        return cursor.lastrowid
+
+    async def reminder_set_message_id(self, reminder_id: int, message_id: int) -> None:
+        await self.db.execute("UPDATE reminders SET message_id = ? WHERE id = ?", (message_id, reminder_id))
+        await self.db.commit()
+
+    async def reminder_get_due(self, now_iso: str) -> list[dict[str, Any]]:
+        self.db.row_factory = aiosqlite.Row
+        async with self.db.execute("SELECT * FROM reminders WHERE triggered = 0 AND trigger_at <= ?", (now_iso,)) as cursor:
+            rows = await cursor.fetchall()
+
+        due = [dict(row) for row in rows]
+        if due:
+            ids = [row["id"] for row in due]
+            placeholders = ",".join("?" * len(ids))
+            await self.db.execute(f"UPDATE reminders SET triggered = 1 WHERE id IN ({placeholders})", ids)
+            await self.db.commit()
+
+        return due
+
+    async def reminder_get_by_message_id(self, message_id: int) -> Optional[dict[str, Any]]:
+        self.db.row_factory = aiosqlite.Row
+        async with self.db.execute("SELECT * FROM reminders WHERE message_id = ?", (message_id,)) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def reminder_add_subscriber(self, reminder_id: int, user_id: int) -> bool:
+        cursor = await self.db.execute(
+            "INSERT OR IGNORE INTO reminder_subscribers (reminder_id, user_id) VALUES (?, ?)",
+            (reminder_id, user_id),
+        )
+        await self.db.commit()
+        return cursor.rowcount > 0
+
+    async def reminder_get_subscribers(self, reminder_id: int) -> list[int]:
+        async with self.db.execute("SELECT user_id FROM reminder_subscribers WHERE reminder_id = ?", (reminder_id,)) as cursor:
+            rows = await cursor.fetchall()
+            return [row[0] for row in rows]
+
+    async def reminder_get_related_to_user(self, user_id: int) -> list[dict[str, Any]]:
+        self.db.row_factory = aiosqlite.Row
+        async with self.db.execute(
+            """SELECT * FROM reminders
+               WHERE triggered = 0 AND (author_id = ? OR id IN (SELECT reminder_id FROM reminder_subscribers WHERE user_id = ?))
+               ORDER BY trigger_at ASC""",
+            (user_id, user_id),
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
