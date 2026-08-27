@@ -5,9 +5,6 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from cogs.hacking import CyberHackCog
-from cogs.economy import EconomyCog
-from cogs.mining import MiningSystemCog
 from config import GuildConfigManager
 from database import DBManager
 from stats import StatsTracker
