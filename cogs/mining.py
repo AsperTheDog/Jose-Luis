@@ -394,7 +394,7 @@ class MiningSystemCog(commands.Cog):
 
             db_pick_id, pickaxe_key, durability = equipped_pick
             pickaxe_data = self.game_data["pickaxes"][pickaxe_key]
-            net_power = pickaxe_data["efficiency"] - level_data["hardness"] + user_lvl * 5
+            net_power = pickaxe_data["efficiency"] - level_data["hardness"] + user_lvl * 3
 
             if net_power <= 0:
                 await self.bot.db.mining_deduct_energy(user_id, energy_cost)
