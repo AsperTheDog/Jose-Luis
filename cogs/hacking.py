@@ -25,7 +25,7 @@ DIFFICULTIES = {
         "proxies": 2,
         "loop_chance": 0.10,
         "time_mult": 1.3, "time_base": 10,
-        "timed_payout": 150, "perfect_payout": 80,
+        "timed_payout": 200, "perfect_payout": 150,
         "max_speed_bonus": 100
     },
     "hard": {
@@ -34,7 +34,7 @@ DIFFICULTIES = {
         "proxies": 3,
         "loop_chance": 0.15,
         "time_mult": 1.2, "time_base": 20,
-        "timed_payout": 200, "perfect_payout": 150,
+        "timed_payout": 400, "perfect_payout": 300,
         "max_speed_bonus": 200
     },
     "very_hard": {
@@ -43,7 +43,7 @@ DIFFICULTIES = {
         "proxies": 4,
         "loop_chance": 0.25,
         "time_mult": 1.0, "time_base": 20,
-        "timed_payout": 600, "perfect_payout": 300,
+        "timed_payout": 800, "perfect_payout": 500,
         "max_speed_bonus": 400
     }
 }
