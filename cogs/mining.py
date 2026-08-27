@@ -414,7 +414,6 @@ class MiningSystemCog(commands.Cog):
             durability_msg = f"Durabilidad pico: {new_durability}/{pickaxe_data['max_durability']}"
             lvl_up_msg = ""
 
-            pick_was_broken = False
             new_xp = current_xp + 10
             required_xp = int(100 * (user_lvl ** 1.5))
             leveled_up = new_xp >= required_xp
@@ -426,12 +425,11 @@ class MiningSystemCog(commands.Cog):
 
             if new_durability <= 0:
                 durability_msg = f"💥 **¡Tu {pickaxe_data['name']} se ha roto!**"
+                await self.bot.global_stats.register_pickaxe_broken(interaction.user.id)
             if leveled_up:
                 lvl_up_msg = f"\n⬆️ **¡Has subido al Nivel Minero {new_level}!**"
 
             await self.bot.global_stats.register_mine_action(interaction.user.id, energy_cost, total_yield)
-            if pick_was_broken:
-                await self.bot.global_stats.register_pickaxe_broken(interaction.user.id)
 
             hit_1 = total_yield // 3
             hit_2 = total_yield // 3
