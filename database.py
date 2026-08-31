@@ -744,3 +744,16 @@ class DBManager:
         ) as cursor:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
+
+    async def eightball_get_all_phrases(self) -> list[tuple[int, str, str]]:
+        async with self.db.execute("SELECT phrase, category FROM eightball_phrases") as cursor:
+            return await cursor.fetchall()
+
+    async def eightball_add_phrase(self, phrase: str, category: str = "neutral"):
+        await self.db.execute("INSERT INTO eightball_phrases (phrase, category) VALUES (?, ?)", (phrase, category))
+        await self.db.commit()
+
+    async def eightball_remove_phrase(self, phrase: str, category: str) -> bool:
+        async with self.db.execute("DELETE FROM eightball_phrases WHERE phrase = ? AND category = ?", (phrase, category)) as cursor:
+            await self.db.commit()
+            return cursor.rowcount > 0
