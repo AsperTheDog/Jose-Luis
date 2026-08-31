@@ -15,9 +15,10 @@ SYMBOLS = {
     "🍒": {"weight": 45, "payout_3": 3.0, "payout_2": 0.5},
     "🍋": {"weight": 28, "payout_3": 5.0, "payout_2": 1.0},
     "🔔": {"weight": 15, "payout_3": 12.0, "payout_2": 1.2},
-    "💎": {"weight": 8,  "payout_3": 30.0, "payout_2": 2.0},
-    "7️⃣": {"weight": 4,  "payout_3": 100.0, "payout_2": 4.0},
+    "💎": {"weight": 8, "payout_3": 30.0, "payout_2": 2.0},
+    "7️⃣": {"weight": 4, "payout_3": 100.0, "payout_2": 4.0},
 }
+
 
 class DropView(discord.ui.View):
     def __init__(self, amount: int, db: DBManager, global_stats: StatsTracker):
@@ -30,7 +31,10 @@ class DropView(discord.ui.View):
     @discord.ui.button(label="¡Reclamar Botín!", style=discord.ButtonStyle.success, emoji="💰")
     async def claim_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.claimed:
-            await interaction.response.send_message("¡Alguien se te adelantó!", ephemeral=True)
+            await interaction.response.send_message(
+                embed=discord.Embed(description="❌ ¡Alguien se te adelantó!", color=discord.Color.red()),
+                ephemeral=True
+            )
             return
 
         self.claimed = True
@@ -52,7 +56,9 @@ class DropView(discord.ui.View):
 
         current_balance = await self.db.economy_get_balance(interaction.user.id)
         text += f"\n💰 Saldo actual: **{current_balance}**"
-        await interaction.response.edit_message(content=text, view=self, delete_after=10)
+
+        embed = discord.Embed(description=text, color=discord.Color.green())
+        await interaction.response.edit_message(content=interaction.user.mention, embed=embed, view=self, delete_after=10)
 
 
 class JobSelectView(discord.ui.View):
@@ -85,7 +91,10 @@ class JobSelectView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message("No puedes interactuar con el menú de otra persona.", ephemeral=True)
+            await interaction.response.send_message(
+                embed=discord.Embed(description="❌ No puedes interactuar con el menú de otra persona.", color=discord.Color.red()),
+                ephemeral=True
+            )
             return False
         return True
 
@@ -106,10 +115,12 @@ class JobSelectView(discord.ui.View):
                     item.disabled = True
 
                 time_dialog = discord.utils.format_dt(time_allowed, "R")
+                embed = discord.Embed(description=f"{phrase}Debes esperar para cambiar de nuevo.\nPodrás cambiar de trabajo {time_dialog}", color=discord.Color.red())
+
                 await interaction.followup.edit_message(
                     message_id=interaction.message.id,
-                    content=f"{phrase}Debes esperar para cambiar de nuevo.\nPodrás cambiar de trabajo {time_dialog}",
-                    embed=None,
+                    content=None,
+                    embed=embed,
                     view=None
                 )
                 self.stop()
@@ -125,13 +136,11 @@ class JobSelectView(discord.ui.View):
         for item in self.children:
             item.disabled = True
 
+        embed = discord.Embed(description=f"{phrase}¡Contratado! Ahora trabajas como **{j_data['nombre']}** {j_data['emoji']}.", color=discord.Color.green())
         await interaction.followup.edit_message(
             message_id=interaction.message.id,
-            content=(
-                f"{phrase}¡Contratado! Ahora trabajas como"
-                f" **{j_data['nombre']}** {j_data['emoji']}."
-            ),
-            embed=None,
+            content=None,
+            embed=embed,
             view=None
         )
         self.stop()
@@ -142,7 +151,9 @@ class JobSelectView(discord.ui.View):
             item.disabled = True
 
         await interaction.response.edit_message(
-            content="Selección de empleo cancelada.", view=self
+            content=None,
+            embed=discord.Embed(description="❌ Selección de empleo cancelada.", color=discord.Color.red()),
+            view=self
         )
         self.stop()
 
@@ -222,7 +233,10 @@ class MayorMenorView(discord.ui.View):
     @discord.ui.button(label="Mayor", style=discord.ButtonStyle.success)
     async def mayor(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user.id:
-            await interaction.response.send_message("❌ No es tu partida.", ephemeral=True)
+            await interaction.response.send_message(
+                embed=discord.Embed(description="❌ No es tu partida.", color=discord.Color.red()),
+                ephemeral=True
+            )
             return
 
         mult_higher, _ = self.calculate_multipliers(self.current_card)
@@ -241,7 +255,10 @@ class MayorMenorView(discord.ui.View):
     @discord.ui.button(label="Menor", style=discord.ButtonStyle.danger)
     async def menor(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user.id:
-            await interaction.response.send_message("❌ No es tu partida.", ephemeral=True)
+            await interaction.response.send_message(
+                embed=discord.Embed(description="❌ No es tu partida.", color=discord.Color.red()),
+                ephemeral=True
+            )
             return
 
         _, mult_lower = self.calculate_multipliers(self.current_card)
@@ -260,7 +277,10 @@ class MayorMenorView(discord.ui.View):
     @discord.ui.button(label="🔒 Retirarse", style=discord.ButtonStyle.primary)
     async def stop_game(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.user.id:
-            await interaction.response.send_message("❌ No es tu partida.", ephemeral=True)
+            await interaction.response.send_message(
+                embed=discord.Embed(description="❌ No es tu partida.", color=discord.Color.red()),
+                ephemeral=True
+            )
             return
 
         await self.end_game(interaction, won=True)
@@ -274,12 +294,16 @@ class MayorMenorView(discord.ui.View):
             await self.bot.global_stats.register_cards_win(self.user.id, self.current_win, self.bet)
             await self.bot.db.economy_update_balance(self.user.id, self.current_win)
             msg = f"🏆 **{self.user.display_name}** se retira con **{self.current_win:,}** choskris tras {self.streak} aciertos."
+            embed_color = discord.Color.green()
+            title = "¡Victoria!"
         else:
             await self.bot.global_stats.register_cards_loss(self.user.id, self.bet)
             reason = "Empate" if card == self.current_card else f"Salió un {self.get_card_name(card)}"
             msg = f"💥 **{self.user.display_name}** falló. ({reason}). Ha perdido la apuesta."
+            embed_color = discord.Color.red()
+            title = "¡Mala suerte!"
 
-        await interaction.response.edit_message(content=msg, embed=None, view=self)
+        await interaction.response.edit_message(content=None, embed=discord.Embed(title=title, description=msg, color=embed_color), view=self)
 
 
 class EconomyCog(commands.Cog):
@@ -317,7 +341,10 @@ class EconomyCog(commands.Cog):
 
         target_user = usuario or interaction.user
         if target_user.bot:
-            await interaction.followup.send("Los bots no tienen cuenta bancaria.", ephemeral=True)
+            await interaction.followup.send(
+                embed=discord.Embed(description="❌ Los bots no tienen cuenta bancaria.", color=discord.Color.red()),
+                ephemeral=True
+            )
             return
 
         user_data = await self.bot.db.economy_get_user_data(target_user.id)
@@ -461,7 +488,7 @@ class EconomyCog(commands.Cog):
 
         active_job = user_data['active_job']
         if not active_job or active_job not in self.bot.db.job_registry:
-            await interaction.followup.send("No tienes un trabajo. Usa `/buscartrabajo` para buscar uno.")
+            await interaction.followup.send(embed=discord.Embed(title="💼 Jornada de Trabajo", description="❌ No tienes un trabajo. Usa `/choskris buscartrabajo` para buscar uno.", color=discord.Color.red()))
             return
 
         now = datetime.datetime.now(datetime.timezone.utc)
@@ -473,11 +500,11 @@ class EconomyCog(commands.Cog):
                 time_cooldown = datetime.timedelta(hours=12 * (1.0 - reduction)) - datetime.timedelta(seconds=reduction_flat)
                 next_time = last_work + time_cooldown
                 time_dialog = discord.utils.format_dt(next_time, "R")
-                text = f"Ya has trabajado hoy. Vuelve {time_dialog}."
+                text = f"⏳ Ya has trabajado hoy. Vuelve {time_dialog}."
                 if reduction > 0.0:
                     time_reduced = datetime.timedelta(hours=12 - 12 * (1.0 - reduction)) + datetime.timedelta(seconds=reduction_flat)
                     text += f" (-{time_reduced.seconds // 3600}h {(time_reduced.seconds // 60) % 60}m!)"
-                await interaction.followup.send(content=text)
+                await interaction.followup.send(embed=discord.Embed(title="💼 Jornada de Trabajo", description=text, color=discord.Color.orange()))
                 return
 
         job_stats = await self.bot.db.economy_get_job_data(interaction.user.id, active_job)
@@ -506,9 +533,9 @@ class EconomyCog(commands.Cog):
         j_data = self.bot.db.job_registry[active_job]
         phrase = await self.bot.db.global_get_random_phrase("job_work", active_job)
         if salary == 0.0:
-            msg = f"{phrase}💼 Has holgazaneado como **{j_data['nombre']}** por lo que no has ganado choskris. (+{xp_gained} XP)"
+            msg = f"{phrase}Has holgazaneado como **{j_data['nombre']}** por lo que no has ganado choskris. (+{xp_gained} XP)"
         else:
-            msg = f"{phrase}💼 Has trabajado duro como **{j_data['nombre']}** y ganado **{int(salary)}** choskris. (+{xp_gained} XP)"
+            msg = f"{phrase}Has trabajado duro como **{j_data['nombre']}** y ganado **{int(salary)}** choskris. (+{xp_gained} XP)"
             if bonus > 0.0:
                 msg += f" (+{bonus} bonus de trabajo!)"
             if leveled_up:
@@ -516,7 +543,8 @@ class EconomyCog(commands.Cog):
 
         current_balance = await self.bot.db.economy_get_balance(interaction.user.id)
         msg += f"\n💰 Saldo actual: **{current_balance}**"
-        await interaction.followup.send(msg)
+
+        await interaction.followup.send(embed=discord.Embed(title="Jornada de Trabajo", description=msg, color=discord.Color.green() if salary > 0 else discord.Color.orange()))
 
     @economy_group.command(name="allowence", description="Reclama tu choskris diario.")
     async def paga(self, interaction: discord.Interaction):
@@ -532,7 +560,7 @@ class EconomyCog(commands.Cog):
                 phrase = await self.bot.db.global_get_random_phrase("allowance", "fail")
                 next_time = last_daily + datetime.timedelta(hours=24)
                 time_dialog = discord.utils.format_dt(next_time, "R")
-                await interaction.followup.send(f"{phrase}Aún no puedes reclamar tu paga. Vuelve {time_dialog}.")
+                await interaction.followup.send(embed=discord.Embed(title="💰 Paga Diaria", description=f"{phrase}Aún no puedes reclamar tu paga. Vuelve {time_dialog}.", color=discord.Color.red()))
                 return
             elif delta > datetime.timedelta(hours=48):
                 streak = 0
@@ -547,11 +575,12 @@ class EconomyCog(commands.Cog):
         await self.bot.global_stats.register_allowance_claim(interaction.user.id, final_paga, streak)
         phrase = await self.bot.db.global_get_random_phrase("allowance", "success")
         job_boost_msg = f" *(+{int(job_boost * 100)}%!)*" if job_boost > 0.0 else ""
-        msg = f"{phrase}💸Could you give me an allowence?\n Has obtenido **{final_paga}**{job_boost_msg} choskris.\n🔥 Racha diaria: **{streak + 1}** días."
+        msg = f"{phrase}💸 Could you give me an allowence?\n Has obtenido **{final_paga}**{job_boost_msg} choskris.\n🔥 Racha diaria: **{streak + 1}** días."
 
         current_balance = await self.bot.db.economy_get_balance(interaction.user.id)
         msg += f"\n💰 Saldo actual: **{current_balance}**"
-        await interaction.followup.send(msg)
+
+        await interaction.followup.send(embed=discord.Embed(title="💰 Paga Diaria", description=msg, color=discord.Color.green()))
 
     @economy_group.command(name="ruleta", description="Juega a la ruleta. Puedes apostar a color, a número, o a ambos (ej. 0 Verde o 17 Negro).")
     @app_commands.describe(
@@ -569,20 +598,20 @@ class EconomyCog(commands.Cog):
 
         phrase = await self.bot.db.global_get_random_phrase("gamble", "error")
         if apuesta <= 0:
-            await interaction.followup.send(f"{phrase}La apuesta debe ser mayor a 0.")
+            await interaction.followup.send(embed=discord.Embed(title="🎡 Ruleta", description=f"{phrase}La apuesta debe ser mayor a 0.", color=discord.Color.red()))
             return
 
         if color is None and numero is None:
-            await interaction.followup.send(f"{phrase}Debes elegir al menos una opción: un color, un número, o ambos.")
+            await interaction.followup.send(embed=discord.Embed(title="🎡 Ruleta", description=f"{phrase}Debes elegir al menos una opción: un color, un número, o ambos.", color=discord.Color.red()))
             return
 
         if numero is not None and not (0 <= numero <= 36):
-            await interaction.followup.send(f"{phrase}El número debe estar entre 0 y 36.")
+            await interaction.followup.send(embed=discord.Embed(title="🎡 Ruleta", description=f"{phrase}El número debe estar entre 0 y 36.", color=discord.Color.red()))
             return
 
         user_data = await self.bot.db.economy_get_user_data(interaction.user.id)
         if user_data['balance'] < apuesta:
-            await interaction.followup.send(f"{phrase}No tienes suficiente choskris para esta apuesta.")
+            await interaction.followup.send(embed=discord.Embed(title="🎡 Ruleta", description=f"{phrase}No tienes suficiente choskris para esta apuesta.", color=discord.Color.red()))
             return
 
         is_let_it_ride = (numero == 17 and color == "negro")
@@ -632,8 +661,11 @@ class EconomyCog(commands.Cog):
 
             phrase = await self.bot.db.global_get_random_phrase("spin", "success")
             await interaction.followup.send(
-                f"{prefix_msg}{phrase}🎰 La bola cayó en **{resultado_num} {color_emoji}**.\n"
-                f"🎉 **{pago_descripcion}** Has ganado **{int(prize)}** choskris."
+                embed=discord.Embed(
+                    title="🎡 Ruleta",
+                    description=f"{prefix_msg}{phrase}La bola cayó en **{resultado_num} {color_emoji}**.\n🎉 **{pago_descripcion}** Has ganado **{int(prize)}** choskris.",
+                    color=discord.Color.green()
+                )
             )
         else:
             phrase = await self.bot.db.global_get_random_phrase("spin", "fail")
@@ -642,13 +674,14 @@ class EconomyCog(commands.Cog):
             await self.bot.db.economy_update_balance(interaction.user.id, -loss)
             await self.bot.global_stats.register_roulette_loss(interaction.user.id, apuesta)
 
-            msg = f"{prefix_msg}{phrase}🎰 La bola cayó en **{resultado_num} {color_emoji}**.\n❌ Perdiste **{apuesta}** choskris."
+            msg = f"{prefix_msg}{phrase}La bola cayó en **{resultado_num} {color_emoji}**.\n❌ Perdiste **{apuesta}** choskris."
             if cashback_pct > 0:
                 msg += f" (-**{apuesta - loss}** cashback)"
 
             current_balance = await self.bot.db.economy_get_balance(interaction.user.id)
             msg += f"\n💰 Saldo actual: **{current_balance}**"
-            await interaction.followup.send(msg)
+
+            await interaction.followup.send(embed=discord.Embed(title="Ruleta", description=msg, color=discord.Color.red()))
 
     @economy_group.command(name="dados", description="Lanza dos dados de 6 caras. Apuesta a suma exacta, alta/baja/7 o par/impar.")
     @app_commands.describe(
@@ -669,17 +702,17 @@ class EconomyCog(commands.Cog):
 
         phrase = await self.bot.db.global_get_random_phrase("gamble", "error")
         if apuesta <= 0:
-            await interaction.followup.send(f"{phrase}La apuesta debe ser mayor a 0.")
+            await interaction.followup.send(embed=discord.Embed(title="🎲 Dados", description=f"{phrase}La apuesta debe ser mayor a 0.", color=discord.Color.red()))
             return
 
         if modalidad == "exacta":
             if suma_exacta is None or not (2 <= suma_exacta <= 12):
-                await interaction.followup.send(f"{phrase}Para la modalidad 'Suma Exacta', debes indicar un número entre 2 y 12 en el campo `suma_exacta`.")
+                await interaction.followup.send(embed=discord.Embed(title="🎲 Dados", description=f"{phrase}Para la modalidad 'Suma Exacta', debes indicar un número entre 2 y 12 en el campo `suma_exacta`.", color=discord.Color.red()))
                 return
 
         user_data = await self.bot.db.economy_get_user_data(interaction.user.id)
         if user_data['balance'] < apuesta:
-            await interaction.followup.send(f"{phrase}No tienes suficiente choskris para esta apuesta.")
+            await interaction.followup.send(embed=discord.Embed(title="🎲 Dados", description=f"{phrase}No tienes suficiente choskris para esta apuesta.", color=discord.Color.red()))
             return
 
         dado1 = random.randint(1, 6)
@@ -726,8 +759,11 @@ class EconomyCog(commands.Cog):
 
             phrase = await self.bot.db.global_get_random_phrase("dice", "success")
             await interaction.followup.send(
-                f"{phrase}🎲 Los dados cayeron en: {d1_str} + {d2_str} = **{total}**\n"
-                f"🎉 **{pago_descripcion}** Has ganado **{int(prize)}** choskris. *(Multiplicador {multiplier}x)*"
+                embed=discord.Embed(
+                    title="🎲 Dados",
+                    description=f"{phrase}Los dados cayeron en: {d1_str} + {d2_str} = **{total}**\n🎉 **{pago_descripcion}** Has ganado **{int(prize)}** choskris. *(Multiplicador {multiplier}x)*",
+                    color=discord.Color.green()
+                )
             )
         else:
             cashback_pct = await self.bot.db.get_user_job_perk(interaction.user.id, "gambling_cashback", 0.0)
@@ -736,13 +772,14 @@ class EconomyCog(commands.Cog):
             await self.bot.global_stats.register_dice_loss(interaction.user.id, apuesta)
 
             phrase = await self.bot.db.global_get_random_phrase("dice", "fail")
-            msg = f"{phrase}🎲 Los dados cayeron en: {d1_str} + {d2_str} = **{total}**\n❌ Perdiste **{apuesta}** choskris."
+            msg = f"{phrase}Los dados cayeron en: {d1_str} + {d2_str} = **{total}**\n❌ Perdiste **{apuesta}** choskris."
             if cashback_pct > 0:
                 msg += f" (-**{apuesta - loss}** cashback)"
 
             current_balance = await self.bot.db.economy_get_balance(interaction.user.id)
             msg += f"\n💰 Saldo actual: **{current_balance}**"
-            await interaction.followup.send(msg)
+
+            await interaction.followup.send(embed=discord.Embed(title="🎲 Dados", description=msg, color=discord.Color.red()))
 
     @economy_group.command(name="crimen", description="Comete un delito. Altas ganancias, alto riesgo.")
     async def crimen(self, interaction: discord.Interaction):
@@ -753,7 +790,7 @@ class EconomyCog(commands.Cog):
         if self._check_jail(user_data['jail_until']):
             jail_until = datetime.datetime.fromisoformat(user_data['jail_until'])
             delta = jail_until - now
-            await interaction.followup.send(f"🚓 Estás en la cárcel. Sales en **{delta.days} días, {delta.seconds // 3600}h**.")
+            await interaction.followup.send(embed=discord.Embed(title="🦹‍♂️ Golpe Criminal", description=f"🚓 Estás en la cárcel. Sales en **{delta.days} días, {delta.seconds // 3600}h**.", color=discord.Color.red()))
             return
 
         streak = user_data['crime_streak']
@@ -781,7 +818,8 @@ class EconomyCog(commands.Cog):
 
             current_balance = await self.bot.db.economy_get_balance(interaction.user.id)
             msg += f"\n💰 Saldo actual: **{current_balance}**"
-            await interaction.followup.send(msg)
+
+            await interaction.followup.send(embed=discord.Embed(title="🦹‍♂️ Golpe Criminal", description=msg, color=discord.Color.green()))
         else:
             penalty = base_reward * 1.5
             jail_time = 72 * (1 + jail_bonus)
@@ -796,9 +834,10 @@ class EconomyCog(commands.Cog):
 
             current_balance = await self.bot.db.economy_get_balance(interaction.user.id)
             msg += f"\n💰 Saldo actual: **{current_balance}**"
-            await interaction.followup.send(msg)
 
-    @economy_group.command(name="pagar", description="Transfiere choskris de tu cuenta personal a otro usuario.")
+            await interaction.followup.send(embed=discord.Embed(title="🦹‍♂️ Golpe Criminal", description=msg, color=discord.Color.red()))
+
+    @economy_group.command(name="transferir", description="Transfiere choskris de tu cuenta personal a otro usuario.")
     @app_commands.describe(destinatario="El usuario que recibirá los choskris", cantidad="La cantidad de choskris a transferir")
     async def pagar(self, interaction: discord.Interaction, destinatario: discord.User, cantidad: int):
         await interaction.response.defer()
@@ -808,24 +847,24 @@ class EconomyCog(commands.Cog):
         is_in_quarantine = await self.bot.db.quarantine_is_quarantined(interaction.user.id)
         if is_in_quarantine:
             reason = await self.bot.db.quarantine_get_quarantine_reason(interaction.user.id)
-            await interaction.followup.send(f"{phrase}Esta cuenta no tiene permitido dar dinero porque está en cuarentena.\nRazón: {reason}")
+            await interaction.followup.send(embed=discord.Embed(title="💸 Transferencia", description=f"{phrase}Esta cuenta no tiene permitido dar dinero porque está en cuarentena.\nRazón: {reason}", color=discord.Color.red()))
             return
 
         if cantidad <= 0:
-            await interaction.followup.send(f"{phrase}La cantidad a transferir debe ser mayor a 0.")
+            await interaction.followup.send(embed=discord.Embed(title="💸 Transferencia", description=f"{phrase}La cantidad a transferir debe ser mayor a 0.", color=discord.Color.red()))
             return
 
         if destinatario.id == interaction.user.id:
-            await interaction.followup.send(f"{phrase}No puedes transferirte choskris a ti mismo.")
+            await interaction.followup.send(embed=discord.Embed(title="💸 Transferencia", description=f"{phrase}No puedes transferirte choskris a ti mismo.", color=discord.Color.red()))
             return
 
         if destinatario.bot:
-            await interaction.followup.send(f"{phrase}No puedes transferir choskris a un bot.")
+            await interaction.followup.send(embed=discord.Embed(title="💸 Transferencia", description=f"{phrase}No puedes transferir choskris a un bot.", color=discord.Color.red()))
             return
 
         user_data = await self.bot.db.economy_get_user_data(interaction.user.id)
         if user_data['balance'] < cantidad:
-            await interaction.followup.send(f"{phrase}Saldo insuficiente. Tienes **{user_data['balance']:,}** choskris y quieres enviar **{cantidad:,}**.")
+            await interaction.followup.send(embed=discord.Embed(title="💸 Transferencia", description=f"{phrase}Saldo insuficiente. Tienes **{user_data['balance']:,}** choskris y quieres enviar **{cantidad:,}**.", color=discord.Color.red()))
             return
 
         await self.bot.db.economy_transfer_balance(interaction.user.id, destinatario.id, cantidad)
@@ -833,11 +872,15 @@ class EconomyCog(commands.Cog):
         await self.bot.global_stats.register_money_gift_receive(destinatario.id, cantidad)
 
         phrase = await self.bot.db.global_get_random_phrase("pay_success")
-        msg = f"{phrase}💸 ¡{interaction.user.mention} le ha enviado **{cantidad:,}** choskris a {destinatario.mention}!"
+        msg = f"{phrase}¡{interaction.user.mention} le ha enviado **{cantidad:,}** choskris a {destinatario.mention}!"
 
         current_balance = await self.bot.db.economy_get_balance(interaction.user.id)
         msg += f"\n💰 Saldo actual: **{current_balance}**"
-        await interaction.followup.send(msg)
+
+        await interaction.followup.send(
+            content=destinatario.mention,
+            embed=discord.Embed(title="💸 Transferencia", description=msg, color=discord.Color.green())
+        )
 
     @economy_group.command(name="generar", description="Genera choskris del aire y se lo otorga a un usuario.")
     @app_commands.describe(destinatario="El usuario que recibirá los choskris generados", cantidad="La cantidad de choskris a generar")
@@ -847,17 +890,20 @@ class EconomyCog(commands.Cog):
         await interaction.response.defer()
 
         if cantidad <= 0:
-            await interaction.followup.send("La cantidad generada debe ser mayor a 0.")
+            await interaction.followup.send(embed=discord.Embed(title="💸 Generación Estampónea", description="❌ La cantidad generada debe ser mayor a 0.", color=discord.Color.red()))
             return
 
         if destinatario.bot:
-            await interaction.followup.send("No puedes otorgar choskris a un bot.")
+            await interaction.followup.send(embed=discord.Embed(title="💸 Generación Estampónea", description="❌ No puedes otorgar choskris a un bot.", color=discord.Color.red()))
             return
 
         await self.bot.db.economy_update_balance(destinatario.id, cantidad)
         await self.bot.global_stats.register_money_gift_receive(destinatario.id, cantidad)
 
-        await interaction.followup.send(f"✅ Has generado **{cantidad:,}** choskris para {destinatario.mention}.")
+        await interaction.followup.send(
+            content=destinatario.mention,
+            embed=discord.Embed(title="💸 Generación Estampónea", description=f"✅ Has generado **{cantidad:,}** choskris para {destinatario.mention}.", color=discord.Color.green())
+        )
 
     @economy_group.command(name="interes", description="Reclama los intereses generados por tus ahorros")
     async def claim_interest(self, interaction: discord.Interaction):
@@ -867,11 +913,11 @@ class EconomyCog(commands.Cog):
         claimed_amount = await self.bot.db.economy_claim_interest(user_id)
 
         if claimed_amount is None:
-            await interaction.response.send_message(f"{phrase}No tienes una cuenta de economía registrada.", ephemeral=True)
+            await interaction.response.send_message(embed=discord.Embed(title="💼 Intereses del Banco", description=f"{phrase}No tienes una cuenta de economía registrada.", color=discord.Color.red()), ephemeral=True)
             return
 
         if claimed_amount <= 0:
-            await interaction.response.send_message( f"{phrase}No tienes intereses pendientes por reclamar.", ephemeral=True)
+            await interaction.response.send_message(embed=discord.Embed(title="💼 Intereses del Banco", description=f"{phrase}No tienes intereses pendientes por reclamar.", color=discord.Color.orange()), ephemeral=True)
             return
 
         await self.bot.global_stats.register_interest_payout(user_id, claimed_amount)
@@ -880,7 +926,8 @@ class EconomyCog(commands.Cog):
 
         current_balance = await self.bot.db.economy_get_balance(interaction.user.id)
         message += f"\n💰 Saldo actual: **{current_balance}**"
-        await interaction.response.send_message(message)
+
+        await interaction.response.send_message(embed=discord.Embed(title="💼 Intereses del Banco", description=message, color=discord.Color.green()))
 
     @economy_group.command(name="historial", description="Muestra tus últimos 10 movimientos de saldo.")
     async def balance_history(self, interaction: discord.Interaction):
@@ -889,7 +936,7 @@ class EconomyCog(commands.Cog):
         entries = await self.bot.db.economy_get_balance_log(interaction.user.id, limit=10)
 
         if not entries:
-            await interaction.followup.send("No tienes movimientos de saldo registrados.")
+            await interaction.followup.send(embed=discord.Embed(title="📜 Historial de Transacciones", description="❌ No tienes movimientos de saldo registrados.", color=discord.Color.red()))
             return
 
         lines = []
@@ -909,14 +956,14 @@ class EconomyCog(commands.Cog):
                 f"{emoji} {sign}{delta:,} choskris · {e['prev_balance']:,} → {e['new_balance']:,} · {when}"
             )
 
-        await interaction.followup.send("\n".join(lines))
+        await interaction.followup.send(embed=discord.Embed(title="📜 Historial de Transacciones", description="\n".join(lines), color=discord.Color.blue()))
 
     @economy_group.command(name="meterfrase", description="Inserta una frase customizada para las acciones de economía")
     async def meterfrase(self, interaction: discord.Interaction, frase: str, categoria: str, tag: Optional[str] = None):
         if await self.bot.filter_operators(interaction): return
         await self.bot.db.economy_add_phrase(frase, categoria, tag)
 
-        await interaction.response.send_message(f"Añadido '{frase}' a la lista de frases.", ephemeral=True)
+        await interaction.response.send_message(embed=discord.Embed(description=f"✅ Añadido '{frase}' a la lista de frases.", color=discord.Color.green()), ephemeral=True)
 
     @staticmethod
     def _get_random_symbol():
@@ -928,7 +975,7 @@ class EconomyCog(commands.Cog):
     @app_commands.describe(apuesta="Cantidad de monedas a apostar")
     async def slots(self, interaction: discord.Interaction, apuesta: int):
         if apuesta <= 0:
-            await interaction.response.send_message("La apuesta debe ser mayor a 0.", ephemeral=True)
+            await interaction.response.send_message(embed=discord.Embed(title="🎰 Tragaperras 🎰", description="❌ La apuesta debe ser mayor a 0.", color=discord.Color.red()), ephemeral=True)
             return
 
         user_id = interaction.user.id
@@ -951,7 +998,7 @@ class EconomyCog(commands.Cog):
         success, current_balance = await self.bot.db.economy_process_slots_bet(interaction.user.id, apuesta, net_change)
 
         if not success:
-            await interaction.response.send_message(f"No tienes suficientes monedas. Saldo actual: **{current_balance}**", ephemeral=True)
+            await interaction.response.send_message(embed=discord.Embed(title="🎰 Tragaperras 🎰", description=f"❌ No tienes suficientes monedas. Saldo actual: **{current_balance}**", color=discord.Color.red()), ephemeral=True)
             return
 
         reels_display = f"| {reel1} | {reel2} | {reel3} |"
@@ -978,7 +1025,7 @@ class EconomyCog(commands.Cog):
 
         balance = await self.bot.db.economy_get_balance(interaction.user.id)
         if cantidad > balance or cantidad <= 0:
-            await interaction.followup.send("No tienes suficientes choskris.")
+            await interaction.followup.send(embed=discord.Embed(title="🃏 Mayor o Menor", description="❌ No tienes suficientes choskris.", color=discord.Color.red()))
             return
 
         await self.bot.db.economy_update_balance(interaction.user.id, -cantidad)
@@ -1006,7 +1053,7 @@ class EconomyCog(commands.Cog):
         embed = discord.Embed(title="¡Han caído unos choskris!", description=f"Alguien ha dejado caer **{amount}** choskris al suelo. ¡Sé el primero en cogerlos!", color=0xf1c40f)
 
         view = DropView(amount=amount, db=self.bot.db, global_stats=self.bot.global_stats)
-        await interaction.response.send_message("¡Drop en camino!", ephemeral=True)
+        await interaction.response.send_message(embed=discord.Embed(description="✅ ¡Drop en camino!", color=discord.Color.green()), ephemeral=True)
         await interaction.channel.send(embed=embed, view=view)
 
     @economy_group.command(name="debuginteres", description="Muestra información de depuración sobre el sistema de intereses diarios.")
@@ -1061,7 +1108,6 @@ class EconomyCog(commands.Cog):
         )
 
         await interaction.followup.send(embed=embed, ephemeral=True)
-
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -1130,12 +1176,11 @@ class EconomyCog(commands.Cog):
         await self._run_daily_interest()
 
         if self._interest_last_error:
-            await interaction.followup.send(f"❌ Ejecución forzada falló: **{self._interest_last_error}**", ephemeral=True)
+            await interaction.followup.send(embed=discord.Embed(description=f"❌ Ejecución forzada falló: **{self._interest_last_error}**", color=discord.Color.red()), ephemeral=True)
             return
 
         await interaction.followup.send(
-            f"✅ Ejecución completada. Usuarios evaluados: **{self._interest_last_iterations}**, "
-            f"intereses: **{self._interest_last_payouts}**, pasivos: **{self._interest_last_passive_payouts}**.",
+            embed=discord.Embed(description=f"✅ Ejecución completada. Usuarios evaluados: **{self._interest_last_iterations}**, intereses: **{self._interest_last_payouts}**, pasivos: **{self._interest_last_passive_payouts}**.", color=discord.Color.green()),
             ephemeral=True,
         )
 

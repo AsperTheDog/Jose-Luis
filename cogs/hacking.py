@@ -448,7 +448,7 @@ class CyberHackCog(commands.Cog):
                 await interaction.edit_original_response(embed=result_embed)
 
             except asyncio.TimeoutError:
-                await self.bot.global_stats.register_hack_loss(user_id, "timeout", elapsed_time)
+                await self.bot.global_stats.register_hack_loss(user_id, "timeout", timeout_seconds)
                 timeout_embed = discord.Embed(
                     title="⏱️ TIEMPO AGOTADO - SISTEMA BLOQUEADO",
                     color=discord.Color.dark_red(),
