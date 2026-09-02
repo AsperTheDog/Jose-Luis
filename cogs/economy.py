@@ -496,8 +496,8 @@ class EconomyCog(commands.Cog):
             last_work = datetime.datetime.fromisoformat(user_data['last_work'])
             reduction = await self.bot.db.get_user_job_perk(interaction.user.id, "cooldown_reduction_pct", 0.0)
             reduction_flat = await self.bot.db.get_user_job_perk(interaction.user.id, "work_cooldown_seconds", 0.0)
-            if now < last_work + datetime.timedelta(hours=12 * (1.0 - reduction)):
-                time_cooldown = datetime.timedelta(hours=12 * (1.0 - reduction)) - datetime.timedelta(seconds=reduction_flat)
+            time_cooldown = datetime.timedelta(hours=12 * (1.0 - reduction)) - datetime.timedelta(seconds=reduction_flat)
+            if now < last_work + time_cooldown:
                 next_time = last_work + time_cooldown
                 time_dialog = discord.utils.format_dt(next_time, "R")
                 text = f"⏳ Ya has trabajado hoy. Vuelve {time_dialog}."
