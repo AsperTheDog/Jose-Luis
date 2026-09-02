@@ -498,8 +498,8 @@ class GachaCog(commands.Cog):
         potenciar="Gasta polvo gacha para mejorar las probabilidades de esta tirada"
     )
     @app_commands.choices(veces=[
-        app_commands.Choice(name="Tirada Sencilla (1000 choskris)", value=1),
-        app_commands.Choice(name="Multitirada x10 (9000 choskris)", value=10),
+        app_commands.Choice(name="Tirada Sencilla (500 choskris)", value=1),
+        app_commands.Choice(name="Multitirada x10 (4500 choskris)", value=10),
     ])
     async def throw(self, interaction: discord.Interaction, veces: app_commands.Choice[int], potenciar: bool = False):
         user_id = interaction.user.id
