@@ -161,3 +161,24 @@ class StatsTracker:
             await self.db.increment_stat(user_id, column_name, 1)
 
         await self.db.increment_stat(user_id, "hacking_time_spent", time_spent)
+
+    async def register_gacha_throw(self, user_id: int, times: int, cost: int, boosted: bool) -> None:
+        await self.db.increment_stat(user_id, "gacha_throws", times)
+        await self.register_money_spent(user_id, cost)
+        if boosted:
+            await self.db.increment_stat(user_id, "gacha_boosted_throws", times)
+
+    async def register_gacha_shard_obtained(self, user_id: int, rarity: int) -> None:
+        valid_rarities = {2, 3, 4, 5}
+        if rarity in valid_rarities:
+            await self.db.increment_stat(user_id, f"gacha_shards_obtained_{rarity}", 1)
+
+    async def register_gacha_unit_crafted(self, user_id: int, amount: int = 1) -> None:
+        await self.db.increment_stat(user_id, "gacha_units_crafted", amount)
+
+    async def register_gacha_shard_destroyed(self, user_id: int, amount: int, dust_gained: int) -> None:
+        await self.db.increment_stat(user_id, "gacha_shards_destroyed", amount)
+        await self.db.increment_stat(user_id, "gacha_dust_obtained", dust_gained)
+
+    async def register_gacha_dust_spent(self, user_id: int, amount: int) -> None:
+        await self.db.increment_stat(user_id, "gacha_dust_spent", amount)

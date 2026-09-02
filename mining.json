@@ -127,6 +127,16 @@
       "name": "Cristal Místico",
       "value": 1200,
       "emoji": "🔮"
+    },
+    "amuleto_pavonita": {
+      "name": "Amuleto de Pavonita",
+      "value": 550,
+      "emoji": "📿"
+    },
+    "daga_obsidiana": {
+      "name": "Daga de Obsidiana",
+      "value": 550,
+      "emoji": "🗡️"
     }
   },
   "recipes": {
@@ -176,6 +186,22 @@
         "obsidiana": 15,
         "pavonita": 15,
         "diamante_bruto": 5
+      }
+    },
+    "amuleto_pavonita": {
+      "type": "valuable",
+      "result": "amuleto_pavonita",
+      "ingredients": {
+        "pavonita": 25,
+        "hierro": 10
+      }
+    },
+    "daga_obsidiana": {
+      "type": "valuable",
+      "result": "daga_obsidiana",
+      "ingredients": {
+        "obsidiana": 25,
+        "hierro": 10
       }
     },
     "craft_pico_hierro": {

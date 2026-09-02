@@ -74,5 +74,17 @@ CREATE TABLE IF NOT EXISTS user_global_stats
     hacking_times_failed_firewall     BIGINT DEFAULT 0,
     hacking_times_failed_lost         BIGINT DEFAULT 0,
     hacking_money_gained              BIGINT DEFAULT 0,
-    hacking_time_spent                FLOAT  DEFAULT 0.0
+    hacking_time_spent                FLOAT  DEFAULT 0.0,
+
+    -- Gacha
+    gacha_throws              BIGINT DEFAULT 0,
+    gacha_boosted_throws      BIGINT DEFAULT 0,
+    gacha_shards_obtained_2   BIGINT DEFAULT 0,
+    gacha_shards_obtained_3   BIGINT DEFAULT 0,
+    gacha_shards_obtained_4   BIGINT DEFAULT 0,
+    gacha_shards_obtained_5   BIGINT DEFAULT 0,
+    gacha_units_crafted       BIGINT DEFAULT 0,
+    gacha_shards_destroyed    BIGINT DEFAULT 0,
+    gacha_dust_obtained       BIGINT DEFAULT 0,
+    gacha_dust_spent          BIGINT DEFAULT 0
 );

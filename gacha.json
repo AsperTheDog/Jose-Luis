@@ -1,0 +1,44 @@
+{
+  "throw_cost": 500,
+  "multi_throw_count": 10,
+  "multi_throw_cost": 4500,
+  "shards_per_unit": 5,
+  "boost_cost_dust": 200,
+  "rarity_weights": {
+    "2": 67,
+    "3": 25,
+    "4": 6,
+    "5": 2
+  },
+  "boosted_rarity_weights": {
+    "2": 25,
+    "3": 40,
+    "4": 25,
+    "5": 10
+  },
+  "dust_per_shard": {
+    "2": 10,
+    "3": 25,
+    "4": 70,
+    "5": 200
+  },
+  "level_score_per_rarity": {
+    "2": 1,
+    "3": 3,
+    "4": 10,
+    "5": 40
+  },
+  "level_score_per_level": 50,
+  "rarity_names": {
+    "2": "⭐⭐",
+    "3": "⭐⭐⭐",
+    "4": "⭐⭐⭐⭐",
+    "5": "⭐⭐⭐⭐⭐"
+  },
+  "rarity_colors": {
+    "2": 9807270,
+    "3": 3447003,
+    "4": 10181046,
+    "5": 15844367
+  }
+}

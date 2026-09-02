@@ -61,7 +61,7 @@ class UtilityCog(commands.Cog):
 
     @utility_group.command(name="execsql", description="Ejecuta una consulta SQL en bot_data.db con formato de tabla alineada.")
     @app_commands.describe(query="La sentencia SQL a ejecutar (SELECT, UPDATE, INSERT, DELETE, etc.)")
-    async def exec_sql(self, interaction: discord.Interaction, query: str):
+    async def execsql(self, interaction: discord.Interaction, query: str):
         if await self.bot.filter_owner(interaction): return
 
         await interaction.response.defer(ephemeral=True)
@@ -131,13 +131,33 @@ class UtilityCog(commands.Cog):
             await interaction.followup.send(f"**Error al ejecutar SQL:**\n```py\n{e}\n```")
 
     @utility_group.command(name="execsqlscript", description="Ejecuta un script SQL en la base de datos")
-    async def execute_sql(self, interaction: discord.Interaction, script: str):
+    async def execsqlscript(self, interaction: discord.Interaction, script: str):
         if await self.bot.filter_owner(interaction): return
 
         await self.bot.db.db.executescript(script)
         await self.bot.db.db.commit()
 
-        await interaction.response.send_message("✅ Script SQL ejecutado correctamente.", ephemeral=True)
+        await interaction.response.send_message("Script SQL ejecutado correctamente.", ephemeral=True)
+
+    @utility_group.command(name="execsqlfile", description="Ejecuta un archivo SQL en la base de datos")
+    async def execsqlfile(self, interaction: discord.Interaction, file: discord.Attachment):
+        if await self.bot.filter_owner(interaction): return
+
+        await interaction.response.defer(ephemeral=True)
+
+        if not file.filename.endswith(".sql"):
+            await interaction.followup.send("El archivo debe ser un script `.sql`.", ephemeral=True)
+            return
+
+        try:
+            sql_content = (await file.read()).decode("utf-8")
+
+            await self.bot.db.db.executescript(sql_content)
+            await self.bot.db.db.commit()
+
+            await interaction.followup.send("Script SQL ejecutado correctamente.", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"Error al ejecutar el script SQL:\n```py\n{e}\n```", ephemeral=True)
 
 async def setup(bot: JoseLuisBot):
     await bot.add_cog(UtilityCog(bot))

@@ -221,3 +221,6 @@ bot_data.db
 twitch_tokens.json
 bot_data.db-shm
 bot_data.db-wal
+
+/gacha_units/framed/*
+!/gacha_units/framed/.gitkeep

@@ -288,6 +288,60 @@ class GlobalStatsCog(commands.Cog):
 
         await interaction.response.send_message(embed=embed)
 
+    @stats_group.command(name="gacha", description="Mira estadísticas del sistema de invocación de personajes")
+    async def stats_gacha(self, interaction: discord.Interaction, target: Optional[discord.User] = None):
+        user = target or interaction.user
+        data = await self.bot.db.global_fetch_user_stats(user.id)
+
+        embed = discord.Embed(
+            title=f"🎰 Gacha - {user.display_name}",
+            color=discord.Color.dark_purple(),
+        )
+        embed.set_thumbnail(url=user.display_avatar.url)
+
+        throws = data.get("gacha_throws", 0)
+        boosted = data.get("gacha_boosted_throws", 0)
+        embed.add_field(
+            name="🎲 Tiradas",
+            value=(
+                f"**Total:** {throws:,}\n"
+                f"**Potenciadas:** {boosted:,}\n"
+            ),
+            inline=True,
+        )
+
+        s2 = data.get("gacha_shards_obtained_2", 0)
+        s3 = data.get("gacha_shards_obtained_3", 0)
+        s4 = data.get("gacha_shards_obtained_4", 0)
+        s5 = data.get("gacha_shards_obtained_5", 0)
+        embed.add_field(
+            name="🧩 Fragmentos Obtenidos",
+            value=(
+                f"**2★:** {s2:,}\n"
+                f"**3★:** {s3:,}\n"
+                f"**4★:** {s4:,}\n"
+                f"**5★:** {s5:,}"
+            ),
+            inline=True,
+        )
+
+        crafted = data.get("gacha_units_crafted", 0)
+        destroyed = data.get("gacha_shards_destroyed", 0)
+        dust_obtained = data.get("gacha_dust_obtained", 0)
+        dust_spent = data.get("gacha_dust_spent", 0)
+        embed.add_field(
+            name="💨 Forja y Polvo Gacha",
+            value=(
+                f"**Unidades Creadas:** {crafted:,}\n"
+                f"**Fragmentos Destruidos:** {destroyed:,}\n"
+                f"**Polvo Obtenido:** {dust_obtained:,}\n"
+                f"**Polvo Gastado:** {dust_spent:,}"
+            ),
+            inline=False,
+        )
+
+        await interaction.response.send_message(embed=embed)
+
 
 async def setup(bot: JoseLuisBot):
     await bot.add_cog(GlobalStatsCog(bot))
