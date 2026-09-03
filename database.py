@@ -164,7 +164,7 @@ class DBManager:
                 tagged_row = await cursor.fetchone()
                 if tagged_row:
                     if no_tag_phrase is None:
-                        return tagged_row[0]
+                        return "*" + tagged_row[0] + ("*\n\n" if add_enter else "*")
                     phrases.append(tagged_row[0])
 
         choice = random.choice(phrases)
