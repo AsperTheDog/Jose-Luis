@@ -170,7 +170,7 @@ class DBManager:
         choice = random.choice(phrases)
         if choice is None:
             return ""
-        return choice + ("\n" if add_enter else "")
+        return "*" + choice + ("*\n\n" if add_enter else "*")
 
     async def economy_ensure_user(self, user_id: int):
         await self.db.execute("INSERT OR IGNORE INTO economy_users (user_id) VALUES (?)", (user_id,))
