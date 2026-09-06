@@ -16,16 +16,25 @@ class GlobalStatsCog(commands.Cog):
         description="Comandos para ver estadísticas del jugador"
     )
 
+    async def _resolve_stats(self, target: Optional[discord.User], author: discord.User) -> tuple[dict, str, str]:
+        user = target or author
+        if user.id == self.bot.user.id:
+            data = await self.bot.db.global_fetch_aggregate_stats()
+            label = "Todos los Usuarios"
+        else:
+            data = await self.bot.db.global_fetch_user_stats(user.id)
+            label = user.display_name
+        return data, label, user.display_avatar.url
+
     @stats_group.command(name="casino", description="Mira estadísticas de los juegos de azar")
     async def stats_gambling(self, interaction: discord.Interaction, target: Optional[discord.User] = None):
-        user = target or interaction.user
-        data = await self.bot.db.global_fetch_user_stats(user.id)
+        data, label, avatar_url = await self._resolve_stats(target, interaction.user)
 
         embed = discord.Embed(
-            title=f"🎰 Estadísticas de Casino - {user.display_name}",
+            title=f"🎰 Estadísticas de Casino - {label}",
             color=discord.Color.gold(),
         )
-        embed.set_thumbnail(url=user.display_avatar.url)
+        embed.set_thumbnail(url=avatar_url)
 
         r_win = data.get("roulette_bets_won", 0)
         r_loss = data.get("roulette_bets_lost", 0)
@@ -99,14 +108,13 @@ class GlobalStatsCog(commands.Cog):
 
     @stats_group.command(name="economia", description="Mira estadísticas de flujo de dinero y movimientos")
     async def stats_economy(self, interaction: discord.Interaction, target: Optional[discord.User] = None):
-        user = target or interaction.user
-        data = await self.bot.db.global_fetch_user_stats(user.id)
+        data, label, avatar_url = await self._resolve_stats(target, interaction.user)
 
         embed = discord.Embed(
-            title=f"💸 Economía y Crímen - {user.display_name}",
+            title=f"💸 Economía y Crímen - {label}",
             color=discord.Color.green(),
         )
-        embed.set_thumbnail(url=user.display_avatar.url)
+        embed.set_thumbnail(url=avatar_url)
 
         gained = data.get("money_obtained", 0)
         spent = data.get("money_spent", 0)
@@ -174,14 +182,13 @@ class GlobalStatsCog(commands.Cog):
 
     @stats_group.command(name="mineria", description="Mira estadísticas de minería y forja")
     async def stats_mining(self, interaction: discord.Interaction, target: Optional[discord.User] = None):
-        user = target or interaction.user
-        data = await self.bot.db.global_fetch_user_stats(user.id)
+        data, label, avatar_url = await self._resolve_stats(target, interaction.user)
 
         embed = discord.Embed(
-            title=f"⛏️ Minería - {user.display_name}",
+            title=f"⛏️ Minería - {label}",
             color=discord.Color.dark_orange(),
         )
-        embed.set_thumbnail(url=user.display_avatar.url)
+        embed.set_thumbnail(url=avatar_url)
 
         mined = data.get("times_mined", 0)
         energy = data.get("energy_spent", 0)
@@ -227,14 +234,13 @@ class GlobalStatsCog(commands.Cog):
 
     @stats_group.command(name="hackeo", description="Mira estadísticas de los ataques informáticos")
     async def stats_hacking(self, interaction: discord.Interaction, target: Optional[discord.User] = None):
-        user = target or interaction.user
-        data = await self.bot.db.global_fetch_user_stats(user.id)
+        data, label, avatar_url = await self._resolve_stats(target, interaction.user)
 
         embed = discord.Embed(
-            title=f"💻 Hackeo - {user.display_name}",
+            title=f"💻 Hackeo - {label}",
             color=discord.Color.purple(),
         )
-        embed.set_thumbnail(url=user.display_avatar.url)
+        embed.set_thumbnail(url=avatar_url)
 
         easy = data.get("hacking_times_hacked_easy", 0)
         normal = data.get("hacking_times_hacked_normal", 0)
@@ -290,14 +296,13 @@ class GlobalStatsCog(commands.Cog):
 
     @stats_group.command(name="gacha", description="Mira estadísticas del sistema de invocación de personajes")
     async def stats_gacha(self, interaction: discord.Interaction, target: Optional[discord.User] = None):
-        user = target or interaction.user
-        data = await self.bot.db.global_fetch_user_stats(user.id)
+        data, label, avatar_url = await self._resolve_stats(target, interaction.user)
 
         embed = discord.Embed(
-            title=f"🎰 Gacha - {user.display_name}",
+            title=f"🎰 Gacha - {label}",
             color=discord.Color.dark_purple(),
         )
-        embed.set_thumbnail(url=user.display_avatar.url)
+        embed.set_thumbnail(url=avatar_url)
 
         throws = data.get("gacha_throws", 0)
         boosted = data.get("gacha_boosted_throws", 0)

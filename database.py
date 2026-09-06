@@ -152,6 +152,42 @@ class DBManager:
             row = await cursor.fetchone()
             return dict(row) if row else {}
 
+    _GLOBAL_STATS_SUM_COLUMNS = (
+        "roulette_money_gained", "roulette_money_lost", "roulette_bets_won", "roulette_bets_lost",
+        "dice_money_gained", "dice_money_lost", "dice_bets_won", "dice_bets_lost",
+        "slots_money_gained", "slots_money_lost", "slots_bets_won", "slots_bets_lost",
+        "cards_money_gained", "cards_money_lost", "cards_bets_won", "cards_bets_lost",
+        "money_given", "money_received", "money_spent", "money_obtained",
+        "times_asked_allowance", "money_from_allowance", "times_worked", "money_from_work",
+        "times_switched_jobs", "drops_claimed", "money_from_drops",
+        "crimes_successful", "times_gone_to_jail", "crime_money_gained", "crime_fines_paid",
+        "interest_money_gained",
+        "times_mined", "times_drank", "money_spent_drinking", "energy_spent",
+        "basic_pickaxes_claimed", "materials_mined", "pickaxes_broken", "items_crafted",
+        "items_sold", "item_sales_money_gained",
+        "hacking_times_hacked_easy", "hacking_times_hacked_normal", "hacking_times_hacked_hard",
+        "hacking_times_hacked_very_hard", "hacking_times_failed_timeout", "hacking_times_failed_firewall",
+        "hacking_times_failed_lost", "hacking_money_gained", "hacking_time_spent",
+        "gacha_throws", "gacha_boosted_throws", "gacha_shards_obtained_2", "gacha_shards_obtained_3",
+        "gacha_shards_obtained_4", "gacha_shards_obtained_5", "gacha_units_crafted",
+        "gacha_shards_destroyed", "gacha_dust_obtained", "gacha_dust_spent",
+    )
+
+    _GLOBAL_STATS_MAX_COLUMNS = (
+        "roulette_biggest_bet", "dice_biggest_bet", "slots_biggest_bet", "cards_biggest_bet",
+        "biggest_money_gift", "highest_money_accumulated", "biggest_allowance_streak",
+    )
+
+    async def global_fetch_aggregate_stats(self) -> dict:
+        select_parts = [f"COALESCE(SUM({col}), 0) AS {col}" for col in self._GLOBAL_STATS_SUM_COLUMNS]
+        select_parts += [f"COALESCE(MAX({col}), 0) AS {col}" for col in self._GLOBAL_STATS_MAX_COLUMNS]
+        query = f"SELECT {', '.join(select_parts)} FROM user_global_stats"
+
+        self.db.row_factory = aiosqlite.Row
+        async with self.db.execute(query) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else {}
+
     async def global_get_random_phrase(self, category: str, tag: Optional[str] = None, add_enter: bool = True) -> str:
         async with self.db.execute("SELECT phrase FROM economy_phrases WHERE category = ? AND (tag IS NULL OR tag = '') ORDER BY RANDOM() LIMIT 1", (category,)) as cursor:
             no_tag_row = await cursor.fetchone()
