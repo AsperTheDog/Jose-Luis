@@ -1053,10 +1053,16 @@ class CasinoCog(commands.Cog):
             await self.bot.global_stats.register_dice_win(interaction.user.id, prize, apuesta)
 
             phrase = await self.bot.db.global_get_random_phrase("dice", "success")
+
+            msg = f"{phrase}Los dados cayeron en: {d1_str} + {d2_str} = **{total}**\n🎉 **{pago_descripcion}** Has ganado **{int(prize)}** choskris. *(Multiplicador {multiplier}x)*"
+
+            current_balance = await self.bot.db.economy_get_balance(interaction.user.id)
+            msg += f"\n💰 Saldo actual: **{current_balance}**"
+            
             await interaction.followup.send(
                 embed=discord.Embed(
                     title="🎲 Dados",
-                    description=f"{phrase}Los dados cayeron en: {d1_str} + {d2_str} = **{total}**\n🎉 **{pago_descripcion}** Has ganado **{int(prize)}** choskris. *(Multiplicador {multiplier}x)*",
+                    description=msg,
                     color=discord.Color.green()
                 )
             )
