@@ -949,10 +949,16 @@ class CasinoCog(commands.Cog):
             await self.bot.global_stats.register_roulette_win(interaction.user.id, prize, apuesta)
 
             phrase = await self.bot.db.global_get_random_phrase("spin", "success")
+
+            msg = f"{prefix_msg}{phrase}La bola cayó en **{resultado_num} {color_emoji}**.\n🎉 **{pago_descripcion}** Has ganado **{int(prize)}** choskris."
+
+            current_balance = await self.bot.db.economy_get_balance(interaction.user.id)
+            msg += f"\n💰 Saldo actual: **{current_balance}**"
+
             await interaction.followup.send(
                 embed=discord.Embed(
                     title="🎡 Ruleta",
-                    description=f"{prefix_msg}{phrase}La bola cayó en **{resultado_num} {color_emoji}**.\n🎉 **{pago_descripcion}** Has ganado **{int(prize)}** choskris.",
+                    description=msg,
                     color=discord.Color.green()
                 )
             )
