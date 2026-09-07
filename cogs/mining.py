@@ -34,12 +34,17 @@ class AscensorView(discord.ui.View):
 
     async def select_callback(self, interaction: discord.Interaction):
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message("Estos botones no son para ti.", ephemeral=True)
+            await interaction.response.send_message(
+                embed=discord.Embed(description="❌ Estos botones no son para ti.", color=discord.Color.red()),
+                ephemeral=True
+            )
             return
 
         selected_level = self.select.values[0]
         await self.db.mining_change_depth(interaction.user.id, selected_level)
-        await interaction.response.send_message(content=f"🛗 El ascensor te ha llevado a: **{selected_level}**")
+        await interaction.response.send_message(
+            embed=discord.Embed(description=f"🛗 El ascensor te ha llevado a: **{selected_level}**", color=discord.Color.blue())
+        )
 
 
 class DrinkConfirmView(discord.ui.View):
@@ -53,7 +58,10 @@ class DrinkConfirmView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message("No puedes usar este botón.", ephemeral=True)
+            await interaction.response.send_message(
+                embed=discord.Embed(description="❌ No puedes usar este botón.", color=discord.Color.red()),
+                ephemeral=True
+            )
             return False
         return True
 
@@ -62,12 +70,18 @@ class DrinkConfirmView(discord.ui.View):
         energy, _, _, choskris = await self.bot.db.mining_get_refill_data(self.user_id)
 
         if energy >= 100:
-            await interaction.response.send_message("Tu energía ya está al máximo.", ephemeral=True)
+            await interaction.response.send_message(
+                embed=discord.Embed(description="⚠️ Tu energía ya está al máximo.", color=discord.Color.orange()),
+                ephemeral=True
+            )
             self.stop()
             return
 
         if choskris < self.total_cost:
-            await interaction.response.send_message(f"Ya no tienes suficientes Choskris (Necesitas {self.total_cost}).", ephemeral=True)
+            await interaction.response.send_message(
+                embed=discord.Embed(description=f"❌ Ya no tienes suficientes Choskris (Necesitas {self.total_cost}).", color=discord.Color.red()),
+                ephemeral=True
+            )
             self.stop()
             return
 
@@ -86,8 +100,10 @@ class DrinkConfirmView(discord.ui.View):
 
         current_balance = await self.bot.db.economy_get_balance(self.user_id)
         msg += f"\n💰 Saldo actual: **{current_balance}**"
+
         await interaction.response.edit_message(
-            content=msg,
+            content=None,
+            embed=discord.Embed(description=msg, color=discord.Color.green()),
             view=None
         )
         self.stop()
@@ -97,7 +113,11 @@ class DrinkConfirmView(discord.ui.View):
         for item in self.children:
             item.disabled = True
 
-        await interaction.response.edit_message(content="Compra cancelada.", view=None)
+        await interaction.response.edit_message(
+            content=None,
+            embed=discord.Embed(description="❌ Compra cancelada.", color=discord.Color.red()),
+            view=None
+        )
         self.stop()
 
 
@@ -143,7 +163,10 @@ class EquipPickaxeView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message("No puedes usar el menú de otra persona.", ephemeral=True)
+            await interaction.response.send_message(
+                embed=discord.Embed(description="❌ No puedes usar el menú de otra persona.", color=discord.Color.red()),
+                ephemeral=True
+            )
             return False
         return True
 
@@ -155,8 +178,8 @@ class EquipPickaxeView(discord.ui.View):
         if not selected_pick:
             await interaction.followup.edit_message(
                 message_id=interaction.message.id,
-                content="Error: No se encontró el pico seleccionado.",
-                embed=None,
+                content=None,
+                embed=discord.Embed(description="❌ Error: No se encontró el pico seleccionado.", color=discord.Color.red()),
                 view=None,
             )
             self.stop()
@@ -166,8 +189,8 @@ class EquipPickaxeView(discord.ui.View):
             pick_data = self.pickaxes_game_data[selected_pick[1]]
             await interaction.followup.edit_message(
                 message_id=interaction.message.id,
-                content=f"ℹ️ Ya tienes equipado el pico **{pick_data['name']}** {pick_data['emoji']}.",
-                embed=None,
+                content=None,
+                embed=discord.Embed(description=f"ℹ️ Ya tienes equipado el pico **{pick_data['name']}** {pick_data['emoji']}.", color=discord.Color.blue()),
                 view=None,
             )
             self.stop()
@@ -178,15 +201,19 @@ class EquipPickaxeView(discord.ui.View):
 
         await interaction.followup.edit_message(
             message_id=interaction.message.id,
-            content=f"✅ Has equipado: **{pick_data['name']}** {pick_data['emoji']}",
-            embed=None,
+            content=None,
+            embed=discord.Embed(description=f"✅ Has equipado: **{pick_data['name']}** {pick_data['emoji']}", color=discord.Color.green()),
             view=None,
         )
         self.stop()
 
     @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary, row=1)
     async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(content="Equipamiento cancelado.", embed=None, view=None)
+        await interaction.response.edit_message(
+            content=None,
+            embed=discord.Embed(description="❌ Equipamiento cancelado.", color=discord.Color.red()),
+            view=None
+        )
         self.stop()
 
     async def on_timeout(self):
@@ -231,7 +258,10 @@ class CraftQuantityModal(discord.ui.Modal):
             if amount < 1:
                 raise ValueError
         except ValueError:
-            await interaction.followup.send("Debes introducir un número entero mayor o igual a 1.", ephemeral=True)
+            await interaction.followup.send(
+                embed=discord.Embed(description="❌ Debes introducir un número entero mayor o igual a 1.", color=discord.Color.red()),
+                ephemeral=True
+            )
             return
 
         inventory = await self.bot.db.mining_get_user_inventory(self.user_id)
@@ -243,16 +273,15 @@ class CraftQuantityModal(discord.ui.Modal):
             if user_has < total_req:
                 mat_name = self.game_data["materials"][mat_id]["name"]
                 missing_mats.append(
-                    f"**{total_req - user_has}x {mat_name}** (Tienes:"
-                    f" {user_has}/{total_req})"
+                    f"**{total_req - user_has}x {mat_name}** (Tienes: {user_has}/{total_req})"
                 )
 
         if missing_mats:
-            mats_str = ", ".join(missing_mats)
+            mats_str = "\n- ".join(missing_mats)
             await interaction.followup.edit_message(
                 message_id=interaction.message.id,
-                content=f"No tienes suficientes materiales para forjar **{amount}x**. Te falta: {mats_str}.",
-                embed=None,
+                content=None,
+                embed=discord.Embed(description=f"❌ No tienes suficientes materiales para forjar **{amount}x**.\n\nTe falta:\n- {mats_str}", color=discord.Color.red()),
                 view=None,
             )
             return
@@ -274,8 +303,8 @@ class CraftQuantityModal(discord.ui.Modal):
 
         await interaction.followup.edit_message(
             message_id=interaction.message.id,
-            content=f"🔨 ¡Has forjado con éxito: **{amount}x {result_name}** {item_info.get('emoji', '')}!",
-            embed=None,
+            content=None,
+            embed=discord.Embed(description=f"🔨 ¡Has forjado con éxito: **{amount}x {result_name}** {item_info.get('emoji', '')}!", color=discord.Color.green()),
             view=None,
         )
 
@@ -321,7 +350,10 @@ class CraftSelectView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message("No puedes interactuar con el menú de otra persona.",ephemeral=True,)
+            await interaction.response.send_message(
+                embed=discord.Embed(description="❌ No puedes interactuar con el menú de otra persona.", color=discord.Color.red()),
+                ephemeral=True
+            )
             return False
         return True
 
@@ -340,7 +372,11 @@ class CraftSelectView(discord.ui.View):
 
     @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary, row=1)
     async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(content="Forja cancelada.", embed=None, view=None)
+        await interaction.response.edit_message(
+            content=None,
+            embed=discord.Embed(description="❌ Forja cancelada.", color=discord.Color.red()),
+            view=None
+        )
         self.stop()
 
     async def on_timeout(self):
@@ -373,7 +409,10 @@ class MiningSystemCog(commands.Cog):
     async def mine(self, interaction: discord.Interaction):
         user_id = interaction.user.id
         if user_id in self.active_miners:
-            await interaction.response.send_message("**¡Ya estás minando!** Espera a que termine tu acción actual antes de volver a picar.", ephemeral=True)
+            await interaction.response.send_message(
+                embed=discord.Embed(description="⚠️ **¡Ya estás minando!** Espera a que termine tu acción actual antes de volver a picar.", color=discord.Color.orange()),
+                ephemeral=True
+            )
             return
 
         self.active_miners.add(user_id)
@@ -382,14 +421,20 @@ class MiningSystemCog(commands.Cog):
             energy, depth_id, current_xp, user_lvl, equipped_pick = await self.bot.db.mining_get_user_status(user_id)
 
             if not equipped_pick:
-                await interaction.response.send_message("No tienes ningún pico equipado. Usa `/equipar` o `/obtenerpico`.", ephemeral=True)
+                await interaction.response.send_message(
+                    embed=discord.Embed(description="⚠️ No tienes ningún pico equipado. Usa `/mineria equipar` o `/mineria obtenerpico`.", color=discord.Color.orange()),
+                    ephemeral=True
+                )
                 return
 
             level_data = self.game_data["levels"][depth_id]
             energy_cost = level_data.get("energy_cost", 10)
 
             if energy < energy_cost:
-                await interaction.response.send_message(f"No tienes suficiente energía para picar aquí ({energy_cost} requeridos). Usa `/beber`.", ephemeral=True)
+                await interaction.response.send_message(
+                    embed=discord.Embed(description=f"⚠️ No tienes suficiente energía para picar aquí ({energy_cost} requeridos). Usa `/mineria beber`.", color=discord.Color.orange()),
+                    ephemeral=True
+                )
                 return
 
             db_pick_id, pickaxe_key, durability = equipped_pick
@@ -399,8 +444,7 @@ class MiningSystemCog(commands.Cog):
             if net_power <= 0:
                 await self.bot.db.mining_deduct_energy(user_id, energy_cost)
                 await interaction.response.send_message(
-                    f"⚠️ La roca en **{level_data['name']}** es demasiado dura para tu nivel y pico actual.\n"
-                    f"*Pierdes {energy_cost} de energía, pero tu pico no sufre desgaste.*",
+                    embed=discord.Embed(description=f"⚠️ La roca en **{level_data['name']}** es demasiado dura para tu nivel y pico actual.\n*Pierdes {energy_cost} de energía, pero tu pico no sufre desgaste.*", color=discord.Color.orange()),
                     ephemeral=True
                 )
                 return
@@ -486,7 +530,10 @@ class MiningSystemCog(commands.Cog):
         energy, user_lvl, refills, choskris = await self.bot.db.mining_get_refill_data(user_id)
 
         if energy >= 100:
-            await interaction.response.send_message("Tu energía ya está al máximo (100/100).", ephemeral=True)
+            await interaction.response.send_message(
+                embed=discord.Embed(description="⚠️ Tu energía ya está al máximo (100/100).", color=discord.Color.orange()),
+                ephemeral=True
+            )
             return
 
         cost_per_energy = 2
@@ -502,7 +549,10 @@ class MiningSystemCog(commands.Cog):
             total_cost = int(gain * final_cost)
 
         if choskris < total_cost:
-            await interaction.response.send_message(f"No tienes suficientes Choskris. Necesitas **{total_cost} Choskris** para restaurar +{gain} de energía *(Tienes: {choskris})*.", ephemeral=True)
+            await interaction.response.send_message(
+                embed=discord.Embed(description=f"❌ No tienes suficientes Choskris. Necesitas **{total_cost} Choskris** para restaurar +{gain} de energía *(Tienes: {choskris})*.", color=discord.Color.red()),
+                ephemeral=True
+            )
             return
 
         next_refill_reset = self.daily_reset_task.next_iteration
@@ -511,20 +561,27 @@ class MiningSystemCog(commands.Cog):
 
         view = DrinkConfirmView(self.bot, user_id, gain, total_cost, refill_alert)
 
-        await interaction.response.send_message(
-            f"🥤 **Confirmación de Compra**\n"
-            f"- **Restauración:** +{gain}⚡ (Energía actual: {energy}/100)\n"
-            f"- **Coste Total:** **{total_cost} Choskris**{refill_alert}\n"
-            f"- **Tu Saldo:** {choskris} Choskris\n\n"
-            f"¿Deseas confirmar la bebida?",
-            view=view
+        embed = discord.Embed(
+            title="🥤 Confirmación de Compra",
+            description=(
+                f"- **Restauración:** +{gain}⚡ (Energía actual: {energy}/100)\n"
+                f"- **Coste Total:** **{total_cost} Choskris**{refill_alert}\n"
+                f"- **Tu Saldo:** {choskris} Choskris\n\n"
+                f"¿Deseas confirmar la bebida?"
+            ),
+            color=discord.Color.blue()
         )
+
+        await interaction.response.send_message(embed=embed, view=view)
 
     @mining_group.command(name="ascensor", description="Cambia el nivel de profundidad en el que minas.")
     async def elevator(self, interaction: discord.Interaction):
         await self.bot.db.mining_ensure_user(interaction.user.id)
         view = AscensorView(interaction.user.id, self.game_data["levels"], self.bot.db)
-        await interaction.response.send_message("🛗 Selecciona tu destino:", view=view)
+        await interaction.response.send_message(
+            embed=discord.Embed(description="🛗 Selecciona tu destino:", color=discord.Color.blue()),
+            view=view
+        )
 
     @mining_group.command(name="obtenerpico", description="Reclama un pico de piedra básico gratuito.")
     async def get_pickaxe(self, interaction: discord.Interaction):
@@ -539,15 +596,19 @@ class MiningSystemCog(commands.Cog):
         if last_pick:
             next_time = last_pick + datetime.timedelta(days=1)
             if next_time > now:
-
                 time_dialog = discord.utils.format_dt(next_time, "R")
-                await interaction.response.send_message(f"El herrero está descansando. Vuelve {time_dialog}", ephemeral=True)
+                await interaction.response.send_message(
+                    embed=discord.Embed(description=f"⏳ El herrero está descansando. Vuelve {time_dialog}", color=discord.Color.orange()),
+                    ephemeral=True
+                )
                 return
 
         await self.bot.db.mining_claim_basic_pickaxe(user_id, pick_id, max_dur)
 
         await self.bot.global_stats.register_basic_pickaxe_claim(interaction.user.id)
-        await interaction.response.send_message("🪨 Has recibido tu **Pico de Piedra** gratuito.")
+        await interaction.response.send_message(
+            embed=discord.Embed(description="🪨 Has recibido tu **Pico de Piedra** gratuito.", color=discord.Color.green())
+        )
 
     @mining_group.command(name="equipar", description="Muestra tus picos y te permite equipar uno.")
     async def equip(self, interaction: discord.Interaction):
@@ -557,7 +618,10 @@ class MiningSystemCog(commands.Cog):
         pickaxes = await self.bot.db.mining_get_user_pickaxes(user_id)
 
         if not pickaxes:
-            await interaction.followup.send("⛏️ No tienes picos en tu inventario. Usa `/obtenerpico` o `/forjar`.", ephemeral=True,)
+            await interaction.followup.send(
+                embed=discord.Embed(description="⛏️ No tienes picos en tu inventario. Usa `/mineria obtenerpico` o `/mineria forjar`.", color=discord.Color.orange()),
+                ephemeral=True
+            )
             return
 
         embed = discord.Embed(
@@ -627,7 +691,10 @@ class MiningSystemCog(commands.Cog):
         items = await self.bot.db.mining_get_user_valuables(user_id)
 
         if not items:
-            await interaction.response.send_message("No tienes objetos valiosos para vender.", ephemeral=True)
+            await interaction.response.send_message(
+                embed=discord.Embed(description="⚠️ No tienes objetos valiosos para vender.", color=discord.Color.orange()),
+                ephemeral=True
+            )
             return
 
         total_choskris = sum(self.game_data["valuables"][v_id]["value"] * amount for v_id, amount in items)
@@ -639,7 +706,8 @@ class MiningSystemCog(commands.Cog):
         msg = f"🪙 Has vendido tus objetos valiosos por un total de **{total_choskris}** Choskris."
         current_balance = await self.bot.db.economy_get_balance(interaction.user.id)
         msg += f"\n💰 Saldo actual: **{current_balance}**"
-        await interaction.response.send_message(msg)
+
+        await interaction.response.send_message(embed=discord.Embed(description=msg, color=discord.Color.green()))
 
     @mining_group.command(name="inventario", description="Revisa tus Choskris, Energía, Materiales y Valiosos.")
     async def inventory(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):

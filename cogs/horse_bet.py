@@ -9,7 +9,7 @@ from main import JoseLuisBot
 from database import BOT_RACE_HOUSE_SEED
 
 TRACK_LENGTH = 1000.0
-
+RACE_TIMES = [datetime.time(hour=h, minute=m) for h in range(24) for m in (0, 30)]
 
 class HorseBetCog(commands.Cog):
     def __init__(self, bot: JoseLuisBot):
@@ -26,14 +26,14 @@ class HorseBetCog(commands.Cog):
 
     @staticmethod
     def generate_horses():
-        names = ["Sardinilla", "Relinchín", "Jorse", "Trueno", "Tornado", "Cometa"]
+        names = ["Sardinilla", "Relinchín", "Jorse Luis", "Flurflirs", "Semáforo", "Mondongo", "Comida de Emergencia"]
         random.shuffle(names)
         horses = []
         for i in range(1, 5):
             horses.append((i, names[i - 1], random.randint(3, 9), random.randint(4, 10), random.randint(2, 8)))
         return horses
 
-    @tasks.loop(minutes=30)
+    @tasks.loop(time=RACE_TIMES)
     async def race_loop(self):
         now = datetime.datetime.now()
         today_date = now.strftime("%Y-%m-%d")
@@ -92,7 +92,9 @@ class HorseBetCog(commands.Cog):
 
     @caballos_group.command(name="carreras", description="Mira el estado de la carrera de hoy y el pozo de apuestas.")
     async def carreras(self, interaction: discord.Interaction):
-        today_date = datetime.datetime.now().strftime("%Y-%m-%d")
+        now = datetime.datetime.now().astimezone()
+        today_date = now.strftime("%Y-%m-%d")
+        today_12 = now.replace(hour=12, minute=0, second=0, microsecond=0)
         race = await self.bot.db.betting_get_race(today_date)
 
         if not race:
@@ -111,9 +113,21 @@ class HorseBetCog(commands.Cog):
         house_rake = int(total_player_pool * 0.1)
         distributable = (total_player_pool + BOT_RACE_HOUSE_SEED) - house_rake
 
+        all_finished = all(h['finished'] for h in race)
+        if now.hour < 12:
+            time_status = f"⏳ Empieza {discord.utils.format_dt(today_12, 'R')}"
+        elif all_finished:
+            time_status = "🏁 **Carrera finalizada**"
+        else:
+            next_update = self.race_loop.next_iteration
+            if next_update:
+                time_status = f"🟢 Empezó {discord.utils.format_dt(today_12, 'R')} | Próximo avance: {discord.utils.format_dt(next_update, 'R')}"
+            else:
+                time_status = f"🟢 Empezó {discord.utils.format_dt(today_12, 'R')}"
+
         embed = discord.Embed(
             title="🏇 Gran Premio de Tres Cantos",
-            description=f"**Estado de la pista** ({today_date}) | **Meta:** {int(TRACK_LENGTH)}m",
+            description=f"**Estado de la pista** ({today_date}) | **Meta:** {int(TRACK_LENGTH)}m\n{time_status}",
             color=discord.Color.brand_green()
         )
 
@@ -139,11 +153,10 @@ class HorseBetCog(commands.Cog):
             inline=False
         )
 
-        now = datetime.datetime.now()
         if now.hour < 12:
-            embed.set_footer(text="La carrera comienza a las 12:00. ¡Aún puedes apostar!")
+            embed.set_footer(text="¡Aún puedes apostar!")
         else:
-            embed.set_footer(text="¡Carrera en curso! Las apuestas actuales son para mañana.")
+            embed.set_footer(text="¡Carrera en curso! Las apuestas que se hagan ahora serán para mañana.")
 
         await interaction.response.send_message(embed=embed)
 
@@ -162,13 +175,16 @@ class HorseBetCog(commands.Cog):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        now = datetime.datetime.now()
+        now = datetime.datetime.now().astimezone()
         if now.hour < 12:
             target_date = now.strftime("%Y-%m-%d")
-            time_label = "la carrera de **HOY**"
+            target_dt = now.replace(hour=12, minute=0, second=0, microsecond=0)
+            time_label = f"**HOY** ({discord.utils.format_dt(target_dt, 'R')})"
         else:
-            target_date = (now + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
-            time_label = "la carrera de **MAÑANA**"
+            tomorrow = now + datetime.timedelta(days=1)
+            target_date = tomorrow.strftime("%Y-%m-%d")
+            target_dt = tomorrow.replace(hour=12, minute=0, second=0, microsecond=0)
+            time_label = f"**MAÑANA** ({discord.utils.format_dt(target_dt, 'R')})"
 
         success = await self.bot.db.betting_place_bet(interaction.user.id, target_date, caballo, cantidad)
 
@@ -185,7 +201,7 @@ class HorseBetCog(commands.Cog):
 
         embed = discord.Embed(
             title="🎟️ Apuesta Registrada",
-            description=f"Has apostado **{cantidad}** monedas al caballo **#{caballo}** para {time_label}.",
+            description=f"Has apostado **{cantidad}** monedas al caballo **#{caballo}** para la carrera de {time_label}.",
             color=discord.Color.gold()
         )
         embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
@@ -208,9 +224,15 @@ class HorseBetCog(commands.Cog):
 
         sorted_race = sorted(race, key=lambda h: (-h['distance'], h['finish_time'] or float('inf')))
 
+        try:
+            race_dt = datetime.datetime.strptime(last_date, "%Y-%m-%d").replace(hour=12).astimezone()
+            date_display = discord.utils.format_dt(race_dt, "D")
+        except ValueError:
+            date_display = last_date
+
         embed = discord.Embed(
             title="🏁 Resultados: Gran Premio de Pavonia",
-            description=f"**Fecha:** {last_date}",
+            description=f"**Fecha:** {date_display}",
             color=discord.Color.gold()
         )
 
@@ -250,9 +272,17 @@ class HorseBetCog(commands.Cog):
 
             horse_info = bet['horse_name'] if bet['horse_name'] else "Desconocido"
 
+            try:
+                race_dt = datetime.datetime.strptime(bet['race_date'], "%Y-%m-%d").replace(hour=12).astimezone()
+                date_str = discord.utils.format_dt(race_dt, "d")
+                relative_str = discord.utils.format_dt(race_dt, "R")
+            except ValueError:
+                date_str = bet['race_date']
+                relative_str = "Desconocido"
+
             embed.add_field(
-                name=f"📅 {bet['race_date']} | Caballo #{bet['horse_id']} ({horse_info})",
-                value=f"**Apostado:** {bet['bet_amount']} monedas\n**Resultado:** {status}",
+                name=f"📅 {date_str} | Caballo #{bet['horse_id']} ({horse_info})",
+                value=f"**Apostado:** {bet['bet_amount']} monedas\n**Resultado:** {status}\n🕒 Carrera: {relative_str}",
                 inline=False
             )
 
