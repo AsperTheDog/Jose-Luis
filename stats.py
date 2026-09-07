@@ -182,3 +182,38 @@ class StatsTracker:
 
     async def register_gacha_dust_spent(self, user_id: int, amount: int) -> None:
         await self.db.increment_stat(user_id, "gacha_dust_spent", amount)
+
+    async def register_blackjack_win(self, user_id: int, money_gained: int, bet_amount: int, natural: bool = False) -> None:
+        await self.db.increment_stat(user_id, "blackjack_money_gained", money_gained)
+        await self.register_money_obtained(user_id, money_gained)
+        await self.db.increment_stat(user_id, "blackjack_hands_won", 1)
+        await self.db.increment_stat(user_id, "blackjack_money_lost", bet_amount)
+        await self.db.update_max_stat(user_id, "blackjack_biggest_bet", bet_amount)
+        await self.register_money_spent(user_id, bet_amount)
+        if natural:
+            await self.db.increment_stat(user_id, "blackjack_naturals", 1)
+
+    async def register_blackjack_loss(self, user_id: int, bet_amount: int) -> None:
+        await self.db.increment_stat(user_id, "blackjack_money_lost", bet_amount)
+        await self.db.increment_stat(user_id, "blackjack_hands_lost", 1)
+        await self.db.update_max_stat(user_id, "blackjack_biggest_bet", bet_amount)
+        await self.register_money_spent(user_id, bet_amount)
+
+    async def register_blackjack_push(self, user_id: int, bet_amount: int) -> None:
+        await self.db.increment_stat(user_id, "blackjack_hands_pushed", 1)
+        await self.db.update_max_stat(user_id, "blackjack_biggest_bet", bet_amount)
+
+    async def register_bet_placed(self, user_id: int, amount: int) -> None:
+        await self.db.increment_stat(user_id, "betting_bets_placed", 1)
+        await self.db.increment_stat(user_id, "betting_money_lost", amount)
+        await self.db.update_max_stat(user_id, "betting_biggest_bet", amount)
+        await self.register_money_spent(user_id, amount)
+
+    async def register_bet_won(self, user_id: int, payout: int) -> None:
+        await self.db.increment_stat(user_id, "betting_bets_won", 1)
+        await self.db.increment_stat(user_id, "betting_money_gained", payout)
+        await self.db.update_max_stat(user_id, "betting_biggest_win", payout)
+        await self.register_money_obtained(user_id, payout)
+
+    async def register_bet_lost(self, user_id: int) -> None:
+        await self.db.increment_stat(user_id, "betting_bets_lost", 1)

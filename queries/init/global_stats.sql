@@ -30,6 +30,15 @@ CREATE TABLE IF NOT EXISTS user_global_stats
     cards_bets_lost           BIGINT DEFAULT 0,
     cards_biggest_bet         BIGINT DEFAULT 0,
 
+    -- Blackjack
+    blackjack_money_gained    BIGINT DEFAULT 0,
+    blackjack_money_lost      BIGINT DEFAULT 0,
+    blackjack_hands_won       BIGINT DEFAULT 0,
+    blackjack_hands_lost      BIGINT DEFAULT 0,
+    blackjack_hands_pushed    BIGINT DEFAULT 0,
+    blackjack_biggest_bet     BIGINT DEFAULT 0,
+    blackjack_naturals        BIGINT DEFAULT 0,
+
     -- Economy & Transfers
     money_given               BIGINT DEFAULT 0,
     money_received            BIGINT DEFAULT 0,
@@ -86,5 +95,14 @@ CREATE TABLE IF NOT EXISTS user_global_stats
     gacha_units_crafted       BIGINT DEFAULT 0,
     gacha_shards_destroyed    BIGINT DEFAULT 0,
     gacha_dust_obtained       BIGINT DEFAULT 0,
-    gacha_dust_spent          BIGINT DEFAULT 0
+    gacha_dust_spent          BIGINT DEFAULT 0,
+
+    -- Horse Betting
+    betting_bets_placed       BIGINT DEFAULT 0,
+    betting_bets_won          BIGINT DEFAULT 0,
+    betting_bets_lost         BIGINT DEFAULT 0,
+    betting_money_gained      BIGINT DEFAULT 0,
+    betting_money_lost        BIGINT DEFAULT 0,
+    betting_biggest_bet       BIGINT DEFAULT 0,
+    betting_biggest_win       BIGINT DEFAULT 0
 );

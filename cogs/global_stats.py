@@ -104,6 +104,26 @@ class GlobalStatsCog(commands.Cog):
             inline=True,
         )
 
+        bj_win = data.get("blackjack_hands_won", 0)
+        bj_loss = data.get("blackjack_hands_lost", 0)
+        bj_push = data.get("blackjack_hands_pushed", 0)
+        bj_gained = data.get("blackjack_money_gained", 0)
+        bj_lost = data.get("blackjack_money_lost", 0)
+        bj_max = data.get("blackjack_biggest_bet", 0)
+        bj_naturals = data.get("blackjack_naturals", 0)
+        embed.add_field(
+            name="🂡 Blackjack",
+            value=(
+                f"**Vi/De/Emp:** {bj_win} / {bj_loss} / {bj_push}\n"
+                f"**Obtenido:** ${bj_gained:,}\n"
+                f"**Perdido:** ${bj_lost:,}\n"
+                f"**Beneficios:** ${(bj_gained - bj_lost):,}\n"
+                f"**Mayor Apuesta:** ${bj_max:,}\n"
+                f"**Naturales:** {bj_naturals}"
+            ),
+            inline=True,
+        )
+
         await interaction.response.send_message(embed=embed)
 
     @stats_group.command(name="economia", description="Mira estadísticas de flujo de dinero y movimientos")
@@ -347,6 +367,39 @@ class GlobalStatsCog(commands.Cog):
 
         await interaction.response.send_message(embed=embed)
 
+    @stats_group.command(name="caballos", description="Mira estadísticas del hipódromo y las apuestas")
+    async def stats_betting(self, interaction: discord.Interaction, target: Optional[discord.User] = None):
+        data, label, avatar_url = await self._resolve_stats(target, interaction.user)
+
+        embed = discord.Embed(
+            title=f"🏇 Hipódromo - {label}",
+            color=discord.Color.dark_gold(),
+        )
+        embed.set_thumbnail(url=avatar_url)
+
+        placed = data.get("betting_bets_placed", 0)
+        b_win = data.get("betting_bets_won", 0)
+        b_loss = data.get("betting_bets_lost", 0)
+        pending = max(0, placed - (b_win + b_loss))
+        b_gained = data.get("betting_money_gained", 0)
+        b_lost = data.get("betting_money_lost", 0)
+        b_max_bet = data.get("betting_biggest_bet", 0)
+        b_max_win = data.get("betting_biggest_win", 0)
+
+        embed.add_field(
+            name="🐎 Apuestas",
+            value=(
+                f"**Vi/De/Pend:** {b_win} / {b_loss} / {pending}\n"
+                f"**Obtenido:** ${b_gained:,}\n"
+                f"**Apostado:** ${b_lost:,}\n"
+                f"**Beneficios:** ${(b_gained - b_lost):,}\n"
+                f"**Mayor Apuesta:** ${b_max_bet:,}\n"
+                f"**Mayor Premio:** ${b_max_win:,}"
+            ),
+            inline=False,
+        )
+
+        await interaction.response.send_message(embed=embed)
 
 async def setup(bot: JoseLuisBot):
     await bot.add_cog(GlobalStatsCog(bot))
