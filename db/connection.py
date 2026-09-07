@@ -42,8 +42,6 @@ class Database:
             await self.conn.executescript(sql_script)
         await self.conn.commit()
 
-    # --- passthrough helpers (preserve aiosqlite's awaitable/asynccontext dual API) ---
-
     def execute(self, sql: str, parameters=None):
         return self.conn.execute(sql, parameters)
 

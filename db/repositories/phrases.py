@@ -33,8 +33,6 @@ class PhraseRepository(BaseRepository):
         await self._db.execute("INSERT INTO economy_phrases (phrase, category, tag) VALUES (?, ?, ?)", (phrase, category, tag))
         await self._db.commit()
 
-    # --- text_lists (frases/chistes) ---
-
     async def pick_random(self, category: str) -> list[str] | None:
         async with self._db.execute("SELECT content FROM text_lists WHERE category = ?", (category,)) as cursor:
             rows = await cursor.fetchall()
@@ -57,8 +55,6 @@ class PhraseRepository(BaseRepository):
         deleted = cursor.rowcount > 0
         await self._db.commit()
         return deleted
-
-    # --- eightball ---
 
     async def eightball_get_all(self) -> list[tuple[str, str]]:
         async with self._db.execute("SELECT phrase, category FROM eightball_phrases") as cursor:

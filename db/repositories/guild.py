@@ -66,8 +66,6 @@ class GuildRepository(BaseRepository):
         )
         await self._db.commit()
 
-    # --- operators ---
-
     async def get_operators(self, guild_id: int) -> List[int]:
         await self.ensure_exists(guild_id)
         async with self._db.execute("SELECT operator_id FROM guild_operators WHERE guild_id = ?", (guild_id,)) as cursor:
@@ -91,8 +89,6 @@ class GuildRepository(BaseRepository):
         async with self._db.execute("SELECT 1 FROM guild_operators WHERE guild_id = ? AND operator_id = ?", (guild_id, operator_id)) as cursor:
             row = await cursor.fetchone()
             return row is not None
-
-    # --- channel whitelist ---
 
     async def get_channel_whitelist(self, guild_id: int) -> List[int]:
         await self.ensure_exists(guild_id)

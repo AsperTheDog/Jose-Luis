@@ -38,15 +38,11 @@ class BotDatabase:
         self.activity = ActivityRepository(self.db)
         self.quarantine = QuarantineRepository(self.db)
 
-    # --- lifecycle ---
-
     async def start(self) -> None:
         await self.db.connect()
 
     async def close(self) -> None:
         await self.db.close()
-
-    # --- passthroughs used by cogs ---
 
     @property
     def job_registry(self) -> dict[str, dict[str, Any]]:

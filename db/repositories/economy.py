@@ -153,8 +153,6 @@ class EconomyRepository(BaseRepository):
             await self._db.execute("UPDATE economy_users SET unclaimed_interest = unclaimed_interest + ? WHERE user_id = ?", (int(daily_interest), user_id))
             await self._db.commit()
 
-    # --- poker balance operations (no ensure_user, no MAX(0) floor) ---
-
     async def poker_get_balance(self, user_id: int) -> int:
         async with self._db.execute("SELECT balance FROM economy_users WHERE user_id = ?", (user_id,)) as cursor:
             row = await cursor.fetchone()
