@@ -39,7 +39,7 @@ class RemindersCog(commands.Cog):
         self.check_reminders_task.cancel()
 
     async def _create_reminder(self, interaction: discord.Interaction, trigger_at: datetime.datetime, nota: str) -> None:
-        reminder_id = await self.bot.db.reminder_create(
+        reminder_id = await self.bot.db.reminders.create(
             interaction.guild.id, interaction.channel.id, interaction.user.id, nota, trigger_at.isoformat()
         )
 
@@ -61,7 +61,7 @@ class RemindersCog(commands.Cog):
 
         await interaction.response.send_message(embed=embed)
         message = await interaction.original_response()
-        await self.bot.db.reminder_set_message_id(reminder_id, message.id)
+        await self.bot.db.reminders.set_message_id(reminder_id, message.id)
 
     @reminder_group.command(name="en", description="Crea un recordatorio dentro de un tiempo determinado")
     @app_commands.describe(
@@ -125,7 +125,7 @@ class RemindersCog(commands.Cog):
             return None
 
         message_id = int(match.group("message_id"))
-        reminder = await self.bot.db.reminder_get_by_message_id(message_id)
+        reminder = await self.bot.db.reminders.get_by_message_id(message_id)
         if not reminder:
             await interaction.response.send_message("⚠️ No he encontrado ningún recordatorio asociado a ese mensaje.", ephemeral=True)
             return None
@@ -147,7 +147,7 @@ class RemindersCog(commands.Cog):
             await interaction.response.send_message("✅ Ya recibirás el aviso, eres quien creó este recordatorio.", ephemeral=True)
             return
 
-        added = await self.bot.db.reminder_add_subscriber(reminder["id"], interaction.user.id)
+        added = await self.bot.db.reminders.add_subscriber(reminder["id"], interaction.user.id)
         if not added:
             await interaction.response.send_message("⚠️ Ya estabas apuntado a ese recordatorio.", ephemeral=True)
             return
@@ -160,7 +160,7 @@ class RemindersCog(commands.Cog):
 
     @reminder_group.command(name="lista", description="Muestra tus recordatorios activos, creados por ti o a los que te has unido")
     async def remind_list(self, interaction: discord.Interaction):
-        reminders = await self.bot.db.reminder_get_related_to_user(interaction.user.id)
+        reminders = await self.bot.db.reminders.get_related_to_user(interaction.user.id)
         if not reminders:
             await interaction.response.send_message("No tienes recordatorios activos.", ephemeral=True)
             return
@@ -184,7 +184,7 @@ class RemindersCog(commands.Cog):
         if reminder is None:
             return
 
-        subscriber_ids = await self.bot.db.reminder_get_subscribers(reminder["id"])
+        subscriber_ids = await self.bot.db.reminders.get_subscribers(reminder["id"])
         mention_ids = dict.fromkeys([reminder["author_id"], *subscriber_ids])
         mentions = ", ".join(f"<@{user_id}>" for user_id in mention_ids)
 
@@ -211,7 +211,7 @@ class RemindersCog(commands.Cog):
             except discord.HTTPException:
                 return
 
-        subscriber_ids = await self.bot.db.reminder_get_subscribers(reminder["id"])
+        subscriber_ids = await self.bot.db.reminders.get_subscribers(reminder["id"])
         mention_ids = dict.fromkeys([reminder["author_id"], *subscriber_ids])
         mentions = " ".join(f"<@{user_id}>" for user_id in mention_ids)
 
@@ -230,7 +230,7 @@ class RemindersCog(commands.Cog):
     @tasks.loop(seconds=60)
     async def check_reminders_task(self):
         now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        due_reminders = await self.bot.db.reminder_get_due(now_iso)
+        due_reminders = await self.bot.db.reminders.get_due(now_iso)
         for reminder in due_reminders:
             await self._send_reminder(reminder)
 

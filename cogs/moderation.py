@@ -23,7 +23,7 @@ class ModerationCog(commands.Cog):
     async def honeypot(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
 
-        await self.bot.config.set_death_channel_id(interaction.guild.id, interaction.channel.id)
+        await self.bot.db.guild.set(interaction.guild.id, "death_channel_id", interaction.channel.id)
         embed = discord.Embed(
             title="⚠️ ¡CANAL TRAMPA! ⚠️",
             description=(
@@ -48,25 +48,25 @@ class ModerationCog(commands.Cog):
     async def nohoneypot(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
 
-        channel = self.bot.get_channel(int(await self.bot.config.get_death_channel_id(interaction.guild.id)))
+        channel = self.bot.get_channel(int(await self.bot.db.guild.get(interaction.guild.id, "death_channel_id")))
         if channel is None:
             await interaction.response.send_message("No hay ningún honeypot configurado", ephemeral=True)
             return
-        await self.bot.config.set_death_channel_id(interaction.guild.id, 0)
+        await self.bot.db.guild.set(interaction.guild.id, "death_channel_id", 0)
         await interaction.response.send_message(f"Eliminado el canal honeypot: {interaction.channel.mention}", ephemeral=True)
 
     @moderation_group.command(name="setadminchannel", description="Establece este canal como el canal de administración")
     async def setadminchannel(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
 
-        await self.bot.config.set_admin_channel_id(interaction.guild.id, interaction.channel.id)
+        await self.bot.db.guild.set(interaction.guild.id, "admin_channel_id", interaction.channel.id)
         await interaction.response.send_message("Establecido este canal como canal de administración")
 
     @moderation_group.command(name="addoperator", description="Añade a un usuario como operador")
     async def addoperator(self, interaction: discord.Interaction, user: discord.Member):
         if await self.bot.filter_owner(interaction): return
 
-        if await self.bot.is_owner(user) or not await self.bot.config.add_operator(interaction.guild.id, user.id):
+        if await self.bot.is_owner(user) or not await self.bot.db.guild.add_operator(interaction.guild.id, user.id):
             await interaction.response.send_message("Esta persona ya es operadora")
             return
         await interaction.response.send_message(f"Añadido {user.mention} como operador")
@@ -79,7 +79,7 @@ class ModerationCog(commands.Cog):
             await interaction.response.send_message("¿Qué haces, payaso? No puedes quitar como operador al dueño del bot ¿Te crees que esto es una democracia?")
             return
 
-        if not await self.bot.config.remove_operator(interaction.guild.id, user.id):
+        if not await self.bot.db.guild.remove_operator(interaction.guild.id, user.id):
             await interaction.response.send_message("Esta persona no es operadora")
             return
         await interaction.response.send_message(f"Quitado {user.mention} como operador")
@@ -88,7 +88,7 @@ class ModerationCog(commands.Cog):
     async def whitelist(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
 
-        if not await self.bot.config.add_to_channel_whitelist(interaction.guild.id, interaction.channel.id):
+        if not await self.bot.db.guild.add_to_channel_whitelist(interaction.guild.id, interaction.channel.id):
             await interaction.response.send_message("Este canal ya está en la lista blanca")
             return
         await interaction.response.send_message("Ahora estaré activo en este canal")
@@ -97,7 +97,7 @@ class ModerationCog(commands.Cog):
     async def unwhitelist(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
 
-        if not await self.bot.config.remove_from_channel_whitelist(interaction.guild.id, interaction.channel.id):
+        if not await self.bot.db.guild.remove_from_channel_whitelist(interaction.guild.id, interaction.channel.id):
             await interaction.response.send_message("Este canal no está en la lista blanca")
             return
         await interaction.response.send_message("Ya no estaré activo en este canal")
@@ -106,7 +106,7 @@ class ModerationCog(commands.Cog):
     async def operators(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
 
-        operators = [int(userID) for userID in await self.bot.config.get_operators(interaction.guild.id)]
+        operators = [int(userID) for userID in await self.bot.db.guild.get_operators(interaction.guild.id)]
 
         users = []
         for userID in operators:
@@ -216,7 +216,7 @@ class ModerationCog(commands.Cog):
     async def cuarentena_agregar(self, interaction: discord.Interaction, usuario: discord.User, razon: str | None = None):
         if await self.bot.filter_operators(interaction): return
 
-        await self.bot.db.quarantine_add_quarantine(usuario.id, razon)
+        await self.bot.db.quarantine.add_quarantine(usuario.id, razon)
 
         msg = f"El usuario {usuario.mention} ha sido puesto en cuarentena."
         if razon:
@@ -229,7 +229,7 @@ class ModerationCog(commands.Cog):
     async def cuarentena_quitar(self, interaction: discord.Interaction, usuario: discord.User):
         if await self.bot.filter_operators(interaction): return
 
-        removed = await self.bot.db.quarantine_remove_quarantine(usuario.id)
+        removed = await self.bot.db.quarantine.remove_quarantine(usuario.id)
 
         if removed:
             await interaction.response.send_message(f"Se ha removido a {usuario.mention} de la cuarentena.", ephemeral=True)
@@ -241,10 +241,10 @@ class ModerationCog(commands.Cog):
     async def cuarentena_verificar(self, interaction: discord.Interaction, usuario: discord.User):
         if await self.bot.filter_operators(interaction): return
 
-        is_in_quarantine = await self.bot.db.quarantine_is_quarantined(usuario.id)
+        is_in_quarantine = await self.bot.db.quarantine.is_quarantined(usuario.id)
 
         if is_in_quarantine:
-            reason = await self.bot.db.quarantine_get_quarantine_reason(usuario.id)
+            reason = await self.bot.db.quarantine.get_quarantine_reason(usuario.id)
             msg = f" El usuario {usuario.mention} **está en cuarentena**."
             if reason:
                 msg += f"\n**Razón:** {reason}"
@@ -259,15 +259,15 @@ class ModerationCog(commands.Cog):
         if message.author.bot or not message.guild:
             return
 
-        death_channel_id = int(await self.bot.config.get_death_channel_id(message.guild.id))
+        death_channel_id = int(await self.bot.db.guild.get(message.guild.id, "death_channel_id"))
         if message.channel.id != death_channel_id:
             return
 
-        grace_seconds = await self.bot.config.get_death_grace_seconds(message.guild.id)
+        grace_seconds = await self.bot.db.guild.get(message.guild.id, "death_grace_seconds")
         duration = datetime.timedelta(seconds=grace_seconds)
         unban_deadline = datetime.datetime.now(datetime.timezone.utc) + duration
 
-        admin_channel_id = int(await self.bot.config.get_admin_channel_id(message.guild.id))
+        admin_channel_id = int(await self.bot.db.guild.get(message.guild.id, "admin_channel_id"))
         admin_channel = message.guild.get_channel(admin_channel_id)
 
         try:

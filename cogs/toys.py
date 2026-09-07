@@ -33,7 +33,7 @@ class ToysCog(commands.Cog):
             ("No", "negative"),
         ]
 
-        phrases = await self.bot.db.eightball_get_all_phrases()
+        phrases = await self.bot.db.phrases.eightball_get_all()
         if not phrases:
             phrase, category = random.choice(default_phrases)
         else:
@@ -68,7 +68,7 @@ class ToysCog(commands.Cog):
     async def eightball_add(self, interaction: discord.Interaction, frase: str, tipo: str):
         if await self.bot.filter_operators(interaction): return
 
-        await self.bot.db.eightball_add_phrase(frase, tipo)
+        await self.bot.db.phrases.eightball_add(frase, tipo)
         embed = discord.Embed(
             description=f"✅ Frase '{frase}' ({tipo}) añadida correctamente a la 8Ball  ",
             color=discord.Color.green()
@@ -85,7 +85,7 @@ class ToysCog(commands.Cog):
     async def eightball_remove(self, interaction: discord.Interaction, frase: int, tipo: str):
         if await self.bot.filter_operators(interaction): return
 
-        deleted = await self.bot.db.eightball_remove_phrase(frase, tipo)
+        deleted = await self.bot.db.phrases.eightball_remove(frase, tipo)
         if deleted:
             embed = discord.Embed(description=f"🗑️ Frase '{frase}' ({tipo}) eliminada de la 8Ball.", color=discord.Color.green())
         else:
@@ -97,7 +97,7 @@ class ToysCog(commands.Cog):
     async def eightball_list(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
 
-        phrases = await self.bot.db.eightball_get_all_phrases()
+        phrases = await self.bot.db.phrases.eightball_get_all()
         if not phrases:
             await interaction.followup.send(
                 embed=discord.Embed(description="❌ No hay frases personalizadas registradas en la base de datos.", color=discord.Color.red()),

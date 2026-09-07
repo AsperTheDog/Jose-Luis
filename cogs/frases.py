@@ -21,11 +21,11 @@ class FrasesCog(commands.Cog):
         content = content.strip()
         if not content:
             return False
-        return await self.bot.db.phrases_add_new(category, content)
+        return await self.bot.db.phrases.add_new(category, content)
 
     async def _remove(self, category: str, content: str):
         content = content.strip()
-        deleted = await self.bot.db.phrases_remove(category, content)
+        deleted = await self.bot.db.phrases.remove(category, content)
 
         if deleted and content in self._recent_history[category]:
             self._recent_history[category].remove(content)
@@ -33,7 +33,7 @@ class FrasesCog(commands.Cog):
         return deleted
 
     async def _pick_random(self, category: str, history_ratio: float = 0.4):
-        candidates = await self.bot.db.phrases_pick_random(category, history_ratio)
+        candidates = await self.bot.db.phrases.pick_random(category)
         if candidates is None:
             return "[FALLO] Aquí no hay nada entre lo que elegir..."
 

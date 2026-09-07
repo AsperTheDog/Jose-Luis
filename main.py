@@ -5,14 +5,13 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from config import GuildConfigManager
-from database import DBManager
+from db import BotDatabase
 from stats import StatsTracker
 
 load_dotenv()
 
 class JoseLuisBot(commands.Bot):
-    def __init__(self, twitchClient, twitchSecret):
+    def __init__(self, twitch_client, twitch_secret):
         intents = discord.Intents.default()
         intents.members = True
         intents.message_content = True
@@ -21,14 +20,13 @@ class JoseLuisBot(commands.Bot):
             command_prefix=commands.when_mentioned,
             intents=intents
         )
-        self.db = DBManager()
-        asyncio.run(self.db.start_db())
+        self.db = BotDatabase()
+        asyncio.run(self.db.start())
 
-        self.config = GuildConfigManager(self.db)
-        self.twitchClient = twitchClient
-        self.twitchSecret = twitchSecret
+        self.twitch_client = twitch_client
+        self.twitch_secret = twitch_secret
 
-        self.global_stats = StatsTracker(self.db)
+        self.global_stats = StatsTracker(self.db.stats)
 
     async def setup_hook(self) -> None:
         for filename in os.listdir("./cogs"):
@@ -50,7 +48,7 @@ class JoseLuisBot(commands.Bot):
         print(f"Logged in as {self.user} (ID: {self.user.id})")
 
     async def is_bot_operator(self, guild_id: int, user: discord.Member | discord.User) -> bool:
-        return await self.config.is_operator(guild_id, user.id) or await bot.is_owner(user)
+        return await self.db.guild.is_operator(guild_id, user.id) or await self.is_owner(user)
 
     async def filter_operators(self, interaction: discord.Interaction) -> bool:
         if not await self.is_bot_operator(interaction.guild.id, interaction.user):
@@ -59,15 +57,15 @@ class JoseLuisBot(commands.Bot):
         return False
 
     async def filter_owner(self, interaction):
-        if not await bot.is_owner(interaction.user):
+        if not await self.is_owner(interaction.user):
             await interaction.response.send_message("Esta acción solo la puede hacer el dueño del bot (avisa a Asper si quieres hacer algo)", ephemeral=True)
             return True
         return False
 
 if __name__ == "__main__":
-    twitchClient = os.getenv("TWITCH_CLIENT")
-    twitchSecret = os.getenv("TWITCH_SECRET")
-    bot = JoseLuisBot(twitchClient, twitchSecret)
+    twitch_client = os.getenv("TWITCH_CLIENT")
+    twitch_secret = os.getenv("TWITCH_SECRET")
+    bot = JoseLuisBot(twitch_client, twitch_secret)
     token = os.getenv("DISCORD_TOKEN")
 
     if not token:

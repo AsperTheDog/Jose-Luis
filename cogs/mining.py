@@ -8,14 +8,14 @@ import json
 import random
 from typing import Optional
 
-from database import DBManager
+from db import BotDatabase
 from main import JoseLuisBot
 
 JSON_PATH = "mining.json"
 
 
 class AscensorView(discord.ui.View):
-    def __init__(self, user_id: int, levels: dict, db: DBManager):
+    def __init__(self, user_id: int, levels: dict, db: BotDatabase):
         super().__init__(timeout=60)
         self.user_id = user_id
         self.db = db
@@ -41,7 +41,7 @@ class AscensorView(discord.ui.View):
             return
 
         selected_level = self.select.values[0]
-        await self.db.mining_change_depth(interaction.user.id, selected_level)
+        await self.db.mining.change_depth(interaction.user.id, selected_level)
         await interaction.response.send_message(
             embed=discord.Embed(description=f"🛗 El ascensor te ha llevado a: **{selected_level}**", color=discord.Color.blue())
         )
@@ -67,7 +67,7 @@ class DrinkConfirmView(discord.ui.View):
 
     @discord.ui.button(label="Comprar y Beber", style=discord.ButtonStyle.success, emoji="🥤")
     async def confirm_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        energy, _, _, choskris = await self.bot.db.mining_get_refill_data(self.user_id)
+        energy, _, _, choskris = await self.bot.db.mining.get_refill_data(self.user_id)
 
         if energy >= 100:
             await interaction.response.send_message(
@@ -87,7 +87,7 @@ class DrinkConfirmView(discord.ui.View):
 
         new_energy = min(100, energy + self.gain)
         new_choskris = choskris - self.total_cost
-        await self.bot.db.mining_apply_refill(self.user_id, new_energy, new_choskris)
+        await self.bot.db.mining.apply_refill(self.user_id, new_energy, new_choskris)
         await self.bot.global_stats.register_drink_action(self.user_id, self.total_cost)
 
         for item in self.children:
@@ -98,7 +98,7 @@ class DrinkConfirmView(discord.ui.View):
             f"⚡ **Energía restaurada:** {new_energy}/100 (+{self.gain})"
         )
 
-        current_balance = await self.bot.db.economy_get_balance(self.user_id)
+        current_balance = await self.bot.db.economy.get_balance(self.user_id)
         msg += f"\n💰 Saldo actual: **{current_balance}**"
 
         await interaction.response.edit_message(
@@ -196,7 +196,7 @@ class EquipPickaxeView(discord.ui.View):
             self.stop()
             return
 
-        await self.bot.db.mining_equip_pickaxe(self.user_id, target_db_id)
+        await self.bot.db.mining.equip_pickaxe(self.user_id, target_db_id)
         pick_data = self.pickaxes_game_data[selected_pick[1]]
 
         await interaction.followup.edit_message(
@@ -264,7 +264,7 @@ class CraftQuantityModal(discord.ui.Modal):
             )
             return
 
-        inventory = await self.bot.db.mining_get_user_inventory(self.user_id)
+        inventory = await self.bot.db.mining.get_user_inventory(self.user_id)
 
         missing_mats = []
         for mat_id, req_amount in self.recipe["ingredients"].items():
@@ -298,7 +298,7 @@ class CraftQuantityModal(discord.ui.Modal):
             max_dur = None
             result_name = item_info["name"]
 
-        await self.bot.db.mining_craft_item(self.user_id, self.recipe["ingredients"], result_id, self.recipe["type"], amount, max_dur)
+        await self.bot.db.mining.craft_item(self.user_id, self.recipe["ingredients"], result_id, self.recipe["type"], amount, max_dur)
         await self.bot.global_stats.register_item_crafted(self.user_id, amount)
 
         await interaction.followup.edit_message(
@@ -418,7 +418,7 @@ class MiningSystemCog(commands.Cog):
         self.active_miners.add(user_id)
 
         try:
-            energy, depth_id, current_xp, user_lvl, equipped_pick = await self.bot.db.mining_get_user_status(user_id)
+            energy, depth_id, current_xp, user_lvl, equipped_pick = await self.bot.db.mining.get_user_status(user_id)
 
             if not equipped_pick:
                 await interaction.response.send_message(
@@ -442,7 +442,7 @@ class MiningSystemCog(commands.Cog):
             net_power = pickaxe_data["efficiency"] - level_data["hardness"] + user_lvl * 3
 
             if net_power <= 0:
-                await self.bot.db.mining_deduct_energy(user_id, energy_cost)
+                await self.bot.db.mining.deduct_energy(user_id, energy_cost)
                 await interaction.response.send_message(
                     embed=discord.Embed(description=f"⚠️ La roca en **{level_data['name']}** es demasiado dura para tu nivel y pico actual.\n*Pierdes {energy_cost} de energía, pero tu pico no sufre desgaste.*", color=discord.Color.orange()),
                     ephemeral=True
@@ -465,7 +465,7 @@ class MiningSystemCog(commands.Cog):
             new_level = user_lvl + 1 if leveled_up else user_lvl
             final_xp = new_xp - required_xp if leveled_up else new_xp
 
-            await self.bot.db.mining_record_mine_action(user_id, energy_cost, db_pick_id, new_durability, dropped_material, total_yield, final_xp, new_level)
+            await self.bot.db.mining.record_mine_action(user_id, energy_cost, db_pick_id, new_durability, dropped_material, total_yield, final_xp, new_level)
 
             if new_durability <= 0:
                 durability_msg = f"💥 **¡Tu {pickaxe_data['name']} se ha roto!**"
@@ -527,7 +527,7 @@ class MiningSystemCog(commands.Cog):
     async def drink(self, interaction: discord.Interaction, modo: Optional[str] = "full"):
         user_id = interaction.user.id
 
-        energy, user_lvl, refills, choskris = await self.bot.db.mining_get_refill_data(user_id)
+        energy, user_lvl, refills, choskris = await self.bot.db.mining.get_refill_data(user_id)
 
         if energy >= 100:
             await interaction.response.send_message(
@@ -576,7 +576,7 @@ class MiningSystemCog(commands.Cog):
 
     @mining_group.command(name="ascensor", description="Cambia el nivel de profundidad en el que minas.")
     async def elevator(self, interaction: discord.Interaction):
-        await self.bot.db.mining_ensure_user(interaction.user.id)
+        await self.bot.db.mining.ensure_user(interaction.user.id)
         view = AscensorView(interaction.user.id, self.game_data["levels"], self.bot.db)
         await interaction.response.send_message(
             embed=discord.Embed(description="🛗 Selecciona tu destino:", color=discord.Color.blue()),
@@ -591,7 +591,7 @@ class MiningSystemCog(commands.Cog):
         max_dur = self.game_data["pickaxes"][pick_id]["max_durability"]
 
         now = datetime.datetime.now()
-        last_pick = await self.bot.db.mining_get_last_basic_pick(user_id)
+        last_pick = await self.bot.db.mining.get_last_basic_pick(user_id)
 
         if last_pick:
             next_time = last_pick + datetime.timedelta(days=1)
@@ -603,7 +603,7 @@ class MiningSystemCog(commands.Cog):
                 )
                 return
 
-        await self.bot.db.mining_claim_basic_pickaxe(user_id, pick_id, max_dur)
+        await self.bot.db.mining.claim_basic_pickaxe(user_id, pick_id, max_dur)
 
         await self.bot.global_stats.register_basic_pickaxe_claim(interaction.user.id)
         await interaction.response.send_message(
@@ -615,7 +615,7 @@ class MiningSystemCog(commands.Cog):
         await interaction.response.defer()
         user_id = interaction.user.id
 
-        pickaxes = await self.bot.db.mining_get_user_pickaxes(user_id)
+        pickaxes = await self.bot.db.mining.get_user_pickaxes(user_id)
 
         if not pickaxes:
             await interaction.followup.send(
@@ -688,7 +688,7 @@ class MiningSystemCog(commands.Cog):
     async def sell(self, interaction: discord.Interaction):
         user_id = interaction.user.id
 
-        items = await self.bot.db.mining_get_user_valuables(user_id)
+        items = await self.bot.db.mining.get_user_valuables(user_id)
 
         if not items:
             await interaction.response.send_message(
@@ -700,11 +700,11 @@ class MiningSystemCog(commands.Cog):
         total_choskris = sum(self.game_data["valuables"][v_id]["value"] * amount for v_id, amount in items)
         total_items = sum(amount for _, amount in items)
 
-        await self.bot.db.mining_sell_all_valuables(user_id, total_choskris)
+        await self.bot.db.mining.sell_all_valuables(user_id, total_choskris)
 
         await self.bot.global_stats.register_item_sale(interaction.user.id, total_items, total_choskris)
         msg = f"🪙 Has vendido tus objetos valiosos por un total de **{total_choskris}** Choskris."
-        current_balance = await self.bot.db.economy_get_balance(interaction.user.id)
+        current_balance = await self.bot.db.economy.get_balance(interaction.user.id)
         msg += f"\n💰 Saldo actual: **{current_balance}**"
 
         await interaction.response.send_message(embed=discord.Embed(description=msg, color=discord.Color.green()))
@@ -714,7 +714,7 @@ class MiningSystemCog(commands.Cog):
         user = user if user else interaction.user
         user_id = user.id
 
-        profile = await self.bot.db.mining_get_full_profile(user_id)
+        profile = await self.bot.db.mining.get_full_profile(user_id)
 
         xp, level, energy, depth = profile["user"]
 
@@ -758,7 +758,7 @@ class MiningSystemCog(commands.Cog):
 
     @tasks.loop(time=datetime.time(hour=0, minute=0, second=0))
     async def daily_reset_task(self):
-        await self.bot.db.mining_reset_all_energy()
+        await self.bot.db.mining.reset_all_energy()
 
     @daily_reset_task.before_loop
     async def before_daily_interest(self):

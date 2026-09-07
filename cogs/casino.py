@@ -211,7 +211,7 @@ class MayorMenorView(discord.ui.View):
 
         if won:
             await self.bot.global_stats.register_cards_win(self.user.id, self.current_win, self.bet)
-            await self.bot.db.economy_update_balance(self.user.id, self.current_win)
+            await self.bot.db.economy.update_balance(self.user.id, self.current_win)
             msg = f"🏆 **{self.user.display_name}** se retira con **{self.current_win:,}** choskris tras {self.streak} aciertos."
             embed_color = discord.Color.green()
             title = "¡Victoria!"
@@ -554,7 +554,7 @@ class PokerTableControl(discord.ui.View):
         refunds_text = []
         for p in self.game.players:
             if p.stack > 0:
-                await self.bot.db.poker_add_balance(p.user.id, p.stack)
+                await self.bot.db.economy.poker_add_balance(p.user.id, p.stack)
                 net_change = p.stack - self.game.buy_in
                 sign = "+" if net_change >= 0 else ""
                 refunds_text.append(f"• **{p.user.display_name}**: Devueltos `{p.stack:,}` ({sign}{net_change})")
@@ -586,13 +586,13 @@ class PokerLobbyView(discord.ui.View):
             await interaction.response.send_message("La mesa está llena (Max 6).", ephemeral=True)
             return
 
-        balance = await self.bot.db.poker_get_balance(interaction.user.id)
+        balance = await self.bot.db.economy.poker_get_balance(interaction.user.id)
         if balance < self.game.buy_in:
             await interaction.response.send_message(
                 f"No tienes choskris suficientes (**{self.game.buy_in:,}** requeridos).", ephemeral=True)
             return
 
-        success = await self.bot.db.poker_remove_balance(interaction.user.id, self.game.buy_in)
+        success = await self.bot.db.economy.poker_remove_balance(interaction.user.id, self.game.buy_in)
         if not success:
             await interaction.response.send_message("Hubo un error procesando tu saldo.", ephemeral=True)
             return
@@ -627,7 +627,7 @@ class PokerLobbyView(discord.ui.View):
 
         refunds_text = []
         for p in self.game.players:
-            await self.bot.db.poker_add_balance(p.user.id, self.game.buy_in)
+            await self.bot.db.economy.poker_add_balance(p.user.id, self.game.buy_in)
             refunds_text.append(f"• {p.user.mention}: Devueltos `{p.game.buy_in:,}` choskris")
 
         embed = discord.Embed(
@@ -751,7 +751,7 @@ class BlackjackView(discord.ui.View):
 
     @discord.ui.button(label="Doblar", style=discord.ButtonStyle.danger, emoji="🪙")
     async def double_down(self, interaction: discord.Interaction, button: discord.ui.Button):
-        user_balance = await self.bot.db.economy_get_balance(self.user.id)
+        user_balance = await self.bot.db.economy.get_balance(self.user.id)
         if user_balance < self.bet:
             await interaction.response.send_message(
                 embed=discord.Embed(description="❌ No tienes suficiente saldo para doblar la apuesta.", color=discord.Color.red()),
@@ -760,7 +760,7 @@ class BlackjackView(discord.ui.View):
             return
 
         # Deduct extra bet for double down
-        await self.bot.db.economy_update_balance(self.user.id, -self.bet)
+        await self.bot.db.economy.update_balance(self.user.id, -self.bet)
         self.total_bet += self.bet
 
         self.player_hand.append(self.deck.pop())
@@ -846,9 +846,9 @@ class BlackjackView(discord.ui.View):
             await self.bot.global_stats.register_blackjack_loss(self.user.id, self.total_bet)
 
         if payout > 0:
-            await self.bot.db.economy_update_balance(self.user.id, payout)
+            await self.bot.db.economy.update_balance(self.user.id, payout)
 
-        current_balance = await self.bot.db.economy_get_balance(self.user.id)
+        current_balance = await self.bot.db.economy.get_balance(self.user.id)
         description += f"\n\n💰 Saldo actual: **`{current_balance:,}`** choskris\n──────────────────────────────"
 
         embed = discord.Embed(title=title, description=description, color=color)
@@ -885,7 +885,7 @@ class CasinoCog(commands.Cog):
     async def spin(self, interaction: discord.Interaction, apuesta: int, color: Optional[str] = None, numero: Optional[int] = None):
         await interaction.response.defer()
 
-        phrase = await self.bot.db.global_get_random_phrase("gamble", "error")
+        phrase = await self.bot.db.phrases.get_random_phrase("gamble", "error")
         if apuesta <= 0:
             await interaction.followup.send(embed=discord.Embed(title="🎡 Ruleta", description=f"{phrase}La apuesta debe ser mayor a 0.", color=discord.Color.red()))
             return
@@ -898,7 +898,7 @@ class CasinoCog(commands.Cog):
             await interaction.followup.send(embed=discord.Embed(title="🎡 Ruleta", description=f"{phrase}El número debe estar entre 0 y 36.", color=discord.Color.red()))
             return
 
-        user_data = await self.bot.db.economy_get_user_data(interaction.user.id)
+        user_data = await self.bot.db.economy.get_user_data(interaction.user.id)
         if user_data['balance'] < apuesta:
             await interaction.followup.send(embed=discord.Embed(title="🎡 Ruleta", description=f"{phrase}No tienes suficiente choskris para esta apuesta.", color=discord.Color.red()))
             return
@@ -945,14 +945,14 @@ class CasinoCog(commands.Cog):
 
         if multiplier > 0:
             prize = apuesta * multiplier
-            await self.bot.db.economy_update_balance(interaction.user.id, prize - apuesta)
+            await self.bot.db.economy.update_balance(interaction.user.id, prize - apuesta)
             await self.bot.global_stats.register_roulette_win(interaction.user.id, prize, apuesta)
 
-            phrase = await self.bot.db.global_get_random_phrase("spin", "success")
+            phrase = await self.bot.db.phrases.get_random_phrase("spin", "success")
 
             msg = f"{prefix_msg}{phrase}La bola cayó en **{resultado_num} {color_emoji}**.\n🎉 **{pago_descripcion}** Has ganado **{int(prize)}** choskris."
 
-            current_balance = await self.bot.db.economy_get_balance(interaction.user.id)
+            current_balance = await self.bot.db.economy.get_balance(interaction.user.id)
             msg += f"\n💰 Saldo actual: **{current_balance}**"
 
             await interaction.followup.send(
@@ -963,17 +963,17 @@ class CasinoCog(commands.Cog):
                 )
             )
         else:
-            phrase = await self.bot.db.global_get_random_phrase("spin", "fail")
-            cashback_pct = await self.bot.db.get_user_job_perk(interaction.user.id, "gambling_cashback", 0.0)
+            phrase = await self.bot.db.phrases.get_random_phrase("spin", "fail")
+            cashback_pct = await self.bot.db.economy.get_user_job_perk(interaction.user.id, "gambling_cashback", 0.0)
             loss = int(apuesta * (1 - cashback_pct))
-            await self.bot.db.economy_update_balance(interaction.user.id, -loss)
+            await self.bot.db.economy.update_balance(interaction.user.id, -loss)
             await self.bot.global_stats.register_roulette_loss(interaction.user.id, apuesta)
 
             msg = f"{prefix_msg}{phrase}La bola cayó en **{resultado_num} {color_emoji}**.\n❌ Perdiste **{apuesta}** choskris."
             if cashback_pct > 0:
                 msg += f" (-**{apuesta - loss}** cashback)"
 
-            current_balance = await self.bot.db.economy_get_balance(interaction.user.id)
+            current_balance = await self.bot.db.economy.get_balance(interaction.user.id)
             msg += f"\n💰 Saldo actual: **{current_balance}**"
 
             await interaction.followup.send(embed=discord.Embed(title="Ruleta", description=msg, color=discord.Color.red()))
@@ -995,7 +995,7 @@ class CasinoCog(commands.Cog):
     async def dice(self, interaction: discord.Interaction, apuesta: int, modalidad: str, suma_exacta: Optional[int] = None):
         await interaction.response.defer()
 
-        phrase = await self.bot.db.global_get_random_phrase("gamble", "error")
+        phrase = await self.bot.db.phrases.get_random_phrase("gamble", "error")
         if apuesta <= 0:
             await interaction.followup.send(embed=discord.Embed(title="🎲 Dados", description=f"{phrase}La apuesta debe ser mayor a 0.", color=discord.Color.red()))
             return
@@ -1005,7 +1005,7 @@ class CasinoCog(commands.Cog):
                 await interaction.followup.send(embed=discord.Embed(title="🎲 Dados", description=f"{phrase}Para la modalidad 'Suma Exacta', debes indicar un número entre 2 y 12 en el campo `suma_exacta`.", color=discord.Color.red()))
                 return
 
-        user_data = await self.bot.db.economy_get_user_data(interaction.user.id)
+        user_data = await self.bot.db.economy.get_user_data(interaction.user.id)
         if user_data['balance'] < apuesta:
             await interaction.followup.send(embed=discord.Embed(title="🎲 Dados", description=f"{phrase}No tienes suficiente choskris para esta apuesta.", color=discord.Color.red()))
             return
@@ -1049,14 +1049,14 @@ class CasinoCog(commands.Cog):
 
         if multiplier > 0:
             prize = apuesta * multiplier
-            await self.bot.db.economy_update_balance(interaction.user.id, prize - apuesta)
+            await self.bot.db.economy.update_balance(interaction.user.id, prize - apuesta)
             await self.bot.global_stats.register_dice_win(interaction.user.id, prize, apuesta)
 
-            phrase = await self.bot.db.global_get_random_phrase("dice", "success")
+            phrase = await self.bot.db.phrases.get_random_phrase("dice", "success")
 
             msg = f"{phrase}Los dados cayeron en: {d1_str} + {d2_str} = **{total}**\n🎉 **{pago_descripcion}** Has ganado **{int(prize)}** choskris. *(Multiplicador {multiplier}x)*"
 
-            current_balance = await self.bot.db.economy_get_balance(interaction.user.id)
+            current_balance = await self.bot.db.economy.get_balance(interaction.user.id)
             msg += f"\n💰 Saldo actual: **{current_balance}**"
 
             await interaction.followup.send(
@@ -1067,17 +1067,17 @@ class CasinoCog(commands.Cog):
                 )
             )
         else:
-            cashback_pct = await self.bot.db.get_user_job_perk(interaction.user.id, "gambling_cashback", 0.0)
+            cashback_pct = await self.bot.db.economy.get_user_job_perk(interaction.user.id, "gambling_cashback", 0.0)
             loss = int(apuesta * (1 - cashback_pct))
-            await self.bot.db.economy_update_balance(interaction.user.id, -loss)
+            await self.bot.db.economy.update_balance(interaction.user.id, -loss)
             await self.bot.global_stats.register_dice_loss(interaction.user.id, apuesta)
 
-            phrase = await self.bot.db.global_get_random_phrase("dice", "fail")
+            phrase = await self.bot.db.phrases.get_random_phrase("dice", "fail")
             msg = f"{phrase}Los dados cayeron en: {d1_str} + {d2_str} = **{total}**\n❌ Perdiste **{apuesta}** choskris."
             if cashback_pct > 0:
                 msg += f" (-**{apuesta - loss}** cashback)"
 
-            current_balance = await self.bot.db.economy_get_balance(interaction.user.id)
+            current_balance = await self.bot.db.economy.get_balance(interaction.user.id)
             msg += f"\n💰 Saldo actual: **{current_balance}**"
 
             await interaction.followup.send(embed=discord.Embed(title="🎲 Dados", description=msg, color=discord.Color.red()))
@@ -1110,7 +1110,7 @@ class CasinoCog(commands.Cog):
         winnings = int(apuesta * multiplier)
         net_change = winnings - apuesta
 
-        success, current_balance = await self.bot.db.economy_process_slots_bet(interaction.user.id, apuesta, net_change)
+        success, current_balance = await self.bot.db.economy.process_slots_bet(interaction.user.id, apuesta, net_change)
 
         if not success:
             await interaction.response.send_message(embed=discord.Embed(title="🎰 Tragaperras 🎰", description=f"❌ No tienes suficientes monedas. Saldo actual: **{current_balance}**", color=discord.Color.red()), ephemeral=True)
@@ -1128,7 +1128,7 @@ class CasinoCog(commands.Cog):
         embed.add_field(name="Rodillos", value=f"```\n{reels_display}\n```", inline=False)
         embed.add_field(name="Resultado", value=result_text, inline=False)
 
-        current_balance = await self.bot.db.economy_get_balance(interaction.user.id)
+        current_balance = await self.bot.db.economy.get_balance(interaction.user.id)
         embed.add_field(name=f"", value=f"💰 Saldo actual: **{current_balance}**")
 
         await interaction.response.send_message(embed=embed)
@@ -1137,12 +1137,12 @@ class CasinoCog(commands.Cog):
     async def mayoromenor(self, interaction: discord.Interaction, cantidad: int):
         await interaction.response.defer()
 
-        balance = await self.bot.db.economy_get_balance(interaction.user.id)
+        balance = await self.bot.db.economy.get_balance(interaction.user.id)
         if cantidad > balance or cantidad <= 0:
             await interaction.followup.send(embed=discord.Embed(title="🃏 Mayor o Menor", description="❌ No tienes suficientes choskris.", color=discord.Color.red()))
             return
 
-        await self.bot.db.economy_update_balance(interaction.user.id, -cantidad)
+        await self.bot.db.economy.update_balance(interaction.user.id, -cantidad)
 
         view = MayorMenorView(interaction.user, cantidad, self.bot)
         embed = discord.Embed(
@@ -1163,12 +1163,12 @@ class CasinoCog(commands.Cog):
             await interaction.followup.send("La entrada mínima es de 100 choskris.")
             return
 
-        balance = await self.bot.db.poker_get_balance(interaction.user.id)
+        balance = await self.bot.db.economy.poker_get_balance(interaction.user.id)
         if balance < buy_in:
             await interaction.followup.send(f"No tienes fondos suficientes (**{buy_in:,}** requeridos). Tienes **{balance:,}**.")
             return
 
-        await self.bot.db.poker_remove_balance(interaction.user.id, buy_in)
+        await self.bot.db.economy.poker_remove_balance(interaction.user.id, buy_in)
 
         game = PokerGame(host=interaction.user, buy_in=buy_in)
 
@@ -1188,21 +1188,21 @@ class CasinoCog(commands.Cog):
     async def blackjack(self, interaction: discord.Interaction, apuesta: int):
         await interaction.response.defer()
 
-        phrase = await self.bot.db.global_get_random_phrase("gamble", "error")
+        phrase = await self.bot.db.phrases.get_random_phrase("gamble", "error")
         if apuesta <= 0:
             await interaction.followup.send(
                 embed=discord.Embed(title="🃏 Blackjack", description=f"{phrase}La apuesta debe ser mayor a 0.", color=discord.Color.red())
             )
             return
 
-        balance = await self.bot.db.economy_get_balance(interaction.user.id)
+        balance = await self.bot.db.economy.get_balance(interaction.user.id)
         if balance < apuesta:
             await interaction.followup.send(
                 embed=discord.Embed(title="🃏 Blackjack", description=f"{phrase}No tienes suficientes choskris para realizar esta apuesta.", color=discord.Color.red())
             )
             return
 
-        await self.bot.db.economy_update_balance(interaction.user.id, -apuesta)
+        await self.bot.db.economy.update_balance(interaction.user.id, -apuesta)
 
         view = BlackjackView(interaction.user, apuesta, self.bot)
 

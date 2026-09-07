@@ -43,14 +43,14 @@ class StatsCog(commands.Cog):
         if not message.guild:
             print(f"Mensaje enviado sin gremio por {message.author.name} en {message.channel.id}")
             return
-        await self.bot.db.activity_update_user_stats(message.guild.id, message.author.id, xp_gained, word_count, char_count, attachment_count, emoji_count)
+        await self.bot.db.activity.update_user_stats(message.guild.id, message.author.id, xp_gained, word_count, char_count, attachment_count, emoji_count)
 
     @stats_group.command(name="stats", description="Muestra las estadísticas de un usuario")
     @app_commands.describe(user="Usuario a consultar (por defecto tú)")
     async def stats(self, interaction: discord.Interaction, user: Optional[discord.User] = None):
         target = user or interaction.user
 
-        row = await self.bot.db.activity_get_user_stats(interaction.guild.id, target.id)
+        row = await self.bot.db.activity.get_user_stats(interaction.guild.id, target.id)
         if not row:
             await interaction.response.send_message(f"**{target.display_name}** aún no tiene estadísticas registradas.", ephemeral=True)
             return
@@ -104,7 +104,7 @@ class StatsCog(commands.Cog):
             "attachments": "Archivos Adjuntos",
         }
 
-        rows = await self.bot.db.activity_get_top_users_by_category(
+        rows = await self.bot.db.activity.get_top_users_by_category(
             interaction.guild.id, category
         )
 

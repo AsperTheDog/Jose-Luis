@@ -1,139 +1,123 @@
-from database import DBManager
+from db.repositories.global_stats import GlobalStatsRepository
 
 
 class StatsTracker:
-    def __init__(self, db: DBManager):
-        self.db = db
+    """Use-case layer that records gameplay events into global stats columns."""
+
+    def __init__(self, stats: GlobalStatsRepository):
+        self.stats = stats
+
+    async def _register_bet_win(self, user_id: int, prefix: str, won_column: str, money_gained: int, bet_amount: int) -> None:
+        await self.stats.increment(user_id, f"{prefix}_money_gained", money_gained)
+        await self.register_money_obtained(user_id, money_gained)
+        await self.stats.increment(user_id, won_column, 1)
+        await self.stats.increment(user_id, f"{prefix}_money_lost", bet_amount)
+        await self.stats.update_max(user_id, f"{prefix}_biggest_bet", bet_amount)
+        await self.register_money_spent(user_id, bet_amount)
+
+    async def _register_bet_loss(self, user_id: int, prefix: str, lost_column: str, bet_amount: int) -> None:
+        await self.stats.increment(user_id, f"{prefix}_money_lost", bet_amount)
+        await self.stats.increment(user_id, lost_column, 1)
+        await self.stats.update_max(user_id, f"{prefix}_biggest_bet", bet_amount)
+        await self.register_money_spent(user_id, bet_amount)
 
     async def register_roulette_win(self, user_id: int, money_gained: int, bet_amount: int) -> None:
-        await self.db.increment_stat(user_id, "roulette_money_gained", money_gained)
-        await self.register_money_obtained(user_id, money_gained)
-        await self.db.increment_stat(user_id, "roulette_bets_won", 1)
-        await self.db.increment_stat(user_id, "roulette_money_lost", bet_amount)
-        await self.db.update_max_stat(user_id, "roulette_biggest_bet", bet_amount)
-        await self.register_money_spent(user_id, bet_amount)
+        await self._register_bet_win(user_id, "roulette", "roulette_bets_won", money_gained, bet_amount)
 
     async def register_roulette_loss(self, user_id: int, bet_amount: int) -> None:
-        await self.db.increment_stat(user_id, "roulette_money_lost", bet_amount)
-        await self.db.increment_stat(user_id, "roulette_bets_lost", 1)
-        await self.db.update_max_stat(user_id, "roulette_biggest_bet", bet_amount)
-        await self.register_money_spent(user_id, bet_amount)
+        await self._register_bet_loss(user_id, "roulette", "roulette_bets_lost", bet_amount)
 
     async def register_dice_win(self, user_id: int, money_gained: int, bet_amount: int) -> None:
-        await self.db.increment_stat(user_id, "dice_money_gained", money_gained)
-        await self.register_money_obtained(user_id, money_gained)
-        await self.db.increment_stat(user_id, "dice_bets_won", 1)
-        await self.db.increment_stat(user_id, "dice_money_lost", bet_amount)
-        await self.db.update_max_stat(user_id, "dice_biggest_bet", bet_amount)
-        await self.register_money_spent(user_id, bet_amount)
+        await self._register_bet_win(user_id, "dice", "dice_bets_won", money_gained, bet_amount)
 
     async def register_dice_loss(self, user_id: int, bet_amount: int) -> None:
-        await self.db.increment_stat(user_id, "dice_money_lost", bet_amount)
-        await self.db.increment_stat(user_id, "dice_bets_lost", 1)
-        await self.db.update_max_stat(user_id, "dice_biggest_bet", bet_amount)
-        await self.register_money_spent(user_id, bet_amount)
+        await self._register_bet_loss(user_id, "dice", "dice_bets_lost", bet_amount)
 
     async def register_slots_win(self, user_id: int, money_gained: int, bet_amount: int) -> None:
-        await self.db.increment_stat(user_id, "slots_money_gained", money_gained)
-        await self.register_money_obtained(user_id, money_gained)
-        await self.db.increment_stat(user_id, "slots_bets_won", 1)
-        await self.db.increment_stat(user_id, "slots_money_lost", bet_amount)
-        await self.db.update_max_stat(user_id, "slots_biggest_bet", bet_amount)
-        await self.register_money_spent(user_id, bet_amount)
+        await self._register_bet_win(user_id, "slots", "slots_bets_won", money_gained, bet_amount)
 
     async def register_slots_loss(self, user_id: int, bet_amount: int) -> None:
-        await self.db.increment_stat(user_id, "slots_money_lost", bet_amount)
-        await self.db.increment_stat(user_id, "slots_bets_lost", 1)
-        await self.db.update_max_stat(user_id, "slots_biggest_bet", bet_amount)
-        await self.register_money_spent(user_id, bet_amount)
+        await self._register_bet_loss(user_id, "slots", "slots_bets_lost", bet_amount)
 
     async def register_cards_win(self, user_id: int, money_gained: int, bet_amount: int) -> None:
-        await self.db.increment_stat(user_id, "cards_money_gained", money_gained)
-        await self.register_money_obtained(user_id, money_gained)
-        await self.db.increment_stat(user_id, "cards_bets_won", 1)
-        await self.db.increment_stat(user_id, "cards_money_lost", bet_amount)
-        await self.db.update_max_stat(user_id, "cards_biggest_bet", bet_amount)
-        await self.register_money_spent(user_id, bet_amount)
+        await self._register_bet_win(user_id, "cards", "cards_bets_won", money_gained, bet_amount)
 
     async def register_cards_loss(self, user_id: int, bet_amount: int) -> None:
-        await self.db.increment_stat(user_id, "cards_money_lost", bet_amount)
-        await self.db.increment_stat(user_id, "cards_bets_lost", 1)
-        await self.db.update_max_stat(user_id, "cards_biggest_bet", bet_amount)
-        await self.register_money_spent(user_id, bet_amount)
+        await self._register_bet_loss(user_id, "cards", "cards_bets_lost", bet_amount)
 
     async def register_money_gift_give(self, user_id: int, amount: int) -> None:
-        await self.db.increment_stat(user_id, "money_given", amount)
-        await self.db.update_max_stat(user_id, "biggest_money_gift", amount)
+        await self.stats.increment(user_id, "money_given", amount)
+        await self.stats.update_max(user_id, "biggest_money_gift", amount)
         await self.register_money_spent(user_id, amount)
 
     async def register_money_gift_receive(self, user_id: int, amount: int) -> None:
-        await self.db.increment_stat(user_id, "money_received", amount)
+        await self.stats.increment(user_id, "money_received", amount)
         await self.register_money_obtained(user_id, amount)
 
     async def register_wallet_update(self, user_id: int, current_balance: int) -> None:
-        await self.db.update_max_stat(user_id, "highest_money_accumulated", current_balance)
+        await self.stats.update_max(user_id, "highest_money_accumulated", current_balance)
 
     async def register_money_spent(self, user_id: int, amount: int = 1) -> None:
-        await self.db.increment_stat(user_id, "money_spent", amount)
+        await self.stats.increment(user_id, "money_spent", amount)
 
     async def register_money_obtained(self, user_id: int, amount: int = 1) -> None:
-        await self.db.increment_stat(user_id, "money_obtained", amount)
+        await self.stats.increment(user_id, "money_obtained", amount)
 
     async def register_allowance_claim(self, user_id: int, amount: int, streak: int) -> None:
-        await self.db.increment_stat(user_id, "times_asked_allowance", 1)
-        await self.db.increment_stat(user_id, "money_from_allowance", amount)
-        await self.db.update_max_stat(user_id, "biggest_allowance_streak", streak)
+        await self.stats.increment(user_id, "times_asked_allowance", 1)
+        await self.stats.increment(user_id, "money_from_allowance", amount)
+        await self.stats.update_max(user_id, "biggest_allowance_streak", streak)
         await self.register_money_obtained(user_id, amount)
 
     async def register_work(self, user_id: int, amount: int) -> None:
-        await self.db.increment_stat(user_id, "times_worked", 1)
-        await self.db.increment_stat(user_id, "money_from_work", amount)
+        await self.stats.increment(user_id, "times_worked", 1)
+        await self.stats.increment(user_id, "money_from_work", amount)
         await self.register_money_obtained(user_id, amount)
 
     async def register_job_switch(self, user_id: int) -> None:
-        await self.db.increment_stat(user_id, "times_switched_jobs", 1)
+        await self.stats.increment(user_id, "times_switched_jobs", 1)
 
     async def register_successful_crime(self, user_id: int, money_gained: int) -> None:
-        await self.db.increment_stat(user_id, "crimes_successful", 1)
-        await self.db.increment_stat(user_id, "crime_money_gained", money_gained)
+        await self.stats.increment(user_id, "crimes_successful", 1)
+        await self.stats.increment(user_id, "crime_money_gained", money_gained)
         await self.register_money_obtained(user_id, money_gained)
 
     async def register_jail_sentence(self, user_id: int, fine_paid: int) -> None:
-        await self.db.increment_stat(user_id, "times_gone_to_jail", 1)
-        await self.db.increment_stat(user_id, "crime_fines_paid", fine_paid)
+        await self.stats.increment(user_id, "times_gone_to_jail", 1)
+        await self.stats.increment(user_id, "crime_fines_paid", fine_paid)
         await self.register_money_spent(user_id, fine_paid)
 
     async def register_interest_payout(self, user_id: int, amount: int) -> None:
-        await self.db.increment_stat(user_id, "interest_money_gained", amount)
+        await self.stats.increment(user_id, "interest_money_gained", amount)
         await self.register_money_obtained(user_id, amount)
 
     async def register_drop_obtained(self, user_id: int, amount: int) -> None:
-        await self.db.increment_stat(user_id, "drops_claimed", 1)
-        await self.db.increment_stat(user_id, "money_from_drops", amount)
+        await self.stats.increment(user_id, "drops_claimed", 1)
+        await self.stats.increment(user_id, "money_from_drops", amount)
         await self.register_money_obtained(user_id, amount)
 
     async def register_mine_action(self, user_id: int, energy_used: int, materials_gained: int) -> None:
-        await self.db.increment_stat(user_id, "times_mined", 1)
-        await self.db.increment_stat(user_id, "energy_spent", energy_used)
-        await self.db.increment_stat(user_id, "materials_mined", materials_gained)
+        await self.stats.increment(user_id, "times_mined", 1)
+        await self.stats.increment(user_id, "energy_spent", energy_used)
+        await self.stats.increment(user_id, "materials_mined", materials_gained)
 
     async def register_drink_action(self, user_id: int, cost: int) -> None:
-        await self.db.increment_stat(user_id, "times_drank", 1)
-        await self.db.increment_stat(user_id, "money_spent_drinking", cost)
+        await self.stats.increment(user_id, "times_drank", 1)
+        await self.stats.increment(user_id, "money_spent_drinking", cost)
         await self.register_money_spent(user_id, cost)
 
     async def register_basic_pickaxe_claim(self, user_id: int) -> None:
-        await self.db.increment_stat(user_id, "basic_pickaxes_claimed", 1)
+        await self.stats.increment(user_id, "basic_pickaxes_claimed", 1)
 
     async def register_pickaxe_broken(self, user_id: int) -> None:
-        await self.db.increment_stat(user_id, "pickaxes_broken", 1)
+        await self.stats.increment(user_id, "pickaxes_broken", 1)
 
     async def register_item_crafted(self, user_id: int, amount: int) -> None:
-        await self.db.increment_stat(user_id, "items_crafted", amount)
+        await self.stats.increment(user_id, "items_crafted", amount)
 
     async def register_item_sale(self, user_id: int, items_sold_count: int, money_gained: int) -> None:
-        await self.db.increment_stat(user_id, "items_sold", items_sold_count)
-        await self.db.increment_stat(user_id, "item_sales_money_gained", money_gained)
+        await self.stats.increment(user_id, "items_sold", items_sold_count)
+        await self.stats.increment(user_id, "item_sales_money_gained", money_gained)
         await self.register_money_obtained(user_id, money_gained)
 
     async def register_hack_win(self, user_id: int, difficulty: str, money_gained: int, time_spent: float) -> None:
@@ -141,12 +125,12 @@ class StatsTracker:
         diff_key = difficulty.lower().replace(" ", "")
 
         if diff_key in valid_difficulties:
-            await self.db.increment_stat(user_id, f"hacking_times_hacked_{diff_key}", 1)
+            await self.stats.increment(user_id, f"hacking_times_hacked_{diff_key}", 1)
 
-        await self.db.increment_stat(user_id, "hacking_time_spent", time_spent)
+        await self.stats.increment(user_id, "hacking_time_spent", time_spent)
 
         if money_gained > 0:
-            await self.db.increment_stat(user_id, "hacking_money_gained", money_gained)
+            await self.stats.increment(user_id, "hacking_money_gained", money_gained)
             await self.register_money_obtained(user_id, money_gained)
 
     async def register_hack_loss(self, user_id: int, reason: str, time_spent: float) -> None:
@@ -158,62 +142,54 @@ class StatsTracker:
 
         column_name = valid_reasons.get(reason.lower())
         if column_name:
-            await self.db.increment_stat(user_id, column_name, 1)
+            await self.stats.increment(user_id, column_name, 1)
 
-        await self.db.increment_stat(user_id, "hacking_time_spent", time_spent)
+        await self.stats.increment(user_id, "hacking_time_spent", time_spent)
 
     async def register_gacha_throw(self, user_id: int, times: int, cost: int, boosted: bool) -> None:
-        await self.db.increment_stat(user_id, "gacha_throws", times)
+        await self.stats.increment(user_id, "gacha_throws", times)
         await self.register_money_spent(user_id, cost)
         if boosted:
-            await self.db.increment_stat(user_id, "gacha_boosted_throws", times)
+            await self.stats.increment(user_id, "gacha_boosted_throws", times)
 
     async def register_gacha_shard_obtained(self, user_id: int, rarity: int) -> None:
         valid_rarities = {2, 3, 4, 5}
         if rarity in valid_rarities:
-            await self.db.increment_stat(user_id, f"gacha_shards_obtained_{rarity}", 1)
+            await self.stats.increment(user_id, f"gacha_shards_obtained_{rarity}", 1)
 
     async def register_gacha_unit_crafted(self, user_id: int, amount: int = 1) -> None:
-        await self.db.increment_stat(user_id, "gacha_units_crafted", amount)
+        await self.stats.increment(user_id, "gacha_units_crafted", amount)
 
     async def register_gacha_shard_destroyed(self, user_id: int, amount: int, dust_gained: int) -> None:
-        await self.db.increment_stat(user_id, "gacha_shards_destroyed", amount)
-        await self.db.increment_stat(user_id, "gacha_dust_obtained", dust_gained)
+        await self.stats.increment(user_id, "gacha_shards_destroyed", amount)
+        await self.stats.increment(user_id, "gacha_dust_obtained", dust_gained)
 
     async def register_gacha_dust_spent(self, user_id: int, amount: int) -> None:
-        await self.db.increment_stat(user_id, "gacha_dust_spent", amount)
+        await self.stats.increment(user_id, "gacha_dust_spent", amount)
 
     async def register_blackjack_win(self, user_id: int, money_gained: int, bet_amount: int, natural: bool = False) -> None:
-        await self.db.increment_stat(user_id, "blackjack_money_gained", money_gained)
-        await self.register_money_obtained(user_id, money_gained)
-        await self.db.increment_stat(user_id, "blackjack_hands_won", 1)
-        await self.db.increment_stat(user_id, "blackjack_money_lost", bet_amount)
-        await self.db.update_max_stat(user_id, "blackjack_biggest_bet", bet_amount)
-        await self.register_money_spent(user_id, bet_amount)
+        await self._register_bet_win(user_id, "blackjack", "blackjack_hands_won", money_gained, bet_amount)
         if natural:
-            await self.db.increment_stat(user_id, "blackjack_naturals", 1)
+            await self.stats.increment(user_id, "blackjack_naturals", 1)
 
     async def register_blackjack_loss(self, user_id: int, bet_amount: int) -> None:
-        await self.db.increment_stat(user_id, "blackjack_money_lost", bet_amount)
-        await self.db.increment_stat(user_id, "blackjack_hands_lost", 1)
-        await self.db.update_max_stat(user_id, "blackjack_biggest_bet", bet_amount)
-        await self.register_money_spent(user_id, bet_amount)
+        await self._register_bet_loss(user_id, "blackjack", "blackjack_hands_lost", bet_amount)
 
     async def register_blackjack_push(self, user_id: int, bet_amount: int) -> None:
-        await self.db.increment_stat(user_id, "blackjack_hands_pushed", 1)
-        await self.db.update_max_stat(user_id, "blackjack_biggest_bet", bet_amount)
+        await self.stats.increment(user_id, "blackjack_hands_pushed", 1)
+        await self.stats.update_max(user_id, "blackjack_biggest_bet", bet_amount)
 
     async def register_bet_placed(self, user_id: int, amount: int) -> None:
-        await self.db.increment_stat(user_id, "betting_bets_placed", 1)
-        await self.db.increment_stat(user_id, "betting_money_lost", amount)
-        await self.db.update_max_stat(user_id, "betting_biggest_bet", amount)
+        await self.stats.increment(user_id, "betting_bets_placed", 1)
+        await self.stats.increment(user_id, "betting_money_lost", amount)
+        await self.stats.update_max(user_id, "betting_biggest_bet", amount)
         await self.register_money_spent(user_id, amount)
 
     async def register_bet_won(self, user_id: int, payout: int) -> None:
-        await self.db.increment_stat(user_id, "betting_bets_won", 1)
-        await self.db.increment_stat(user_id, "betting_money_gained", payout)
-        await self.db.update_max_stat(user_id, "betting_biggest_win", payout)
+        await self.stats.increment(user_id, "betting_bets_won", 1)
+        await self.stats.increment(user_id, "betting_money_gained", payout)
+        await self.stats.update_max(user_id, "betting_biggest_win", payout)
         await self.register_money_obtained(user_id, payout)
 
     async def register_bet_lost(self, user_id: int) -> None:
-        await self.db.increment_stat(user_id, "betting_bets_lost", 1)
+        await self.stats.increment(user_id, "betting_bets_lost", 1)

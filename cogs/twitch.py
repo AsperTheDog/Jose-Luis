@@ -21,8 +21,8 @@ class StreamerNotifierCog(commands.Cog):
     def __init__(self, bot: JoseLuisBot):
         self.bot = bot
 
-        self.client_id = self.bot.twitchClient
-        self.client_secret = self.bot.twitchSecret
+        self.client_id = self.bot.twitch_client
+        self.client_secret = self.bot.twitch_secret
         self.tokens_file = "twitch_tokens.json"
 
         self.access_token: str = ""
@@ -145,7 +145,7 @@ class StreamerNotifierCog(commands.Cog):
     async def sync_all_subscriptions(self, session_id: str):
         self.active_session_id = session_id
 
-        streamers = await self.bot.db.twitch_get_tracked_streamers()
+        streamers = await self.bot.db.twitch.get_tracked_streamers()
 
         for row in streamers:
             twitch_user = row[0] if isinstance(row, (tuple, list)) else row
@@ -219,7 +219,7 @@ class StreamerNotifierCog(commands.Cog):
         twitch_user = event_data.get("broadcaster_user_login", "").lower()
         streamer_name = event_data.get("broadcaster_user_name", twitch_user)
 
-        destinations = await self.bot.db.twitch_get_streamer_destinations(twitch_user)
+        destinations = await self.bot.db.twitch.get_streamer_destinations(twitch_user)
 
         if not destinations:
             return
@@ -264,7 +264,7 @@ class StreamerNotifierCog(commands.Cog):
             await interaction.response.send_message(f"No se pudo encontrar al usuario `{twitch_user}` en Twitch.", ephemeral=True)
             return
 
-        await self.bot.db.twitch_add_or_update_tracked_streamer(interaction.guild_id, target_channel.id, twitch_user, kick_user, at_everyone)
+        await self.bot.db.twitch.add_or_update_tracked_streamer(interaction.guild_id, target_channel.id, twitch_user, kick_user, at_everyone)
 
         sub_success = True
         if self.active_session_id:
@@ -286,7 +286,7 @@ class StreamerNotifierCog(commands.Cog):
 
         twitch_user = twitch.strip().lower()
 
-        deleted = await self.bot.db.twitch_remove_tracked_streamer(interaction.guild_id, twitch_user)
+        deleted = await self.bot.db.twitch.remove_tracked_streamer(interaction.guild_id, twitch_user)
 
         if not deleted:
             await interaction.response.send_message(f"**{twitch_user}** no estaba en la lista", ephemeral=True)
@@ -295,7 +295,7 @@ class StreamerNotifierCog(commands.Cog):
 
     @streamer_group.command(name="lista", description="Muestra los streamers configurados")
     async def list_streamers(self, interaction: discord.Interaction):
-        rows = await self.bot.db.twitch_get_guild_tracked_streamers(interaction.guild_id)
+        rows = await self.bot.db.twitch.get_guild_tracked_streamers(interaction.guild_id)
 
         if not rows:
             await interaction.response.send_message("No hay streamers configurados en este servidor.", ephemeral=True)

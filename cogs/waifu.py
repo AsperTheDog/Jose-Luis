@@ -50,7 +50,7 @@ class GiftQuantityModal(discord.ui.Modal):
         unit_value = self.gift_data["value"]
         total_cost = unit_value * amount
 
-        balance = await self.bot.db.economy_get_balance(self.giver_id)
+        balance = await self.bot.db.economy.get_balance(self.giver_id)
         if balance < total_cost:
             await interaction.followup.edit_message(
                 message_id=interaction.message.id,
@@ -60,8 +60,8 @@ class GiftQuantityModal(discord.ui.Modal):
             )
             return
 
-        await self.bot.db.economy_update_balance(self.giver_id, -total_cost)
-        await self.bot.db.waifu_add_gift(
+        await self.bot.db.economy.update_balance(self.giver_id, -total_cost)
+        await self.bot.db.waifu.add_gift(
             waifu_id=self.target_member.id,
             item_name=self.gift_data["name"],
             cost_per_unit=unit_value,
@@ -163,21 +163,21 @@ class WaifuCog(commands.Cog):
             await interaction.response.send_message("No puedes reclamar a un bot.", ephemeral=True)
             return
 
-        claimer_data = await self.bot.db.waifu_get_user(claimer_id)
+        claimer_data = await self.bot.db.waifu.get_user(claimer_id)
         if claimer_data.get("claim") is not None:
             claimed_user = self.bot.get_user(claimer_data["claim"])
             name = claimed_user.display_name if claimed_user else f"ID {claimer_data['claim']}"
             await interaction.response.send_message(f"⚠️ Ya tienes reclamado a **{name}**. Debes usar `/waifu divorcio` antes de reclamar a alguien más.", ephemeral=True)
             return
 
-        if await self.bot.db.waifu_is_blocked(blocker_id=target_id, blocked_id=claimer_id):
+        if await self.bot.db.waifu.is_blocked(blocker_id=target_id, blocked_id=claimer_id):
             await interaction.response.send_message(f"❌ **{usuario.display_name}** te ha bloqueado. No puedes reclamarle/a hasta que te desbloquee.", ephemeral=True)
             return
 
-        target_data = await self.bot.db.waifu_get_user(target_id)
-        cost, is_affinity = await self.bot.db.waifu_get_effective_value(target_id)
+        target_data = await self.bot.db.waifu.get_user(target_id)
+        cost, is_affinity = await self.bot.db.waifu.get_effective_value(target_id)
 
-        balance = await self.bot.db.economy_get_balance(claimer_id)
+        balance = await self.bot.db.economy.get_balance(claimer_id)
         if balance < cost:
             await interaction.response.send_message(
                 f"❌ No tienes suficientes Choskris para reclamar a **{usuario.display_name}**.\n"
@@ -187,12 +187,12 @@ class WaifuCog(commands.Cog):
             return
 
         will_trigger_affinity = target_data.get("claim") == claimer_id
-        previous_owner = await self.bot.db.waifu_get_owner(target_id)
+        previous_owner = await self.bot.db.waifu.get_owner(target_id)
 
-        await self.bot.db.economy_update_balance(claimer_id, -cost)
+        await self.bot.db.economy.update_balance(claimer_id, -cost)
 
         new_value = int(target_data["value"] * 1.2)
-        await self.bot.db.waifu_claim_target(claimer_id, target_id, new_value)
+        await self.bot.db.waifu.claim_target(claimer_id, target_id, new_value)
 
         pronoun = target_data.get("pronoun", "waifu")
         msg = f"💖 ¡Has reclamado a **{usuario.display_name}** como tu **{pronoun}** por **{cost} Choskris**!"
@@ -220,7 +220,7 @@ class WaifuCog(commands.Cog):
     @waifu_group.command(name="divorcio", description="Te divorcias de la waifu/husbando que tienes actualmente reclamado/a.")
     async def divorce(self, interaction: discord.Interaction):
         claimer_id = interaction.user.id
-        claimer_data = await self.bot.db.waifu_get_user(claimer_id)
+        claimer_data = await self.bot.db.waifu.get_user(claimer_id)
 
         target_id = claimer_data.get("claim")
         if not target_id:
@@ -230,8 +230,8 @@ class WaifuCog(commands.Cog):
         target_user = self.bot.get_user(target_id)
         target_name = target_user.display_name if target_user else f"ID {target_id}"
 
-        had_affinity = await self.bot.db.waifu_is_affinity_active(claimer_id, target_id)
-        await self.bot.db.waifu_divorce(claimer_id)
+        had_affinity = await self.bot.db.waifu.is_affinity_active(claimer_id, target_id)
+        await self.bot.db.waifu.divorce(claimer_id)
 
         msg = f"💔 Te has divorciado de **{target_name}**. Ahora ambos están libres para ser reclamados."
         if had_affinity:
@@ -242,16 +242,16 @@ class WaifuCog(commands.Cog):
     @waifu_group.command(name="liberarse", description="Fuerzas tu propia liberación pagando tu valor actual.")
     async def unclaim(self, interaction: discord.Interaction):
         waifu_id = interaction.user.id
-        owner_data = await self.bot.db.waifu_get_owner(waifu_id)
+        owner_data = await self.bot.db.waifu.get_owner(waifu_id)
 
         if not owner_data:
             await interaction.response.send_message("Nadie te ha reclamado actualmente.", ephemeral=True)
             return
 
         owner_id = owner_data["user_id"]
-        cost, had_affinity = await self.bot.db.waifu_get_effective_value(waifu_id, True)
+        cost, had_affinity = await self.bot.db.waifu.get_effective_value(waifu_id, True)
 
-        balance = await self.bot.db.economy_get_balance(waifu_id)
+        balance = await self.bot.db.economy.get_balance(waifu_id)
         if balance < cost:
             await interaction.response.send_message(
                 f"No tienes suficientes Choskris para liberarte.\n"
@@ -260,8 +260,8 @@ class WaifuCog(commands.Cog):
             )
             return
 
-        await self.bot.db.economy_update_balance(waifu_id, -cost)
-        await self.bot.db.waifu_force_unclaim(waifu_id, owner_id)
+        await self.bot.db.economy.update_balance(waifu_id, -cost)
+        await self.bot.db.waifu.force_unclaim(waifu_id, owner_id)
 
         owner_user = self.bot.get_user(owner_id)
         owner_name = owner_user.display_name if owner_user else f"ID {owner_id}"
@@ -283,12 +283,12 @@ class WaifuCog(commands.Cog):
             await interaction.response.send_message("No puedes bloquearte a ti mismo/a.", ephemeral=True)
             return
 
-        await self.bot.db.waifu_add_block(interaction.user.id, usuario.id)
+        await self.bot.db.waifu.add_block(interaction.user.id, usuario.id)
         await interaction.response.send_message(f"🚫 Has bloqueado a **{usuario.display_name}**. Ya no podrá reclamarte.", ephemeral=True)
 
     @waifu_group.command(name="desbloquear", description="Desbloquea a un usuario para permitirle que pueda reclamarte.")
     async def unblock(self, interaction: discord.Interaction, usuario: discord.Member):
-        unblocked = await self.bot.db.waifu_remove_block(interaction.user.id, usuario.id)
+        unblocked = await self.bot.db.waifu.remove_block(interaction.user.id, usuario.id)
 
         if unblocked:
             await interaction.response.send_message(f"✅ Has desbloqueado a **{usuario.display_name}**. Ahora puede volver a reclamarte.", ephemeral=True)
@@ -299,7 +299,7 @@ class WaifuCog(commands.Cog):
     async def gift(self, interaction: discord.Interaction):
         await interaction.response.defer()
 
-        owner_data = await self.bot.db.waifu_get_user(interaction.user.id)
+        owner_data = await self.bot.db.waifu.get_user(interaction.user.id)
         if not owner_data or not owner_data.get("claim"):
             await interaction.followup.send("No has reclamado a nadie aún, debes tener a alguien reclamado para poder regalar", ephemeral=True)
             return
@@ -335,7 +335,7 @@ class WaifuCog(commands.Cog):
         app_commands.Choice(name="Husbando", value="husbando")
     ])
     async def set_pronoun(self, interaction: discord.Interaction, opcion: app_commands.Choice[str]):
-        await self.bot.db.waifu_set_pronoun(interaction.user.id, opcion.value)
+        await self.bot.db.waifu.set_pronoun(interaction.user.id, opcion.value)
         await interaction.response.send_message(f"👤 Tu identidad se ha actualizado a: **{opcion.name}**.", ephemeral=True)
 
     @waifu_group.command(name="perfil", description="Muestra el perfil detallado de waifu/husbando de un usuario.")
@@ -343,13 +343,13 @@ class WaifuCog(commands.Cog):
         target = usuario or interaction.user
         target_id = target.id
 
-        u_data = await self.bot.db.waifu_get_user(target_id)
+        u_data = await self.bot.db.waifu.get_user(target_id)
 
         pronoun_raw = u_data.get("pronoun", "waifu")
         pronoun_label = "Waifu 🌸" if pronoun_raw == "waifu" else "Husbando 🕺"
 
         base_value = u_data["value"]
-        effective_value, is_affinity = await self.bot.db.waifu_get_effective_value(target_id)
+        effective_value, is_affinity = await self.bot.db.waifu.get_effective_value(target_id)
 
         claimed_id = u_data.get("claim")
         claimed_str = "*Nadie*"
@@ -357,13 +357,13 @@ class WaifuCog(commands.Cog):
             claimed_user = self.bot.get_user(claimed_id)
             claimed_str = f"💖 *{claimed_user.mention}*"
 
-        owner_data = await self.bot.db.waifu_get_owner(target_id)
+        owner_data = await self.bot.db.waifu.get_owner(target_id)
         owner_str = "*Nadie (Libre)*"
         if owner_data:
             owner_user = self.bot.get_user(owner_data["user_id"])
             owner_str = f"👑 *{owner_user.mention}*"
 
-        gifts = await self.bot.db.waifu_get_gifts(target_id)
+        gifts = await self.bot.db.waifu.get_gifts(target_id)
         if gifts:
             gifts_formatted = [f"• **{item}**: x{amount}" for item, amount in gifts]
             gifts_str = "\n".join(gifts_formatted)
@@ -399,7 +399,7 @@ class WaifuCog(commands.Cog):
     async def top(self, interaction: discord.Interaction):
         await interaction.response.defer()
 
-        top_users = await self.bot.db.waifu_get_top_users(limit=10)
+        top_users = await self.bot.db.waifu.get_top_users(limit=10)
 
         if not top_users:
             await interaction.followup.send("🏆 Aún no hay registrado ningún usuario en el sistema de waifus.", ephemeral=True)

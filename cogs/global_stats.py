@@ -19,10 +19,10 @@ class GlobalStatsCog(commands.Cog):
     async def _resolve_stats(self, target: Optional[discord.User], author: discord.User) -> tuple[dict, str, str]:
         user = target or author
         if user.id == self.bot.user.id:
-            data = await self.bot.db.global_fetch_aggregate_stats()
+            data = await self.bot.db.stats.fetch_aggregate()
             label = "Todos los Usuarios"
         else:
-            data = await self.bot.db.global_fetch_user_stats(user.id)
+            data = await self.bot.db.stats.fetch_user(user.id)
             label = user.display_name
         return data, label, user.display_avatar.url
 

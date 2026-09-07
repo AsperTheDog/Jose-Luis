@@ -6,7 +6,7 @@ import time
 import random
 
 from main import JoseLuisBot
-from database import BOT_RACE_HOUSE_SEED
+from db import BOT_RACE_HOUSE_SEED
 
 TRACK_LENGTH = 1000.0
 RACE_TIMES = [datetime.time(hour=h, minute=m) for h in range(24) for m in (0, 30)]
@@ -38,22 +38,22 @@ class HorseBetCog(commands.Cog):
         now = datetime.datetime.now()
         today_date = now.strftime("%Y-%m-%d")
 
-        unprocessed_dates = await self.bot.db.betting_get_unprocessed_dates()
+        unprocessed_dates = await self.bot.db.betting.get_unprocessed_dates()
         for old_date in unprocessed_dates:
-            race = await self.bot.db.betting_get_race(old_date)
+            race = await self.bot.db.betting.get_race(old_date)
             if race:
                 winner = sorted(race, key=lambda h: (-h['distance'], h['finish_time'] or float('inf')))[0]
-                resolved_bets = await self.bot.db.betting_resolve_payouts(old_date, winner['horse_id'])
+                resolved_bets = await self.bot.db.betting.resolve_payouts(old_date, winner['horse_id'])
                 for bet in resolved_bets:
                     if bet['won']:
                         await self.bot.global_stats.register_bet_won(bet['user_id'], bet['payout'])
                     else:
                         await self.bot.global_stats.register_bet_lost(bet['user_id'])
 
-        today_race = await self.bot.db.betting_get_race(today_date)
+        today_race = await self.bot.db.betting.get_race(today_date)
         if not today_race:
-            await self.bot.db.betting_create_race(today_date, self.generate_horses())
-            today_race = await self.bot.db.betting_get_race(today_date)
+            await self.bot.db.betting.create_race(today_date, self.generate_horses())
+            today_race = await self.bot.db.betting.get_race(today_date)
 
         if 12 <= now.hour <= 23:
             for horse in today_race:
@@ -80,22 +80,22 @@ class HorseBetCog(commands.Cog):
 
                     finish_timestamp = time.time() + fraction_of_tick
 
-                await self.bot.db.betting_update_horse_distance(today_date, horse['horse_id'], new_distance, finished, finish_timestamp)
+                await self.bot.db.betting.update_horse_distance(today_date, horse['horse_id'], new_distance, finished, finish_timestamp)
 
     @race_loop.before_loop
     async def before_race_loop(self):
         await self.bot.wait_until_ready()
         today_date = datetime.datetime.now().strftime("%Y-%m-%d")
-        race = await self.bot.db.betting_get_race(today_date)
+        race = await self.bot.db.betting.get_race(today_date)
         if not race:
-            await self.bot.db.betting_create_race(today_date, self.generate_horses())
+            await self.bot.db.betting.create_race(today_date, self.generate_horses())
 
     @caballos_group.command(name="carreras", description="Mira el estado de la carrera de hoy y el pozo de apuestas.")
     async def carreras(self, interaction: discord.Interaction):
         now = datetime.datetime.now().astimezone()
         today_date = now.strftime("%Y-%m-%d")
         today_12 = now.replace(hour=12, minute=0, second=0, microsecond=0)
-        race = await self.bot.db.betting_get_race(today_date)
+        race = await self.bot.db.betting.get_race(today_date)
 
         if not race:
             embed = discord.Embed(
@@ -106,7 +106,7 @@ class HorseBetCog(commands.Cog):
             await interaction.response.send_message(embed=embed)
             return
 
-        bet_rows = await self.bot.db.betting_get_race_bets_summary(today_date)
+        bet_rows = await self.bot.db.betting.get_race_bets_summary(today_date)
         bets_by_horse = {row['horse_id']: row['total_bet'] for row in bet_rows}
 
         total_player_pool = sum(bets_by_horse.values())
@@ -186,7 +186,7 @@ class HorseBetCog(commands.Cog):
             target_dt = tomorrow.replace(hour=12, minute=0, second=0, microsecond=0)
             time_label = f"**MAÑANA** ({discord.utils.format_dt(target_dt, 'R')})"
 
-        success = await self.bot.db.betting_place_bet(interaction.user.id, target_date, caballo, cantidad)
+        success = await self.bot.db.betting.place_bet(interaction.user.id, target_date, caballo, cantidad)
 
         if not success:
             embed = discord.Embed(
@@ -211,7 +211,7 @@ class HorseBetCog(commands.Cog):
 
     @caballos_group.command(name="ultimacarrera", description="Mira los resultados de la última carrera completada.")
     async def ultimacarrera(self, interaction: discord.Interaction):
-        last_date, race = await self.bot.db.betting_get_last_race()
+        last_date, race = await self.bot.db.betting.get_last_race()
 
         if not race:
             embed = discord.Embed(
@@ -247,7 +247,7 @@ class HorseBetCog(commands.Cog):
 
     @caballos_group.command(name="misapuestas", description="Consulta tu historial de apuestas y resultados.")
     async def misapuestas(self, interaction: discord.Interaction):
-        history = await self.bot.db.betting_get_user_history(interaction.user.id)
+        history = await self.bot.db.betting.get_user_history(interaction.user.id)
 
         if not history:
             embed = discord.Embed(

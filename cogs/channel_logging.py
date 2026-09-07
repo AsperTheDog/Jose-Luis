@@ -1,4 +1,4 @@
-from typing import Optional, Callable, Dict, Awaitable
+from typing import Optional
 import discord
 from discord import app_commands, DMChannel
 from discord.ext import commands
@@ -16,23 +16,22 @@ class LoggingCog(commands.Cog):
         self.bot = bot
 
     async def _get_log_channel(self, guild: discord.Guild, category: str) -> Optional[discord.TextChannel]:
-        log_channel_id = await self.bot.config.get_log_channel_id(guild.id)
+        log_channel_id = await self.bot.db.guild.get(guild.id, "log_channel_id")
         if not log_channel_id:
             return None
 
-        category_map: Dict[str, Callable[[int], Awaitable[bool]]] = {
-            "messages": self.bot.config.get_event_mensajes,
-            "mensajes": self.bot.config.get_event_mensajes,
-            "members": self.bot.config.get_event_miembros,
-            "miembros": self.bot.config.get_event_miembros,
-            "moderation": self.bot.config.get_event_moderacion,
-            "moderación": self.bot.config.get_event_moderacion,
-            "channels": self.bot.config.get_event_canales,
-            "canales": self.bot.config.get_event_canales,
-        }
+        column = {
+            "messages": "event_mensajes",
+            "mensajes": "event_mensajes",
+            "members": "event_miembros",
+            "miembros": "event_miembros",
+            "moderation": "event_moderacion",
+            "moderación": "event_moderacion",
+            "channels": "event_canales",
+            "canales": "event_canales",
+        }.get(category)
 
-        checker = category_map.get(category)
-        if checker and not await checker(guild.id):
+        if column and not await self.bot.db.guild.get(guild.id, column):
             return None
 
         return await guild.fetch_channel(log_channel_id)
@@ -41,7 +40,7 @@ class LoggingCog(commands.Cog):
     async def set_log_channel(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
 
-        self.bot.config.set_log_channel_id(interaction.guild.id, interaction.channel_id)
+        await self.bot.db.guild.set(interaction.guild.id, "log_channel_id", interaction.channel_id)
 
         embed = discord.Embed(
             title="Logging activado",
@@ -54,7 +53,7 @@ class LoggingCog(commands.Cog):
     async def disable_logging(self, interaction: discord.Interaction):
         if await self.bot.filter_operators(interaction): return
 
-        self.bot.config.set_log_channel_id(interaction.guild_id, None)
+        await self.bot.db.guild.set(interaction.guild_id, "log_channel_id", None)
 
         embed = discord.Embed(
             title="Logging desactivado",
@@ -68,10 +67,10 @@ class LoggingCog(commands.Cog):
         if await self.bot.filter_operators(interaction): return
 
         guild_id = interaction.guild.id
-        self.bot.config.set_event_mensajes(guild_id, messages)
-        self.bot.config.set_event_miembros(guild_id, members)
-        self.bot.config.set_event_moderacion(guild_id, moderation)
-        self.bot.config.set_event_canales(guild_id, channels)
+        await self.bot.db.guild.set(guild_id, "event_mensajes", messages)
+        await self.bot.db.guild.set(guild_id, "event_miembros", members)
+        await self.bot.db.guild.set(guild_id, "event_moderacion", moderation)
+        await self.bot.db.guild.set(guild_id, "event_canales", channels)
 
         embed = discord.Embed(title="Actualizada configuración de logs", color=discord.Color.blue())
         events_status = {

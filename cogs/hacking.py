@@ -418,7 +418,7 @@ class CyberHackCog(commands.Cog):
                         payout = engine.base_payout
 
                     daily_deduct_msg = ""
-                    if await self.bot.db.hacking_is_over_threshold(user_id, 3000):
+                    if await self.bot.db.hacking.is_over_threshold(user_id, 3000):
                         payout = int(payout * 0.1)
                         daily_deduct_msg = "\n⚠️ Has pasado los 3000 choskris de recompensa hoy, recompensa reducida"
 
@@ -432,8 +432,8 @@ class CyberHackCog(commands.Cog):
                             f"💰 **Recompensa:** **${payout:,}** choskris{daily_deduct_msg}"
                     )
 
-                    await self.bot.db.economy_update_balance(user_id, payout)
-                    await self.bot.db.hacking_add_win(user_id, payout)
+                    await self.bot.db.economy.update_balance(user_id, payout)
+                    await self.bot.db.hacking.add_win(user_id, payout)
                     await self.bot.global_stats.register_hack_win(user_id, diff_val, payout, elapsed_time)
                 else:
                     result_embed.title = "💥 BLOQUEO DEL SISTEMA"
@@ -481,7 +481,7 @@ class CyberHackCog(commands.Cog):
 
     @tasks.loop(time=datetime.time(hour=0, minute=0, second=0))
     async def daily_reset_task(self):
-        await self.bot.db.hacking_reset_daily()
+        await self.bot.db.hacking.reset_daily()
 
     @daily_reset_task.before_loop
     async def before_daily_interest(self):

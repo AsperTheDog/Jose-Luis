@@ -67,7 +67,7 @@ class UtilityCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         async def run_db_query(sql: str) -> tuple[str, Any, Any]:
-            async with self.bot.db.db.execute(sql) as cursor:
+            async with self.bot.db.execute(sql) as cursor:
                 if cursor.description:
                     columns = [desc[0] for desc in cursor.description]
                     rows = await cursor.fetchall()
@@ -76,7 +76,7 @@ class UtilityCog(commands.Cog):
 
                 affected_rows = cursor.rowcount
 
-            await self.bot.db.db.commit()
+            await self.bot.db.commit()
             return "MUTATION", affected_rows, None
 
         try:
@@ -134,8 +134,8 @@ class UtilityCog(commands.Cog):
     async def execsqlscript(self, interaction: discord.Interaction, script: str):
         if await self.bot.filter_owner(interaction): return
 
-        await self.bot.db.db.executescript(script)
-        await self.bot.db.db.commit()
+        await self.bot.db.executescript(script)
+        await self.bot.db.commit()
 
         await interaction.response.send_message("Script SQL ejecutado correctamente.", ephemeral=True)
 
@@ -152,8 +152,8 @@ class UtilityCog(commands.Cog):
         try:
             sql_content = (await file.read()).decode("utf-8")
 
-            await self.bot.db.db.executescript(sql_content)
-            await self.bot.db.db.commit()
+            await self.bot.db.executescript(sql_content)
+            await self.bot.db.commit()
 
             await interaction.followup.send("Script SQL ejecutado correctamente.", ephemeral=True)
         except Exception as e:

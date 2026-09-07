@@ -376,7 +376,7 @@ class GachaCog(commands.Cog):
 
     async def unit_name_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         current_lower = current.lower()
-        all_units = await self.bot.db.gacha_get_all_unit_definitions()
+        all_units = await self.bot.db.gacha.get_all_unit_definitions()
         matches = [data for data in all_units.values() if current_lower in data["name"].lower()]
         matches.sort(key=lambda d: (-d["rarity"], d["name"]))
         return [
@@ -391,7 +391,7 @@ class GachaCog(commands.Cog):
         await interaction.response.defer(thinking=True)
 
         app_emojis = await interaction.client.fetch_application_emojis()
-        fixed = await self.bot.db.gacha_fix_missing_emojis(app_emojis)
+        fixed = await self.bot.db.gacha.fix_missing_emojis(app_emojis)
 
         if fixed > 0:
             await interaction.followup.send(
@@ -449,7 +449,7 @@ class GachaCog(commands.Cog):
             )
             return
 
-        existing = await self.bot.db.gacha_get_unit_definition(unit_id)
+        existing = await self.bot.db.gacha.get_unit_definition(unit_id)
         if existing:
             await interaction.followup.send(
                 embed=discord.Embed(description=f"⚠️ Ya existe un personaje con el ID `{unit_id}`.", color=discord.Color.orange()),
@@ -457,7 +457,7 @@ class GachaCog(commands.Cog):
             )
             return
 
-        existing_name = await self.bot.db.gacha_get_unit_definition_by_name(nombre)
+        existing_name = await self.bot.db.gacha.get_unit_definition_by_name(nombre)
         if existing_name:
             await interaction.followup.send(
                 embed=discord.Embed(description=f"⚠️ Ya existe un personaje con el nombre **{nombre}**. Los nombres deben ser únicos.", color=discord.Color.orange()),
@@ -475,7 +475,7 @@ class GachaCog(commands.Cog):
             return
 
         rarity = rareza.value
-        created = await self.bot.db.gacha_add_unit_definition(unit_id, nombre, frase, interprete, rarity, fuente, str(emoji_obj))
+        created = await self.bot.db.gacha.add_unit_definition(unit_id, nombre, frase, interprete, rarity, fuente, str(emoji_obj))
         if not created:
             await interaction.followup.send(
                 embed=discord.Embed(description=f"⚠️ Ocurrió un error al intentar registrar el personaje `{unit_id}`.", color=discord.Color.red()),
@@ -501,7 +501,7 @@ class GachaCog(commands.Cog):
     async def remove_unit(self, interaction: discord.Interaction, personaje: str):
         if await self.bot.filter_operators(interaction): return
 
-        data = await self.bot.db.gacha_get_unit_definition_by_name(personaje)
+        data = await self.bot.db.gacha.get_unit_definition_by_name(personaje)
         if not data:
             await interaction.response.send_message(
                 embed=discord.Embed(description="⚠️ Ese personaje no existe. Escribe el nombre completo y exacto.", color=discord.Color.orange()),
@@ -524,7 +524,7 @@ class GachaCog(commands.Cog):
         if not view.confirmed:
             return
 
-        await self.bot.db.gacha_delete_unit_definition(unit_id)
+        await self.bot.db.gacha.delete_unit_definition(unit_id)
 
         for rarity in (2, 3, 4, 5):
             framed_path = os.path.join(FRAMED_FOLDER, f"{unit_id}_{rarity}s.png")
@@ -557,7 +557,7 @@ class GachaCog(commands.Cog):
 
         self.active_throws.add(user_id)
         try:
-            all_units = await self.bot.db.gacha_get_all_unit_definitions()
+            all_units = await self.bot.db.gacha.get_all_unit_definitions()
             if not all_units:
                 await interaction.response.send_message(
                     embed=discord.Embed(description="⚠️ Todavía no hay personajes registrados en el sistema gacha.", color=discord.Color.orange()),
@@ -573,7 +573,7 @@ class GachaCog(commands.Cog):
             count = veces.value
             cost = self.registry.throw_cost if count == 1 else self.registry.multi_throw_cost
 
-            balance = await self.bot.db.economy_get_balance(user_id)
+            balance = await self.bot.db.economy.get_balance(user_id)
             if balance < cost:
                 await interaction.response.send_message(
                     embed=discord.Embed(description=f"⚠️ No tienes suficientes choskris. Necesitas **{cost:,}** y tienes **{balance:,}**.", color=discord.Color.red()),
@@ -584,7 +584,7 @@ class GachaCog(commands.Cog):
             boost_total_cost = self.registry.boost_cost_dust * count
             use_boost = False
             if potenciar:
-                dust = await self.bot.db.gacha_get_dust(user_id)
+                dust = await self.bot.db.gacha.get_dust(user_id)
                 if dust < boost_total_cost:
                     await interaction.response.send_message(
                         embed=discord.Embed(description=f"⚠️ No tienes suficiente polvo gacha para potenciar. Necesitas **{boost_total_cost:,}** y tienes **{dust:,}**.", color=discord.Color.red()),
@@ -593,9 +593,9 @@ class GachaCog(commands.Cog):
                     return
                 use_boost = True
 
-            await self.bot.db.economy_update_balance(user_id, -cost)
+            await self.bot.db.economy.update_balance(user_id, -cost)
             if use_boost:
-                await self.bot.db.gacha_add_dust(user_id, -boost_total_cost)
+                await self.bot.db.gacha.add_dust(user_id, -boost_total_cost)
                 await self.bot.global_stats.register_gacha_dust_spent(user_id, boost_total_cost)
 
             await self.bot.global_stats.register_gacha_throw(user_id, count, cost, use_boost)
@@ -621,7 +621,7 @@ class GachaCog(commands.Cog):
             for _ in range(count):
                 rarity = self.registry.roll_rarity(use_boost, available_rarities)
                 unit_id = random.choice(units_by_rarity[rarity])
-                await self.bot.db.gacha_add_shard(user_id, unit_id, 1)
+                await self.bot.db.gacha.add_shard(user_id, unit_id, 1)
                 await self.bot.global_stats.register_gacha_shard_obtained(user_id, rarity)
                 results.append((unit_id, rarity))
 
@@ -670,7 +670,7 @@ class GachaCog(commands.Cog):
     @app_commands.describe(personaje="Nombre del personaje", cantidad="Cantidad de fragmentos a destruir")
     @app_commands.autocomplete(personaje=unit_name_autocomplete)
     async def destroy_shards(self, interaction: discord.Interaction, personaje: str, cantidad: app_commands.Range[int, 1, 9999] = 1):
-        data = await self.bot.db.gacha_get_unit_definition_by_name(personaje)
+        data = await self.bot.db.gacha.get_unit_definition_by_name(personaje)
         if not data:
             await interaction.response.send_message(
                 embed=discord.Embed(description="⚠️ Ese personaje no existe. Escribe el nombre completo y exacto.", color=discord.Color.orange()),
@@ -679,9 +679,9 @@ class GachaCog(commands.Cog):
             return
 
         unit_id = data["unit_id"]
-        removed = await self.bot.db.gacha_remove_shards(interaction.user.id, unit_id, cantidad)
+        removed = await self.bot.db.gacha.remove_shards(interaction.user.id, unit_id, cantidad)
         if not removed:
-            owned = await self.bot.db.gacha_get_shard_count(interaction.user.id, unit_id)
+            owned = await self.bot.db.gacha.get_shard_count(interaction.user.id, unit_id)
             await interaction.response.send_message(
                 embed=discord.Embed(description=f"⚠️ No tienes suficientes fragmentos de **{data['name']}** (tienes {owned}, necesitas {cantidad}).", color=discord.Color.orange()),
                 ephemeral=True
@@ -689,7 +689,7 @@ class GachaCog(commands.Cog):
             return
 
         dust_gained = self.registry.dust_per_shard[data["rarity"]] * cantidad
-        await self.bot.db.gacha_add_dust(interaction.user.id, dust_gained)
+        await self.bot.db.gacha.add_dust(interaction.user.id, dust_gained)
         await self.bot.global_stats.register_gacha_shard_destroyed(interaction.user.id, cantidad, dust_gained)
 
         embed = discord.Embed(
@@ -702,7 +702,7 @@ class GachaCog(commands.Cog):
     @app_commands.describe(personaje="Nombre del personaje", cantidad="Cuántas unidades crear de una vez")
     @app_commands.autocomplete(personaje=unit_name_autocomplete)
     async def craft_unit(self, interaction: discord.Interaction, personaje: str, cantidad: app_commands.Range[int, 1, 999] = 1):
-        data = await self.bot.db.gacha_get_unit_definition_by_name(personaje)
+        data = await self.bot.db.gacha.get_unit_definition_by_name(personaje)
         if not data:
             await interaction.response.send_message(
                 embed=discord.Embed(description="⚠️ Ese personaje no existe. Escribe el nombre completo y exacto.", color=discord.Color.orange()),
@@ -712,19 +712,19 @@ class GachaCog(commands.Cog):
 
         unit_id = data["unit_id"]
         needed = self.registry.shards_per_unit * cantidad
-        removed = await self.bot.db.gacha_remove_shards(interaction.user.id, unit_id, needed)
+        removed = await self.bot.db.gacha.remove_shards(interaction.user.id, unit_id, needed)
         if not removed:
-            owned = await self.bot.db.gacha_get_shard_count(interaction.user.id, unit_id)
+            owned = await self.bot.db.gacha.get_shard_count(interaction.user.id, unit_id)
             await interaction.response.send_message(
                 embed=discord.Embed(description=f"⚠️ No tienes suficientes fragmentos de **{data['name']}** (tienes {owned}, necesitas {needed}).", color=discord.Color.orange()),
                 ephemeral=True
             )
             return
 
-        await self.bot.db.gacha_add_unit(interaction.user.id, unit_id, cantidad)
+        await self.bot.db.gacha.add_unit(interaction.user.id, unit_id, cantidad)
         await self.bot.global_stats.register_gacha_unit_crafted(interaction.user.id, cantidad)
 
-        total_units = await self.bot.db.gacha_get_unit_count(interaction.user.id, unit_id)
+        total_units = await self.bot.db.gacha.get_unit_count(interaction.user.id, unit_id)
         embed = discord.Embed(
             description=f"✨ Has creado **{cantidad}x** {data['emoji']} **{data['name']}**. Ahora tienes **{total_units}** unidad(es) de este personaje.",
             color=discord.Color.green()
@@ -741,7 +741,7 @@ class GachaCog(commands.Cog):
     ])
     async def batch_destroy(self, interaction: discord.Interaction, rareza: Optional[app_commands.Choice[int]] = None):
         user_id = interaction.user.id
-        shards = await self.bot.db.gacha_get_shards(user_id)
+        shards = await self.bot.db.gacha.get_shards(user_id)
 
         if not shards:
             await interaction.response.send_message(
@@ -752,7 +752,7 @@ class GachaCog(commands.Cog):
 
         await interaction.response.defer()
 
-        all_units = await self.bot.db.gacha_get_all_unit_definitions()
+        all_units = await self.bot.db.gacha.get_all_unit_definitions()
         target_rarity = rareza.value if rareza else None
 
         total_shards_destroyed = 0
@@ -768,7 +768,7 @@ class GachaCog(commands.Cog):
 
             dust_val = self.registry.dust_per_shard[unit_data["rarity"]] * amount
 
-            await self.bot.db.gacha_remove_shards(user_id, unit_id, amount)
+            await self.bot.db.gacha.remove_shards(user_id, unit_id, amount)
             total_shards_destroyed += amount
             total_dust_gained += dust_val
 
@@ -778,7 +778,7 @@ class GachaCog(commands.Cog):
             )
             return
 
-        await self.bot.db.gacha_add_dust(user_id, total_dust_gained)
+        await self.bot.db.gacha.add_dust(user_id, total_dust_gained)
         await self.bot.global_stats.register_gacha_shard_destroyed(user_id, total_shards_destroyed, total_dust_gained)
 
         msg = f"💨 Has destruido masivamente **{total_shards_destroyed}x** fragmento(s)"
@@ -798,7 +798,7 @@ class GachaCog(commands.Cog):
     ])
     async def batch_craft(self, interaction: discord.Interaction, rareza: Optional[app_commands.Choice[int]] = None):
         user_id = interaction.user.id
-        shards = await self.bot.db.gacha_get_shards(user_id)
+        shards = await self.bot.db.gacha.get_shards(user_id)
 
         if not shards:
             await interaction.response.send_message(
@@ -809,7 +809,7 @@ class GachaCog(commands.Cog):
 
         await interaction.response.defer()
 
-        all_units = await self.bot.db.gacha_get_all_unit_definitions()
+        all_units = await self.bot.db.gacha.get_all_unit_definitions()
         target_rarity = rareza.value if rareza else None
 
         total_units_crafted = 0
@@ -827,8 +827,8 @@ class GachaCog(commands.Cog):
             if craftable_amount > 0:
                 shards_to_remove = craftable_amount * self.registry.shards_per_unit
 
-                await self.bot.db.gacha_remove_shards(user_id, unit_id, shards_to_remove)
-                await self.bot.db.gacha_add_unit(user_id, unit_id, craftable_amount)
+                await self.bot.db.gacha.remove_shards(user_id, unit_id, shards_to_remove)
+                await self.bot.db.gacha.add_unit(user_id, unit_id, craftable_amount)
 
                 total_units_crafted += craftable_amount
                 total_shards_used += shards_to_remove
@@ -852,7 +852,7 @@ class GachaCog(commands.Cog):
     @app_commands.describe(personaje="Nombre del personaje")
     @app_commands.autocomplete(personaje=unit_name_autocomplete)
     async def inspect_unit(self, interaction: discord.Interaction, personaje: str):
-        data = await self.bot.db.gacha_get_unit_definition_by_name(personaje)
+        data = await self.bot.db.gacha.get_unit_definition_by_name(personaje)
         if not data:
             await interaction.response.send_message(
                 embed=discord.Embed(description="⚠️ Ese personaje no existe. Escribe el nombre completo y exacto.", color=discord.Color.orange()),
@@ -864,8 +864,8 @@ class GachaCog(commands.Cog):
 
         unit_id = data["unit_id"]
         rarity = data["rarity"]
-        shard_count = await self.bot.db.gacha_get_shard_count(interaction.user.id, unit_id)
-        unit_count = await self.bot.db.gacha_get_unit_count(interaction.user.id, unit_id)
+        shard_count = await self.bot.db.gacha.get_shard_count(interaction.user.id, unit_id)
+        unit_count = await self.bot.db.gacha.get_unit_count(interaction.user.id, unit_id)
 
         embed = discord.Embed(
             title=f"{data['emoji']} {data['name']}",
@@ -889,7 +889,7 @@ class GachaCog(commands.Cog):
 
     @gacha_group.command(name="listar", description="Muestra el catálogo completo de personajes registrados en el sistema gacha")
     async def list_units(self, interaction: discord.Interaction):
-        all_units = await self.bot.db.gacha_get_all_unit_definitions()
+        all_units = await self.bot.db.gacha.get_all_unit_definitions()
         if not all_units:
             await interaction.response.send_message(
                 embed=discord.Embed(description="⚠️ Todavía no hay personajes registrados en el sistema gacha.", color=discord.Color.orange()),
@@ -925,8 +925,8 @@ class GachaCog(commands.Cog):
     @app_commands.describe(usuario="Usuario cuya colección quieres ver (opcional)")
     async def collection(self, interaction: discord.Interaction, usuario: Optional[discord.Member] = None):
         target = usuario or interaction.user
-        units_owned = await self.bot.db.gacha_get_units(target.id)
-        all_units = await self.bot.db.gacha_get_all_unit_definitions()
+        units_owned = await self.bot.db.gacha.get_units(target.id)
+        all_units = await self.bot.db.gacha.get_all_unit_definitions()
 
         view = CollectionView(interaction.user.id, self.registry, target, units_owned, all_units)
         embed = view.build_summary_embed()
@@ -937,9 +937,9 @@ class GachaCog(commands.Cog):
     @app_commands.describe(usuario="Usuario cuyo inventario quieres ver (opcional)")
     async def shards_inventory(self, interaction: discord.Interaction, usuario: Optional[discord.Member] = None):
         target = usuario or interaction.user
-        shards = await self.bot.db.gacha_get_shards(target.id)
-        dust = await self.bot.db.gacha_get_dust(target.id)
-        all_units = await self.bot.db.gacha_get_all_unit_definitions()
+        shards = await self.bot.db.gacha.get_shards(target.id)
+        dust = await self.bot.db.gacha.get_dust(target.id)
+        all_units = await self.bot.db.gacha.get_all_unit_definitions()
 
         if not shards:
             embed = discord.Embed(title=f"🧩 Fragmentos de {target.display_name}", color=discord.Color.blurple())
@@ -987,8 +987,8 @@ class GachaCog(commands.Cog):
     async def ranking(self, interaction: discord.Interaction, modo: app_commands.Choice[str]):
         await interaction.response.defer()
 
-        all_rows = await self.bot.db.gacha_get_all_owned_units()
-        all_units = await self.bot.db.gacha_get_all_unit_definitions()
+        all_rows = await self.bot.db.gacha.get_all_owned_units()
+        all_units = await self.bot.db.gacha.get_all_unit_definitions()
         per_user: dict[int, dict[str, int]] = {}
         for user_id, unit_id, amount in all_rows:
             per_user.setdefault(user_id, {})[unit_id] = amount
