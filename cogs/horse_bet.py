@@ -242,7 +242,6 @@ class HorseBetCog(commands.Cog):
             results_text += f"{medals[i]} **{h['horse_name']}** *(Caballo #{h['horse_id']})*\n"
 
         embed.add_field(name="Clasificación Final", value=results_text, inline=False)
-        embed.set_thumbnail(url="https://cdn-icons-png.flaticon.com/512/3253/3253086.png")
 
         await interaction.response.send_message(embed=embed)
 
