@@ -154,6 +154,8 @@ class DBManager:
         "dice_money_gained", "dice_money_lost", "dice_bets_won", "dice_bets_lost",
         "slots_money_gained", "slots_money_lost", "slots_bets_won", "slots_bets_lost",
         "cards_money_gained", "cards_money_lost", "cards_bets_won", "cards_bets_lost",
+        "blackjack_money_gained", "blackjack_money_lost", "blackjack_hands_won",
+        "blackjack_hands_lost", "blackjack_hands_pushed", "blackjack_naturals",
         "money_given", "money_received", "money_spent", "money_obtained",
         "times_asked_allowance", "money_from_allowance", "times_worked", "money_from_work",
         "times_switched_jobs", "drops_claimed", "money_from_drops",
@@ -168,11 +170,15 @@ class DBManager:
         "gacha_throws", "gacha_boosted_throws", "gacha_shards_obtained_2", "gacha_shards_obtained_3",
         "gacha_shards_obtained_4", "gacha_shards_obtained_5", "gacha_units_crafted",
         "gacha_shards_destroyed", "gacha_dust_obtained", "gacha_dust_spent",
+        "betting_bets_placed", "betting_bets_won", "betting_bets_lost",
+        "betting_money_gained", "betting_money_lost",
     )
 
     _GLOBAL_STATS_MAX_COLUMNS = (
         "roulette_biggest_bet", "dice_biggest_bet", "slots_biggest_bet", "cards_biggest_bet",
+        "blackjack_biggest_bet",
         "biggest_money_gift", "highest_money_accumulated", "biggest_allowance_streak",
+        "betting_biggest_bet", "betting_biggest_win",
     )
 
     async def global_fetch_aggregate_stats(self) -> dict:
