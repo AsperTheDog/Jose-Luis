@@ -99,7 +99,7 @@ class HorseBetCog(commands.Cog):
 
         if not race:
             embed = discord.Embed(
-                title="🏇 Gran Premio de Tres Cantos",
+                title="🏇 Gran Premio de Pavonia",
                 description="Las inscripciones aún se están preparando.",
                 color=discord.Color.light_grey()
             )
@@ -126,7 +126,7 @@ class HorseBetCog(commands.Cog):
                 time_status = f"🟢 Empezó {discord.utils.format_dt(today_12, 'R')}"
 
         embed = discord.Embed(
-            title="🏇 Gran Premio de Tres Cantos",
+            title="🏇 Gran Premio de Pavonia",
             description=f"**Estado de la pista** ({today_date}) | **Meta:** {int(TRACK_LENGTH)}m\n{time_status}",
             color=discord.Color.brand_green()
         )

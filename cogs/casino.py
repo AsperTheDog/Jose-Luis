@@ -1058,7 +1058,7 @@ class CasinoCog(commands.Cog):
 
             current_balance = await self.bot.db.economy_get_balance(interaction.user.id)
             msg += f"\n💰 Saldo actual: **{current_balance}**"
-            
+
             await interaction.followup.send(
                 embed=discord.Embed(
                     title="🎲 Dados",
