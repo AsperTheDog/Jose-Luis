@@ -875,7 +875,7 @@ class CasinoCog(commands.Cog):
     @app_commands.describe(
         apuesta="Cantidad de choskris a apostar",
         color="Color al que quieres apostar (Rojo, Negro o Verde)",
-        numero="Número específico al que quieres apostar (0 a 36)"
+        numero="Número específico al que quieres apostar (0 a 36). Rellenar este parámetro ignora color"
     )
     @app_commands.choices(color=[
         app_commands.Choice(name="🔴 Rojo", value="rojo"),
@@ -918,22 +918,15 @@ class CasinoCog(commands.Cog):
             resultado_color = "negro"
             color_emoji = "⚫ Negro"
 
-        acerto_color = (color is not None and color == resultado_color)
-        acerto_numero = (numero is not None and numero == resultado_num)
-
         multiplier = 0
         pago_descripcion = ""
 
-        if color is not None and numero is not None:
-            if acerto_color and acerto_numero:
-                multiplier = 70
-                pago_descripcion = "¡Pleno Combinado!"
-        elif numero is not None:
-            if acerto_numero:
+        if numero is not None:
+            if numero == resultado_num:
                 multiplier = 36
                 pago_descripcion = "¡Pleno al Número!"
         elif color is not None:
-            if acerto_color:
+            if color == resultado_color:
                 if color == "verde":
                     multiplier = 36
                     pago_descripcion = "¡Acierto en Verde!"
@@ -976,7 +969,7 @@ class CasinoCog(commands.Cog):
             current_balance = await self.bot.db.economy.get_balance(interaction.user.id)
             msg += f"\n💰 Saldo actual: **{current_balance}**"
 
-            await interaction.followup.send(embed=discord.Embed(title="Ruleta", description=msg, color=discord.Color.red()))
+            await interaction.followup.send(embed=discord.Embed(title="🎡 Ruleta", description=msg, color=discord.Color.red()))
 
     @casino_group.command(name="dados", description="Lanza dos dados de 6 caras. Apuesta a suma exacta, alta/baja/7 o par/impar.")
     @app_commands.describe(
