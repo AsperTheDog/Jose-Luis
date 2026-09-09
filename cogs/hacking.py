@@ -418,9 +418,9 @@ class CyberHackCog(commands.Cog):
                         payout = engine.base_payout
 
                     daily_deduct_msg = ""
-                    if await self.bot.db.hacking.is_over_threshold(user_id, 3000):
+                    if await self.bot.db.hacking.is_over_threshold(user_id, 8000):
                         payout = int(payout * 0.1)
-                        daily_deduct_msg = "\n⚠️ Has pasado los 3000 choskris de recompensa hoy, recompensa reducida"
+                        daily_deduct_msg = "\n⚠️ Has pasado los 8000 choskris de recompensa hoy, recompensa reducida"
 
                     result_embed.title = "🎉 ¡NÚCLEO INFILTRADO CON ÉXITO!"
                     result_embed.colour = discord.Color.green()
