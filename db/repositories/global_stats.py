@@ -4,8 +4,6 @@ from db.repositories.base import BaseRepository
 
 
 class GlobalStatsRepository(BaseRepository):
-    """user_global_stats: per-user aggregate counters for every activity."""
-
     _SUM_COLUMNS = (
         "roulette_money_gained", "roulette_money_lost", "roulette_bets_won", "roulette_bets_lost",
         "dice_money_gained", "dice_money_lost", "dice_bets_won", "dice_bets_lost",

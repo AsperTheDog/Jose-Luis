@@ -85,6 +85,32 @@ class LoggingCog(commands.Cog):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
+    @app_commands.command(name="añadircanaldebug", description="Pone el canal actual como canal de errores del bot")
+    async def set_debug_channel(self, interaction: discord.Interaction):
+        if await self.bot.filter_operators(interaction): return
+
+        await self.bot.db.guild.set(interaction.guild.id, "debug_channel_id", interaction.channel_id)
+
+        embed = discord.Embed(
+            title="Canal de debug activado",
+            description=f"Los errores no controlados de los comandos se enviarán a este canal ({interaction.channel.mention}).",
+            color=discord.Color.green(),
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="quitarcanaldebug", description="Desactiva el canal de errores del bot")
+    async def clear_debug_channel(self, interaction: discord.Interaction):
+        if await self.bot.filter_operators(interaction): return
+
+        await self.bot.db.guild.set(interaction.guild.id, "debug_channel_id", None)
+
+        embed = discord.Embed(
+            title="Canal de debug desactivado",
+            description="Ya no enviaré errores no controlados de comandos a ningún canal.",
+            color=discord.Color.red(),
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
     @commands.Cog.listener()
     async def on_message_delete(self, message: discord.Message):
         if not message.guild:

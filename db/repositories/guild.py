@@ -5,6 +5,7 @@ from db.repositories.base import BaseRepository
 DEFAULT_CONFIG = {
     "admin_channel_id": 0,
     "log_channel_id": 0,
+    "debug_channel_id": 0,
     "death_channel_id": 0,
     "death_grace_seconds": 60.0,
     "global_cooldown_seconds": 600.0,
@@ -16,21 +17,20 @@ DEFAULT_CONFIG = {
 
 
 class GuildRepository(BaseRepository):
-    """Per-guild configuration columns plus operator and channel whitelists."""
-
     async def ensure_exists(self, guild_id: int) -> None:
         query = """
                 INSERT OR IGNORE INTO guild_config (
-                    guild_id, admin_channel_id, log_channel_id, death_channel_id,
-                    death_grace_seconds, global_cooldown_seconds,
+                    guild_id, admin_channel_id, log_channel_id, debug_channel_id,
+                    death_channel_id, death_grace_seconds, global_cooldown_seconds,
                     event_mensajes, event_miembros, event_moderacion, event_canales
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
         params = (
             guild_id,
             DEFAULT_CONFIG["admin_channel_id"],
             DEFAULT_CONFIG["log_channel_id"],
+            DEFAULT_CONFIG["debug_channel_id"],
             DEFAULT_CONFIG["death_channel_id"],
             DEFAULT_CONFIG["death_grace_seconds"],
             DEFAULT_CONFIG["global_cooldown_seconds"],

@@ -2,8 +2,6 @@ from db.repositories.base import BaseRepository
 
 
 class HackingRepository(BaseRepository):
-    """hacking_daily: per-day profit tracking for the hacking minigame."""
-
     async def add_win(self, user_id: int, profit: int) -> None:
         await self._db.execute(
             """INSERT INTO hacking_daily (user_id, profit) VALUES (?, ?)

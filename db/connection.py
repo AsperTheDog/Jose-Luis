@@ -1,17 +1,18 @@
 import json
 import os
+import sqlite3
 from typing import Any
 
 import aiosqlite
 
+from db.schema import parse_create_tables
+
+
+def _quote_identifier(name: str) -> str:
+    return '"' + name.replace('"', '""') + '"'
+
 
 class Database:
-    """Owns the SQLite connection lifecycle and shared low-level query helpers.
-
-    Repositories receive a ``Database`` and issue queries through it, so the
-    connection (and its ``row_factory``) is configured in exactly one place.
-    """
-
     def __init__(self, path: str = "bot_data.db"):
         self.path = path
         self.conn: aiosqlite.Connection | None = None
@@ -35,12 +36,49 @@ class Database:
             raise FileNotFoundError(f"Folder not found: {folder_path}")
 
         sql_files = sorted(f for f in os.listdir(folder_path) if f.endswith(".sql"))
+        definitions: dict[str, list[tuple[str, str]]] = {}
         for file_name in sql_files:
             file_path = os.path.join(folder_path, file_name)
             with open(file_path, "r", encoding="utf-8") as f:
                 sql_script = f.read()
             await self.conn.executescript(sql_script)
+            self._merge_table_definitions(definitions, parse_create_tables(sql_script))
         await self.conn.commit()
+        await self._add_missing_columns(definitions)
+
+    @staticmethod
+    def _merge_table_definitions(
+        target: dict[str, list[tuple[str, str]]],
+        parsed: dict[str, list[tuple[str, str]]],
+    ) -> None:
+        for table, columns in parsed.items():
+            known = {name for name, _ in target.setdefault(table, [])}
+            target[table].extend((name, definition) for name, definition in columns if name not in known)
+
+    async def _add_missing_columns(self, definitions: dict[str, list[tuple[str, str]]]) -> None:
+        added = 0
+        for table, columns in definitions.items():
+            async with self.conn.execute(f"PRAGMA table_info({_quote_identifier(table)})") as cursor:
+                existing = {row["name"] for row in await cursor.fetchall()}
+            if not existing:
+                continue
+
+            for name, definition in columns:
+                if name in existing:
+                    continue
+                try:
+                    await self.conn.execute(
+                        f"ALTER TABLE {_quote_identifier(table)} ADD COLUMN {definition}"
+                    )
+                except sqlite3.OperationalError as error:
+                    print(f"[db] No se pudo añadir la columna {table}.{name}: {error}")
+                else:
+                    existing.add(name)
+                    added += 1
+                    print(f"[db] Columna añadida: {table}.{name}")
+        await self.conn.commit()
+        if added:
+            print(f"[db] {added} columna(s) añadida(s) desde queries/init.")
 
     def execute(self, sql: str, parameters=None):
         return self.conn.execute(sql, parameters)

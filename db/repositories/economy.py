@@ -4,8 +4,6 @@ from db.repositories.base import BaseRepository
 
 
 class EconomyRepository(BaseRepository):
-    """economy_users / economy_jobs: balances, jobs, crime, interest and poker."""
-
     async def get_job_perk(self, user_job_id: str, perk_name: str, default: float, user_id: Optional[int] = None) -> float:
         def calc_level(job_level: float, val: float) -> float:
             if perk_name == "job_penalty":

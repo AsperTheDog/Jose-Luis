@@ -2,8 +2,6 @@ from db.repositories.base import BaseRepository
 
 
 class QuarantineRepository(BaseRepository):
-    """quarantine: users blocked from sending money."""
-
     async def is_quarantined(self, user_id: int) -> bool:
         async with self._db.execute("SELECT 1 FROM quarantine WHERE user_id = ?", (user_id,)) as cursor:
             return await cursor.fetchone() is not None

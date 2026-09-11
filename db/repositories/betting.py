@@ -4,8 +4,6 @@ BOT_RACE_HOUSE_SEED = 2000
 
 
 class BettingRepository(BaseRepository):
-    """horse_races / horse_bets: daily horse racing and parimutuel payouts."""
-
     async def create_race(self, race_date: str, horses: list[tuple]) -> None:
         await self._db.executemany(
             "INSERT OR IGNORE INTO horse_races (race_date, horse_id, horse_name, speed, stamina, clutch) VALUES (?, ?, ?, ?, ?, ?)",

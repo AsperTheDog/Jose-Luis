@@ -4,8 +4,6 @@ from db.repositories.base import BaseRepository
 
 
 class WaifuRepository(BaseRepository):
-    """waifu_users, waifu_blocks and waifu_gifts."""
-
     async def ensure_user(self, user_id: int, default_value: int = 1000) -> None:
         await self._db.execute(
             "INSERT OR IGNORE INTO waifu_users (user_id, pronoun, value, claim) VALUES (?, 'waifu', ?, NULL)",

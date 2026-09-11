@@ -2,8 +2,6 @@ from db.repositories.base import BaseRepository
 
 
 class TwitchRepository(BaseRepository):
-    """tracked_streamers: per-guild streamer notification destinations."""
-
     async def get_tracked_streamers(self) -> list[str]:
         async with self._db.execute("SELECT DISTINCT twitch_username FROM tracked_streamers") as cursor:
             rows = await cursor.fetchall()

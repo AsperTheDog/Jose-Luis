@@ -2,8 +2,6 @@ from db.repositories.base import BaseRepository
 
 
 class ActivityRepository(BaseRepository):
-    """user_stats: per-guild message/activity counters."""
-
     async def update_user_stats(self, guild_id: int, user_id: int, xp_gained: int, word_count: int, char_count: int, attachment_count: int, emoji_count: int) -> None:
         await self._db.execute("""INSERT INTO user_stats (guild_id, user_id, messages, xp, words, chars, attachments, emojis)
                                  VALUES (?, ?, 1, ?, ?, ?, ?, ?) ON CONFLICT(guild_id, user_id) DO UPDATE SET messages = messages + 1, xp = xp + excluded.xp,

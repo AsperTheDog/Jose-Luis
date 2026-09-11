@@ -7,8 +7,6 @@ from db.repositories.base import BaseRepository
 
 
 class PhraseRepository(BaseRepository):
-    """economy_phrases (random action phrases), text_lists and eightball_phrases."""
-
     async def get_random_phrase(self, category: str, tag: Optional[str] = None, add_enter: bool = True) -> str:
         async with self._db.execute("SELECT phrase FROM economy_phrases WHERE category = ? AND (tag IS NULL OR tag = '') ORDER BY RANDOM() LIMIT 1", (category,)) as cursor:
             no_tag_row = await cursor.fetchone()

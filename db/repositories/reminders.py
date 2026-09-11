@@ -4,8 +4,6 @@ from db.repositories.base import BaseRepository
 
 
 class ReminderRepository(BaseRepository):
-    """reminders and reminder_subscribers."""
-
     async def create(self, guild_id: int, channel_id: int, author_id: int, note: str, trigger_at: str) -> int:
         cursor = await self._db.execute(
             "INSERT INTO reminders (guild_id, channel_id, author_id, note, trigger_at) VALUES (?, ?, ?, ?, ?)",

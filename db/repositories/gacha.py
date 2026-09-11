@@ -7,8 +7,6 @@ from db.repositories.base import BaseRepository
 
 
 class GachaRepository(BaseRepository):
-    """gacha_unit_definitions plus per-user shards, owned units and dust."""
-
     async def add_unit_definition(self, unit_id: str, name: str, phrase: str, interpreter: str, rarity: int, source: str, emoji: str) -> bool:
         try:
             await self._db.execute(

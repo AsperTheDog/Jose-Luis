@@ -6,8 +6,6 @@ from db.repositories.base import BaseRepository
 
 
 class MiningRepository(BaseRepository):
-    """mining_users and the mining inventory tables (pickaxes, materials, valuables)."""
-
     async def ensure_user(self, user_id: int) -> None:
         await self._db.execute("INSERT OR IGNORE INTO mining_users (user_id) VALUES (?)", (user_id,))
         await self._db.commit()

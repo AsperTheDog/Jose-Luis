@@ -159,5 +159,10 @@ class UtilityCog(commands.Cog):
         except Exception as e:
             await interaction.followup.send(f"Error al ejecutar el script SQL:\n```py\n{e}\n```", ephemeral=True)
 
+    @utility_group.command(name="error")
+    async def causeerror(self, interaction: discord.Interaction):
+        if await self.bot.filter_owner(interaction): return
+        await interaction.response.send_message(f"{1/0}")
+
 async def setup(bot: JoseLuisBot):
     await bot.add_cog(UtilityCog(bot))

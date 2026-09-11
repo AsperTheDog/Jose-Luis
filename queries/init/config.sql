@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS guild_config (
     guild_id INTEGER PRIMARY KEY,
     admin_channel_id INTEGER NOT NULL DEFAULT 0,
     log_channel_id INTEGER DEFAULT 0,
+    debug_channel_id INTEGER DEFAULT 0,
     death_channel_id INTEGER NOT NULL DEFAULT 0,
     death_grace_seconds REAL NOT NULL DEFAULT 60.0,
     global_cooldown_seconds REAL NOT NULL DEFAULT 600.0,
