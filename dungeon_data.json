@@ -273,7 +273,7 @@
       "level": 3,
       "cost": 25,
       "cooldown": 1,
-      "desc": "Lanza un orbe ardiente de Pico de los Gigantes que prende e inflama al objetivo.",
+      "desc": "Lanza un orbe ardiente del Pico de los Gigantes que prende e inflama al objetivo.",
       "mods": [
         {"on": "ON_SKILL_USE", "if": {"type": "ALWAYS"}, "then": {"type": "DEAL_DAMAGE", "ratio": 1.0, "damage_type": "fuego", "target": "foe"}},
         {"on": "ON_SKILL_USE", "if": {"type": "ALWAYS"}, "then": {"type": "APPLY_STATUS", "tag": "BURN", "stacks": 2, "turns": 3, "target": "foe"}}

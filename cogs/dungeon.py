@@ -101,13 +101,9 @@ async def ensure_dungeon_access(interaction: discord.Interaction) -> bool:
 
     role_id = int(await bot.db.guild.get(interaction.guild.id, "dungeon_role_id") or 0)
     roles = getattr(interaction.user, "roles", [])
-    if role_id and any(role.id == role_id for role in roles):
+    if not role_id or (role_id and any(role.id == role_id for role in roles)):
         return True
-
-    if not role_id:
-        detail = "Un operador todavía no ha configurado el rol de acceso con `/mazmorra configuraracceso`."
-    else:
-        detail = f"Necesitas el rol <@&{role_id}> para entrar en la mazmorra."
+    detail = f"Necesitas el rol <@&{role_id}> para entrar en la mazmorra."
     await interaction.response.send_message(
         embed=discord.Embed(title="🔒 Acceso restringido", description=detail, color=discord.Color.dark_red()),
         ephemeral=True,
@@ -2076,7 +2072,7 @@ class DungeonCog(commands.Cog):
             value=(f"`/mazmorra explorar` - pelea; cada piso requiere derrotar {max(1, int(self.engine.cfg['enemies_per_floor']))} enemigos para despejarlo.\n"
                    "`/mazmorra jefe` - desafía al Jefe que bloquea cada 10 pisos (6h de espera tras ganar).\n"
                    "`/mazmorra avanzar` y `/mazmorra ajustes` - controlan el avance automático de piso.\n"
-                   "`/mazmorra entrenar` (XP pasivo), `/mazmorra practicar` (simulacro sin recompensas) y `/mazmorra anomalia` - requieren mutaciones."),
+                   "`/mazmorra entrenar`, `/mazmorra practicar` y `/mazmorra anomalia` - requieren mutaciones."),
             inline=False,
         )
         embed.add_field(
