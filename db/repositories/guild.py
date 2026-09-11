@@ -9,6 +9,7 @@ DEFAULT_CONFIG = {
     "death_channel_id": 0,
     "death_grace_seconds": 60.0,
     "global_cooldown_seconds": 600.0,
+    "dungeon_role_id": 0,
     "event_mensajes": True,
     "event_miembros": True,
     "event_moderacion": True,

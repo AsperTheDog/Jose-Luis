@@ -401,5 +401,69 @@ class GlobalStatsCog(commands.Cog):
 
         await interaction.response.send_message(embed=embed)
 
+    @stats_group.command(name="mazmorra", description="Mira estadísticas de la Mazmorra RPG")
+    async def stats_dungeon(self, interaction: discord.Interaction, target: Optional[discord.User] = None):
+        data, label, avatar_url = await self._resolve_stats(target, interaction.user)
+
+        embed = discord.Embed(
+            title=f"🏰 Mazmorra - {label}",
+            color=discord.Color.dark_teal(),
+        )
+        embed.set_thumbnail(url=avatar_url)
+
+        embed.add_field(
+            name="🗺️ Progreso",
+            value=(
+                f"**Pisos superados:** {data.get('dungeon_floors_cleared', 0):,}\n"
+                f"**Piso máximo:** {data.get('dungeon_highest_floor', 0):,}\n"
+                f"**Jefes derrotados:** {data.get('dungeon_bosses_defeated', 0):,}\n"
+                f"**Anomalías cerradas:** {data.get('dungeon_anomalies_cleared', 0):,}"
+            ),
+            inline=True,
+        )
+        embed.add_field(
+            name="⚔️ Combate",
+            value=(
+                f"**Daño infligido:** {data.get('dungeon_damage_dealt', 0):,}\n"
+                f"**Daño recibido:** {data.get('dungeon_damage_taken', 0):,}\n"
+                f"**Muertes:** {data.get('dungeon_deaths', 0):,}\n"
+                f"**Entrenamientos:** {data.get('dungeon_training_sessions', 0):,}"
+            ),
+            inline=True,
+        )
+        embed.add_field(
+            name="💰 Botín y Economía",
+            value=(
+                f"**Oro interno:** {data.get('dungeon_gold_earned', 0):,}\n"
+                f"**Objetos hallados:** {data.get('dungeon_items_found', 0):,}\n"
+                f"**Monedas de Jefe:** {data.get('dungeon_boss_coins_earned', 0):,}\n"
+                f"**Choskris convertidos:** {data.get('dungeon_money_converted', 0):,}"
+            ),
+            inline=True,
+        )
+        embed.add_field(
+            name="✨ Meta-progreso",
+            value=(
+                f"**Prestigios:** {data.get('dungeon_prestiges', 0):,}\n"
+                f"**Polvo obtenido:** {data.get('dungeon_dust_earned', 0):,}\n"
+                f"**Mutaciones compradas:** {data.get('dungeon_mutations', 0):,}\n"
+                f"**Ecos despertados:** {data.get('dungeon_echoes', 0):,}"
+            ),
+            inline=True,
+        )
+        embed.add_field(
+            name="🔨 Forja y retiradas",
+            value=(
+                f"**Ranuras reforjadas:** {data.get('dungeon_rerolls', 0):,}\n"
+                f"**Infusiones:** {data.get('dungeon_infusions', 0):,}\n"
+                f"**Retiradas:** {data.get('dungeon_retreats', 0):,}\n"
+                f"**Simulaciones:** {data.get('dungeon_auto_sims', 0):,}"
+            ),
+            inline=True,
+        )
+
+        await interaction.response.send_message(embed=embed)
+
+
 async def setup(bot: JoseLuisBot):
     await bot.add_cog(GlobalStatsCog(bot))

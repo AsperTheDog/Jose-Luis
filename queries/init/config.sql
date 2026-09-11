@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS guild_config (
     death_channel_id INTEGER NOT NULL DEFAULT 0,
     death_grace_seconds REAL NOT NULL DEFAULT 60.0,
     global_cooldown_seconds REAL NOT NULL DEFAULT 600.0,
+    dungeon_role_id INTEGER NOT NULL DEFAULT 0,
     event_mensajes INTEGER NOT NULL DEFAULT 1,
     event_miembros INTEGER NOT NULL DEFAULT 1,
     event_moderacion INTEGER NOT NULL DEFAULT 1,

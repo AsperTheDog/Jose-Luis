@@ -1,5 +1,6 @@
 from db.repositories.activity import ActivityRepository
 from db.repositories.betting import BettingRepository
+from db.repositories.dungeon import DungeonRepository
 from db.repositories.economy import EconomyRepository
 from db.repositories.gacha import GachaRepository
 from db.repositories.global_stats import GlobalStatsRepository
@@ -15,6 +16,7 @@ from db.repositories.waifu import WaifuRepository
 __all__ = [
     "ActivityRepository",
     "BettingRepository",
+    "DungeonRepository",
     "EconomyRepository",
     "GachaRepository",
     "GlobalStatsRepository",

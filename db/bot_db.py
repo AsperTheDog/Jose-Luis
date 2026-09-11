@@ -4,6 +4,7 @@ from db.connection import Database
 from db.repositories import (
     ActivityRepository,
     BettingRepository,
+    DungeonRepository,
     EconomyRepository,
     GachaRepository,
     GlobalStatsRepository,
@@ -33,6 +34,7 @@ class BotDatabase:
         self.hacking = HackingRepository(self.db)
         self.waifu = WaifuRepository(self.db)
         self.betting = BettingRepository(self.db)
+        self.dungeon = DungeonRepository(self.db)
         self.reminders = ReminderRepository(self.db)
         self.twitch = TwitchRepository(self.db)
         self.activity = ActivityRepository(self.db)

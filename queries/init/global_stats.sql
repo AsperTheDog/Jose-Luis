@@ -104,5 +104,28 @@ CREATE TABLE IF NOT EXISTS user_global_stats
     betting_money_gained      BIGINT DEFAULT 0,
     betting_money_lost        BIGINT DEFAULT 0,
     betting_biggest_bet       BIGINT DEFAULT 0,
-    betting_biggest_win       BIGINT DEFAULT 0
+    betting_biggest_win       BIGINT DEFAULT 0,
+
+    -- Dungeon RPG
+    dungeon_floors_cleared    BIGINT DEFAULT 0,
+    dungeon_bosses_defeated   BIGINT DEFAULT 0,
+    dungeon_highest_floor     BIGINT DEFAULT 0,
+    dungeon_gold_earned       BIGINT DEFAULT 0,
+    dungeon_items_found       BIGINT DEFAULT 0,
+    dungeon_prestiges         BIGINT DEFAULT 0,
+    dungeon_dust_earned       BIGINT DEFAULT 0,
+    dungeon_mutations         BIGINT DEFAULT 0,
+    dungeon_boss_coins_earned BIGINT DEFAULT 0,
+    dungeon_coins_converted   BIGINT DEFAULT 0,
+    dungeon_money_converted   BIGINT DEFAULT 0,
+    dungeon_deaths            BIGINT DEFAULT 0,
+    dungeon_damage_dealt      BIGINT DEFAULT 0,
+    dungeon_damage_taken      BIGINT DEFAULT 0,
+    dungeon_training_sessions BIGINT DEFAULT 0,
+    dungeon_auto_sims         BIGINT DEFAULT 0,
+    dungeon_anomalies_cleared BIGINT DEFAULT 0,
+    dungeon_rerolls           BIGINT DEFAULT 0,
+    dungeon_infusions         BIGINT DEFAULT 0,
+    dungeon_retreats          BIGINT DEFAULT 0,
+    dungeon_echoes            BIGINT DEFAULT 0
 );

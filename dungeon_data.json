@@ -1,0 +1,910 @@
+{
+  "config": {
+    "boss_interval": 10,
+    "enemy_hp_base": 60,
+    "enemy_hp_growth": 1.18,
+    "enemy_dmg_base": 2,
+    "enemy_dmg_growth": 1.12,
+    "enemy_def_base": 1,
+    "player_base_hp": 60,
+    "player_hp_per_level": 12,
+    "player_base_attack": 6,
+    "player_attack_per_level": 2,
+    "player_base_defense": 2,
+    "player_defense_per_level": 1,
+    "player_base_energy": 100,
+    "player_energy_regen": 12,
+    "defend_shield_ratio": 0.30,
+    "defend_block": 0.5,
+    "defend_energy": 15,
+    "crit_chance_base": 0.08,
+    "crit_multiplier": 1.75,
+    "crit_cap": 0.75,
+    "dodge_base": 0.03,
+    "max_turns": 60,
+    "flee_gold_penalty_pct": 0.0,
+    "potion_heal_ratio": 0.40,
+    "potion_start": 3,
+    "potion_price_base": 40,
+    "potion_price_growth": 1.15,
+    "level_attack_mult": 0.045,
+    "level_hp_mult": 0.04,
+    "level_defense_mult": 0.03,
+    "level_crit_per_level": 0.002,
+    "level_cap_attack": 2.5,
+    "level_cap_hp": 2.5,
+    "level_cap_defense": 2.0,
+    "xp_base": 25,
+    "xp_growth": 1.06,
+    "level_xp_base": 15,
+    "level_xp_exponent": 1.5,
+    "gold_base": 15,
+    "gold_growth": 1.20,
+    "drop_chance_base": 0.50,
+    "drop_chance_per_floor": 0.008,
+    "drop_chance_max": 0.90,
+    "gear_attack_base": 2.2,
+    "gear_attack_growth": 1.18,
+    "gear_defense_base": 2,
+    "gear_defense_growth": 1.12,
+    "gear_hp_base": 8,
+    "gear_hp_growth": 1.12,
+    "gear_energy_base": 3,
+    "gear_energy_growth": 1.05,
+    "gear_crit_mult": 0.06,
+    "enemy_def_growth": 1.17,
+    "boss_coin_per_tier": 10,
+    "boss_hp_tier_growth": 0.12,
+    "boss_cooldown_hours": 6,
+    "dust_divisor": 5,
+    "dust_exponent": 2.5,
+    "conversion_rate": 10,
+    "conversion_cap_base": 100,
+    "conversion_cap_growth": 1.6,
+    "conversion_cap_max": 10000,
+    "anomaly_cooldown_minutes": 60,
+    "attack_upgrade_per_level": 2,
+    "defense_upgrade_per_level": 1,
+    "vitality_upgrade_per_level": 25,
+    "energy_upgrade_per_level": 5,
+    "crit_upgrade_per_level": 0.01,
+    "upgrade_max_level": 30
+  },
+
+  "enabled_triggers": [
+    "ON_BATTLE_START",
+    "ON_TURN_START",
+    "ON_TURN_END",
+    "ON_ATTACK",
+    "ON_CRIT",
+    "ON_DEFEND",
+    "ON_HIT_TAKEN",
+    "ON_STATUS_APPLIED",
+    "ON_STATUS_TICK",
+    "ON_KILL",
+    "ON_LOW_HP",
+    "ON_SHIELD_BREAK",
+    "ON_HEAL",
+    "ON_ENERGY_GAIN",
+    "ON_POTION_USE",
+    "ON_SKILL_USE",
+    "ON_DODGE",
+    "ON_BOSS_PHASE",
+    "ON_BATTLE_END",
+    "ON_FLOOR_CLEAR"
+  ],
+
+  "trigger_weights": {
+    "ON_ATTACK": 20,
+    "ON_CRIT": 10,
+    "ON_HIT_TAKEN": 12,
+    "ON_TURN_START": 12,
+    "ON_STATUS_APPLIED": 8,
+    "ON_DEFEND": 6,
+    "ON_KILL": 4,
+    "ON_LOW_HP": 5,
+    "ON_DODGE": 3,
+    "ON_SHIELD_BREAK": 3,
+    "ON_HEAL": 4,
+    "ON_ENERGY_GAIN": 3,
+    "ON_POTION_USE": 3,
+    "ON_SKILL_USE": 5,
+    "ON_STATUS_TICK": 4,
+    "ON_TURN_END": 3,
+    "ON_BATTLE_START": 3,
+    "ON_BATTLE_END": 2,
+    "ON_BOSS_PHASE": 1,
+    "ON_FLOOR_CLEAR": 1
+  },
+
+  "enabled_conditions": [
+    "ALWAYS",
+    "HP_BELOW",
+    "HP_ABOVE",
+    "FOE_HP_BELOW",
+    "ENERGY_BELOW",
+    "ENERGY_ABOVE",
+    "SHIELD_ABOVE",
+    "SHIELD_BELOW",
+    "IS_CRITICAL",
+    "TARGET_HAS_STATUS",
+    "SELF_HAS_STATUS",
+    "STATUS_STACKS_ABOVE",
+    "RANDOM",
+    "TURN_ABOVE",
+    "FLOOR_ABOVE"
+  ],
+
+  "condition_templates": {
+    "HP_BELOW": {"weight": 12, "target": "self", "pct_min": 25, "pct_max": 75},
+    "HP_ABOVE": {"weight": 8, "target": "self", "pct_min": 30, "pct_max": 85},
+    "FOE_HP_BELOW": {"weight": 8, "target": "foe", "pct_min": 20, "pct_max": 65},
+    "ENERGY_BELOW": {"weight": 4, "target": "self", "pct_min": 20, "pct_max": 60},
+    "ENERGY_ABOVE": {"weight": 4, "target": "self", "pct_min": 40, "pct_max": 80},
+    "SHIELD_ABOVE": {"weight": 3, "target": "self", "pct_min": 5, "pct_max": 25},
+    "SHIELD_BELOW": {"weight": 3, "target": "self", "pct_min": 5, "pct_max": 25},
+    "IS_CRITICAL": {"weight": 8},
+    "TARGET_HAS_STATUS": {"weight": 9, "target": "foe"},
+    "SELF_HAS_STATUS": {"weight": 7, "target": "self"},
+    "STATUS_STACKS_ABOVE": {"weight": 5, "target": "foe", "value_min": 1, "value_max": 3},
+    "RANDOM": {"weight": 8, "chance_min": 0.20, "chance_max": 0.50},
+    "TURN_ABOVE": {"weight": 3, "value_min": 2, "value_max": 5},
+    "FLOOR_ABOVE": {"weight": 3, "value_min": 5, "value_max": 25}
+  },
+
+  "enabled_effects": [
+    "DEAL_DAMAGE",
+    "APPLY_STATUS",
+    "BUFF_SELF",
+    "GAIN_SHIELD",
+    "HEAL_HP",
+    "REFUND_ENERGY",
+    "STEAL_ENERGY",
+    "LIFESTEAL",
+    "PURGE_STATUS",
+    "CLEANSE",
+    "GAIN_GOLD",
+    "GRANT_XP",
+    "EXECUTE",
+    "REFLECT",
+    "EXTRA_TURN"
+  ],
+
+  "effect_templates": {
+    "DEAL_DAMAGE": {"weight": 22, "ratio_min": 0.25, "ratio_max": 0.95, "types": ["fisico", "fuego", "hielo", "rayo", "veneno", "arcano"]},
+    "APPLY_STATUS": {"weight": 16, "tags": ["BURN", "BLEED", "POISON", "STUN", "CHILL", "WEAKEN", "VULNERABLE", "MARK", "CURSE"], "stacks_min": 1, "stacks_max": 2, "turns_min": 2, "turns_max": 4},
+    "BUFF_SELF": {"weight": 10, "tags": ["RAGE", "FORTIFY", "REGEN", "HASTE", "THORNS"], "turns": 3},
+    "GAIN_SHIELD": {"weight": 9, "ratio_min": 0.08, "ratio_max": 0.30},
+    "HEAL_HP": {"weight": 9, "ratio_min": 0.05, "ratio_max": 0.20},
+    "REFUND_ENERGY": {"weight": 6, "value_min": 6, "value_max": 22},
+    "STEAL_ENERGY": {"weight": 3, "value_min": 5, "value_max": 15},
+    "LIFESTEAL": {"weight": 4, "ratio_min": 0.05, "ratio_max": 0.18},
+    "PURGE_STATUS": {"weight": 3, "tags": ["BURN", "BLEED", "POISON", "STUN", "CHILL", "WEAKEN", "VULNERABLE", "MARK", "CURSE", "RAGE", "FORTIFY", "REGEN", "HASTE", "THORNS"]},
+    "CLEANSE": {"weight": 3, "value_min": 1, "value_max": 2},
+    "GAIN_GOLD": {"weight": 3, "value_min": 8, "value_max": 60},
+    "GRANT_XP": {"weight": 3, "value_min": 3, "value_max": 12},
+    "EXECUTE": {"weight": 2, "pct_min": 0.10, "pct_max": 0.30},
+    "REFLECT": {"weight": 2, "ratio_min": 0.10, "ratio_max": 0.30},
+    "EXTRA_TURN": {"weight": 2, "chance": 0.08}
+  },
+
+  "statuses": {
+    "BURN": {"name": "Quemadura", "emoji": "🔥", "kind": "dot", "damage_type": "fuego", "dot_ratio": 0.40, "turns": 3, "max_stacks": 8, "desc": "Sufre daño de fuego en cada turno."},
+    "BLEED": {"name": "Hemorragia", "emoji": "🩸", "kind": "dot", "damage_type": "fisico", "dot_ratio": 0.32, "low_hp_bonus": 1.6, "turns": 4, "max_stacks": 6, "desc": "Sangra; se agrava cuando la vida es baja."},
+    "POISON": {"name": "Veneno", "emoji": "☠️", "kind": "dot", "damage_type": "veneno", "dot_ratio": 0.26, "pierce": true, "turns": 5, "max_stacks": 10, "desc": "Corroe ignorando los escudos."},
+    "SHIELD": {"name": "Escudo", "emoji": "🛡️", "kind": "shield", "desc": "Absorbe el daño entrante."},
+    "STUN": {"name": "Aturdimiento", "emoji": "💫", "kind": "control", "skip": true, "turns": 1, "max_stacks": 1, "desc": "Pierde el siguiente turno."},
+    "CHILL": {"name": "Congelación", "emoji": "❄️", "kind": "debuff", "attack_mult": -0.12, "turns": 3, "max_stacks": 5, "desc": "Reduce el daño infligido."},
+    "WEAKEN": {"name": "Debilidad", "emoji": "📉", "kind": "debuff", "attack_mult": -0.10, "taken_mult": 0.08, "turns": 3, "max_stacks": 5, "desc": "Reduce su daño y aumenta el recibido."},
+    "VULNERABLE": {"name": "Vulnerable", "emoji": "🎯", "kind": "debuff", "taken_mult": 0.15, "turns": 3, "max_stacks": 6, "desc": "Recibe más daño."},
+    "MARK": {"name": "Marca", "emoji": "🔻", "kind": "debuff", "taken_mult": 0.20, "crit_bonus": 0.10, "turns": 2, "max_stacks": 1, "desc": "Recibe más daño y es más fácil de criticar."},
+    "CURSE": {"name": "Maldición", "emoji": "🕯️", "kind": "debuff", "heal_mult": -0.30, "dot_mult": 0.30, "turns": 4, "max_stacks": 3, "desc": "Cura menos y sufre más daño de estado."},
+    "RAGE": {"name": "Ira", "emoji": "😡", "kind": "buff", "attack_mult": 0.15, "turns": 3, "max_stacks": 5, "desc": "Aumenta el daño infligido."},
+    "FORTIFY": {"name": "Fortificar", "emoji": "🪨", "kind": "buff", "defense_mult": 0.35, "turns": 3, "max_stacks": 5, "desc": "Aumenta la defensa."},
+    "REGEN": {"name": "Regeneración", "emoji": "💚", "kind": "buff", "heal_ratio": 0.05, "turns": 3, "max_stacks": 5, "desc": "Recupera vida en cada turno."},
+    "HASTE": {"name": "Celeridad", "emoji": "💨", "kind": "buff", "dodge": 0.06, "energy_regen": 4, "turns": 3, "max_stacks": 5, "desc": "Más esquiva y regeneración de energía."},
+    "THORNS": {"name": "Espinas", "emoji": "🌵", "kind": "buff", "reflect_ratio": 0.18, "turns": 3, "max_stacks": 5, "desc": "Refleja parte del daño recibido."}
+  },
+
+  "rarities": {
+    "comun": {"name": "Común", "emoji": "⚪", "weight": 52, "sockets": 1, "power": 1.00, "stat_mult": 1.00},
+    "raro": {"name": "Raro", "emoji": "🔵", "weight": 26, "sockets": 2, "power": 1.25, "stat_mult": 1.35},
+    "epico": {"name": "Épico", "emoji": "🟣", "weight": 14, "sockets": 3, "power": 1.55, "stat_mult": 1.80},
+    "legendario": {"name": "Legendario", "emoji": "🟠", "weight": 6, "sockets": 4, "power": 1.90, "stat_mult": 2.40},
+    "mitico": {"name": "Mítico", "emoji": "🔴", "weight": 2, "sockets": 5, "power": 2.40, "stat_mult": 3.20}
+  },
+
+  "gear_slots": {
+    "arma": {"name": "Arma", "emoji": "⚔️", "bases": ["Filo", "Maza", "Lanza", "Hacha", "Daga", "Bastón", "Guadaña", "Cetro"], "stats": {"attack": 1.0, "defense": 0.05, "max_hp": 0.05, "max_energy": 0.10, "crit": 0.35}},
+    "armadura": {"name": "Armadura", "emoji": "🛡️", "bases": ["Coraza", "Túnica", "Placas", "Manto", "Égida", "Caparazón"], "stats": {"attack": 0.15, "defense": 1.0, "max_hp": 1.0, "max_energy": 0.15, "crit": 0.0}},
+    "reliquia": {"name": "Reliquia", "emoji": "🔮", "bases": ["Amuleto", "Anillo", "Tótem", "Talismán", "Cristal", "Sigilo"], "stats": {"attack": 0.35, "defense": 0.20, "max_hp": 0.30, "max_energy": 0.60, "crit": 1.0}}
+  },
+
+  "prefixes": ["Oxidado", "Arcano", "Ardiente", "Gélido", "Umbrío", "Vil", "Sagrado", "Rúnico", "Abisal", "Etéreo", "Titánico", "Voraz", "Espectral", "Solar", "Profano"],
+
+  "skills": [
+    {
+      "id": "martillo_de_haima",
+      "name": "Martillo Gigante",
+      "emoji": "🔨",
+      "level": 1,
+      "cost": 20,
+      "cooldown": 0,
+      "desc": "Invoca un enorme mazo de piedra fulgurante para asestar un golpe del 150% de ataque.",
+      "mods": [
+        {"on": "ON_SKILL_USE", "if": {"type": "ALWAYS"}, "then": {"type": "DEAL_DAMAGE", "ratio": 1.5, "damage_type": "fisico", "target": "foe"}}
+      ]
+    },
+    {
+      "id": "escudo_de_piedra_refulgente",
+      "name": "Escudo de Piedra Refulgente",
+      "emoji": "🔷",
+      "level": 2,
+      "cost": 18,
+      "cooldown": 2,
+      "desc": "Crea una barrera mágica de la Academia que te otorga un escudo y fortifica tu defensa.",
+      "mods": [
+        {"on": "ON_SKILL_USE", "if": {"type": "ALWAYS"}, "then": {"type": "GAIN_SHIELD", "ratio": 0.28, "target": "self"}},
+        {"on": "ON_SKILL_USE", "if": {"type": "ALWAYS"}, "then": {"type": "APPLY_STATUS", "tag": "FORTIFY", "stacks": 1, "turns": 3, "target": "self"}}
+      ]
+    },
+    {
+      "id": "llama_de_los_gigantes",
+      "name": "Llama de los Gigantes",
+      "emoji": "🔥",
+      "level": 3,
+      "cost": 25,
+      "cooldown": 1,
+      "desc": "Lanza un orbe ardiente de Pico de los Gigantes que prende e inflama al objetivo.",
+      "mods": [
+        {"on": "ON_SKILL_USE", "if": {"type": "ALWAYS"}, "then": {"type": "DEAL_DAMAGE", "ratio": 1.0, "damage_type": "fuego", "target": "foe"}},
+        {"on": "ON_SKILL_USE", "if": {"type": "ALWAYS"}, "then": {"type": "APPLY_STATUS", "tag": "BURN", "stacks": 2, "turns": 3, "target": "foe"}}
+      ]
+    },
+    {
+      "id": "cuchilla_sangrienta",
+      "name": "Cuchilla Sangrienta",
+      "emoji": "🩸",
+      "level": 4,
+      "cost": 24,
+      "cooldown": 1,
+      "desc": "Proyecta un tajo impregnado en Llama Sangrienta que provoca una herida profunda.",
+      "mods": [
+        {"on": "ON_SKILL_USE", "if": {"type": "ALWAYS"}, "then": {"type": "DEAL_DAMAGE", "ratio": 1.1, "damage_type": "fisico", "target": "foe"}},
+        {"on": "ON_SKILL_USE", "if": {"type": "ALWAYS"}, "then": {"type": "APPLY_STATUS", "tag": "BLEED", "stacks": 2, "turns": 4, "target": "foe"}}
+      ]
+    },
+    {
+      "id": "espinas_del_castigo",
+      "name": "Espinas del Castigo",
+      "emoji": "🦇",
+      "level": 6,
+      "cost": 30,
+      "cooldown": 2,
+      "desc": "Invoca zarzas de sangre aberrante que drenan la vida y energía de la víctima.",
+      "mods": [
+        {"on": "ON_SKILL_USE", "if": {"type": "ALWAYS"}, "then": {"type": "DEAL_DAMAGE", "ratio": 1.2, "damage_type": "arcano", "target": "foe"}},
+        {"on": "ON_SKILL_USE", "if": {"type": "ALWAYS"}, "then": {"type": "LIFESTEAL", "ratio": 0.35, "target": "self"}},
+        {"on": "ON_SKILL_USE", "if": {"type": "ALWAYS"}, "then": {"type": "STEAL_ENERGY", "value": 12, "target": "foe"}}
+      ]
+    },
+    {
+      "id": "lanza_de_rayo_de_dragon",
+      "name": "Lanza de Rayo de Dragón",
+      "emoji": "🌩️",
+      "level": 8,
+      "cost": 35,
+      "cooldown": 3,
+      "desc": "Descarga un rayo dorado del Culto del Dragón que puede aturdir al objetivo.",
+      "mods": [
+        {"on": "ON_SKILL_USE", "if": {"type": "ALWAYS"}, "then": {"type": "DEAL_DAMAGE", "ratio": 1.6, "damage_type": "rayo", "target": "foe"}},
+        {"on": "ON_SKILL_USE", "if": {"type": "RANDOM", "chance": 0.6}, "then": {"type": "APPLY_STATUS", "tag": "STUN", "stacks": 1, "turns": 1, "target": "foe"}}
+      ]
+    },
+    {
+      "id": "muerte_destinada",
+      "name": "Muerte Destinada",
+      "emoji": "⚖️",
+      "level": 10,
+      "cost": 45,
+      "cooldown": 4,
+      "desc": "Desata el poder de la Runa de la Muerte para aniquilar a enemigos debilitados por debajo del 22%.",
+      "mods": [
+        {"on": "ON_SKILL_USE", "if": {"type": "FOE_HP_BELOW", "pct": 22, "target": "foe"}, "then": {"type": "EXECUTE", "pct": 0.35, "target": "foe"}}
+      ]
+    },
+    {
+      "id": "bendicion_del_arbol_aureo",
+      "name": "Bendición del Gran Árbol",
+      "emoji": "✨",
+      "level": 12,
+      "cost": 40,
+      "cooldown": 3,
+      "desc": "Canaliza la gracia primordial para sanar tus heridas y purificar estados alterados.",
+      "mods": [
+        {"on": "ON_SKILL_USE", "if": {"type": "ALWAYS"}, "then": {"type": "HEAL_HP", "ratio": 0.35, "target": "self"}},
+        {"on": "ON_SKILL_USE", "if": {"type": "ALWAYS"}, "then": {"type": "CLEANSE", "value": 2, "target": "self"}}
+      ]
+    },
+    {
+      "id": "aullido_de_shabriri",
+      "name": "Aullido de locura",
+      "emoji": "😡",
+      "level": 14,
+      "cost": 30,
+      "cooldown": 3,
+      "desc": "Entras en el frenesí más absoluto: aumenta tu daño y devuelve el impacto durante 3 turnos.",
+      "mods": [
+        {"on": "ON_SKILL_USE", "if": {"type": "ALWAYS"}, "then": {"type": "APPLY_STATUS", "tag": "RAGE", "stacks": 3, "turns": 3, "target": "self"}},
+        {"on": "ON_SKILL_USE", "if": {"type": "ALWAYS"}, "then": {"type": "REFLECT", "ratio": 0.25, "target": "self"}}
+      ]
+    },
+    {
+      "id": "meteorito_de_astel",
+      "name": "Meteorito",
+      "emoji": "🌌",
+      "level": 18,
+      "cost": 55,
+      "cooldown": 5,
+      "desc": "Desata la gravedad del vacío gravitatorio para devastar y dejar vulnerable al enemigo.",
+      "mods": [
+        {"on": "ON_SKILL_USE", "if": {"type": "ALWAYS"}, "then": {"type": "DEAL_DAMAGE", "ratio": 2.2, "damage_type": "arcano", "target": "foe"}},
+        {"on": "ON_SKILL_USE", "if": {"type": "ALWAYS"}, "then": {"type": "APPLY_STATUS", "tag": "VULNERABLE", "stacks": 3, "turns": 3, "target": "foe"}}
+      ]
+    }
+  ],
+
+  "upgrades": {
+    "attack": {"name": "Bonus Ataque", "emoji": "⚔️", "desc": "+2 de ataque por nivel.", "cost": 100, "growth": 1.30},
+    "defense": {"name": "Bonus Defensa", "emoji": "🛡️", "desc": "+1 de defensa por nivel.", "cost": 110, "growth": 1.30},
+    "vitality": {"name": "Bonus Salud", "emoji": "❤️", "desc": "+25 de vida máxima por nivel.", "cost": 90, "growth": 1.24},
+    "energy": {"name": "Constitución", "emoji": "⚡", "desc": "+5 de energía máxima por nivel.", "cost": 120, "growth": 1.32},
+    "crit": {"name": "Ojo Crítico", "emoji": "🎯", "desc": "+1% de probabilidad de crítico por nivel.", "cost": 180, "growth": 1.38}
+  },
+
+  "market": {
+    "potions": {"name": "Poción de Vida", "emoji": "🧪", "desc": "Cura un 40% de tu vida máxima en combate."}
+  },
+
+  "enemy_archetypes": [
+    {
+      "id": "rata",
+      "name": "Rata de Ciudad Infestada",
+      "emoji": "🐀",
+      "hp": 0.80,
+      "dmg": 0.85,
+      "def": 0.40,
+      "ai": "agresivo",
+      "floor_min": 1,
+      "floor_max": 14,
+      "weight": 12,
+      "mods": []
+    },
+    {
+      "id": "slime",
+      "name": "Babosa de Arcilla",
+      "emoji": "🟢",
+      "hp": 1.10,
+      "dmg": 0.70,
+      "def": 0.60,
+      "ai": "versatil",
+      "floor_min": 1,
+      "floor_max": 12,
+      "weight": 10,
+      "mods": [
+        {"on": "ON_TURN_START", "if": {"type": "ALWAYS"}, "then": {"type": "HEAL_HP", "ratio": 0.03, "target": "self"}}
+      ]
+    },
+    {
+      "id": "esqueleto",
+      "name": "Esqueleto de las Catacumbas",
+      "emoji": "💀",
+      "hp": 0.95,
+      "dmg": 1.05,
+      "def": 0.70,
+      "ai": "agresivo",
+      "floor_min": 1,
+      "floor_max": 18,
+      "weight": 11,
+      "mods": [
+        {"on": "ON_CRIT", "if": {"type": "ALWAYS"}, "then": {"type": "APPLY_STATUS", "tag": "BLEED", "stacks": 1, "turns": 3, "target": "foe"}}
+      ]
+    },
+    {
+      "id": "goblin",
+      "name": "Sombra Vulgar",
+      "emoji": "👺",
+      "hp": 0.85,
+      "dmg": 0.95,
+      "def": 0.50,
+      "ai": "versatil",
+      "floor_min": 1,
+      "floor_max": 16,
+      "weight": 11,
+      "mods": [
+        {"on": "ON_ATTACK", "if": {"type": "RANDOM", "chance": 0.35}, "then": {"type": "GAIN_SHIELD", "ratio": 0.10, "target": "self"}}
+      ]
+    },
+    {
+      "id": "lobo",
+      "name": "Lobo Huargo",
+      "emoji": "🐺",
+      "hp": 0.90,
+      "dmg": 1.15,
+      "def": 0.45,
+      "ai": "agresivo",
+      "floor_min": 8,
+      "floor_max": 25,
+      "weight": 10,
+      "mods": [
+        {"on": "ON_ATTACK", "if": {"type": "RANDOM", "chance": 0.30}, "then": {"type": "DEAL_DAMAGE", "ratio": 0.35, "damage_type": "fisico", "target": "foe"}}
+      ]
+    },
+    {
+      "id": "arana",
+      "name": "Araña de la Podredumbre",
+      "emoji": "🕷️",
+      "hp": 0.80,
+      "dmg": 0.90,
+      "def": 0.45,
+      "ai": "conjurador",
+      "floor_min": 6,
+      "floor_max": 22,
+      "weight": 10,
+      "mods": [
+        {"on": "ON_ATTACK", "if": {"type": "RANDOM", "chance": 0.40}, "then": {"type": "APPLY_STATUS", "tag": "POISON", "stacks": 2, "turns": 4, "target": "foe"}}
+      ]
+    },
+    {
+      "id": "espectro",
+      "name": "Espectro de la Ciudadela",
+      "emoji": "👻",
+      "hp": 0.85,
+      "dmg": 1.10,
+      "def": 0.30,
+      "ai": "conjurador",
+      "floor_min": 12,
+      "floor_max": 30,
+      "weight": 9,
+      "mods": [
+        {"on": "ON_HIT_TAKEN", "if": {"type": "RANDOM", "chance": 0.30}, "then": {"type": "APPLY_STATUS", "tag": "CURSE", "stacks": 1, "turns": 3, "target": "foe"}}
+      ]
+    },
+    {
+      "id": "golem",
+      "name": "Gólem de Piedra",
+      "emoji": "🗿",
+      "hp": 1.60,
+      "dmg": 0.95,
+      "def": 1.40,
+      "ai": "defensivo",
+      "floor_min": 10,
+      "floor_max": 35,
+      "weight": 8,
+      "mods": [
+        {"on": "ON_TURN_START", "if": {"type": "SHIELD_BELOW", "pct": 10, "target": "self"}, "then": {"type": "GAIN_SHIELD", "ratio": 0.18, "target": "self"}}
+      ]
+    },
+    {
+      "id": "brujo",
+      "name": "Hechicero de la Academia",
+      "emoji": "🧙",
+      "hp": 0.90,
+      "dmg": 1.20,
+      "def": 0.40,
+      "ai": "conjurador",
+      "floor_min": 15,
+      "floor_max": 45,
+      "weight": 8,
+      "mods": [
+        {"on": "ON_TURN_START", "if": {"type": "RANDOM", "chance": 0.40}, "then": {"type": "APPLY_STATUS", "tag": "WEAKEN", "stacks": 2, "turns": 3, "target": "foe"}}
+      ]
+    },
+    {
+      "id": "quimera",
+      "name": "León Guardián",
+      "emoji": "🦁",
+      "hp": 1.25,
+      "dmg": 1.20,
+      "def": 0.80,
+      "ai": "versatil",
+      "floor_min": 20,
+      "floor_max": 55,
+      "weight": 7,
+      "mods": [
+        {"on": "ON_ATTACK", "if": {"type": "RANDOM", "chance": 0.35}, "then": {"type": "APPLY_STATUS", "tag": "VULNERABLE", "stacks": 1, "turns": 2, "target": "foe"}}
+      ]
+    },
+    {
+      "id": "dragon",
+      "name": "Dragón Volador",
+      "emoji": "🐉",
+      "hp": 1.50,
+      "dmg": 1.35,
+      "def": 1.00,
+      "ai": "agresivo",
+      "floor_min": 30,
+      "floor_max": 80,
+      "weight": 6,
+      "mods": [
+        {"on": "ON_ATTACK", "if": {"type": "RANDOM", "chance": 0.35}, "then": {"type": "DEAL_DAMAGE", "ratio": 0.5, "damage_type": "fuego", "target": "foe"}}
+      ]
+    },
+    {
+      "id": "demonio",
+      "name": "Demonio del Odio",
+      "emoji": "😈",
+      "hp": 1.30,
+      "dmg": 1.40,
+      "def": 0.70,
+      "ai": "versatil",
+      "floor_min": 40,
+      "floor_max": 120,
+      "weight": 6,
+      "mods": [
+        {"on": "ON_HIT_TAKEN", "if": {"type": "ALWAYS"}, "then": {"type": "APPLY_STATUS", "tag": "BURN", "stacks": 1, "turns": 3, "target": "foe"}}
+      ]
+    },
+    {
+      "id": "titan",
+      "name": "Gigante de los Picos",
+      "emoji": "🏔️",
+      "hp": 1.90,
+      "dmg": 1.30,
+      "def": 1.50,
+      "ai": "defensivo",
+      "floor_min": 50,
+      "floor_max": 200,
+      "weight": 5,
+      "mods": [
+        {"on": "ON_HIT_TAKEN", "if": {"type": "ALWAYS"}, "then": {"type": "APPLY_STATUS", "tag": "FORTIFY", "stacks": 2, "turns": 2, "target": "self"}}
+      ]
+    },
+    {
+      "id": "vacio",
+      "name": "Engendro del Vacío",
+      "emoji": "🌑",
+      "hp": 1.20,
+      "dmg": 1.50,
+      "def": 0.80,
+      "ai": "conjurador",
+      "floor_min": 60,
+      "floor_max": 999,
+      "weight": 5,
+      "mods": [
+        {"on": "ON_TURN_START", "if": {"type": "RANDOM", "chance": 0.45}, "then": {"type": "APPLY_STATUS", "tag": "STUN", "stacks": 1, "turns": 1, "target": "foe"}}
+      ]
+    },
+    {
+      "id": "celestial",
+      "name": "Guardián del Gran Árbol",
+      "emoji": "🌟",
+      "hp": 1.40,
+      "dmg": 1.45,
+      "def": 1.20,
+      "ai": "versatil",
+      "floor_min": 70,
+      "floor_max": 999,
+      "weight": 5,
+      "mods": [
+        {"on": "ON_CRIT", "if": {"type": "ALWAYS"}, "then": {"type": "HEAL_HP", "ratio": 0.10, "target": "self"}}
+      ]
+    }
+  ],
+
+  "bosses": [
+    {
+      "id": "guardian_oxido",
+      "name": "Centinela del Árbol",
+      "emoji": "🗿",
+      "hp_mult": 2.0,
+      "dmg_mult": 1.35,
+      "phases": [
+        {
+          "name": "Barrera de Hierro Antiguo",
+          "min_hp": 1.00,
+          "shield_ratio": 0.03,
+          "mods": []
+        },
+        {
+          "name": "Furia del Crisol",
+          "min_hp": 0.60,
+          "enrage": 0.22,
+          "mods": [
+            {
+              "on": "ON_ATTACK",
+              "if": {"type": "RANDOM", "chance": 0.40},
+              "then": {"type": "APPLY_STATUS", "tag": "WEAKEN", "stacks": 2, "turns": 3, "target": "foe"}
+            }
+          ]
+        },
+        {
+          "name": "Núcleo Fundido",
+          "min_hp": 0.25,
+          "enrage": 0.40,
+          "mods": [
+            {
+              "on": "ON_TURN_START",
+              "if": {"type": "ALWAYS"},
+              "then": {"type": "GAIN_SHIELD", "ratio": 0.06, "target": "self"}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "reina_escamas",
+      "name": "Serpiente Devoradora de Dioses",
+      "emoji": "🐍",
+      "hp_mult": 2.1,
+      "dmg_mult": 1.40,
+      "phases": [
+        {
+          "name": "Escamas Blasfemas",
+          "min_hp": 1.00,
+          "shield_ratio": 0.03,
+          "mods": []
+        },
+        {
+          "name": "Veneno Sacrílego",
+          "min_hp": 0.65,
+          "enrage": 0.20,
+          "mods": [
+            {
+              "on": "ON_ATTACK",
+              "if": {"type": "ALWAYS"},
+              "then": {"type": "APPLY_STATUS", "tag": "POISON", "stacks": 3, "turns": 5, "target": "foe"}
+            }
+          ]
+        },
+        {
+          "name": "Muda Magmática",
+          "min_hp": 0.30,
+          "enrage": 0.38,
+          "heal_ratio": 0.04,
+          "mods": []
+        }
+      ]
+    },
+    {
+      "id": "coloso_runico",
+      "name": "Coloso Rúnico de la Academia",
+      "emoji": "🏛️",
+      "hp_mult": 2.2,
+      "dmg_mult": 1.35,
+      "phases": [
+        {
+          "name": "Barrera de Piedra Refulgente",
+          "min_hp": 1.00,
+          "shield_ratio": 0.05,
+          "mods": []
+        },
+        {
+          "name": "Sobrecarga de Mana",
+          "min_hp": 0.55,
+          "enrage": 0.26,
+          "mods": [
+            {
+              "on": "ON_TURN_START",
+              "if": {"type": "SHIELD_BELOW", "pct": 15, "target": "self"},
+              "then": {"type": "GAIN_SHIELD", "ratio": 0.10, "target": "self"}
+            }
+          ]
+        },
+        {
+          "name": "Colapso Primordial",
+          "min_hp": 0.20,
+          "enrage": 0.42,
+          "mods": [
+            {
+              "on": "ON_TURN_START",
+              "if": {"type": "ALWAYS"},
+              "then": {"type": "APPLY_STATUS", "tag": "VULNERABLE", "stacks": 2, "turns": 2, "target": "self"}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "devorador_abismo",
+      "name": "Guardián de la Hoja Mortal",
+      "emoji": "🕳️",
+      "hp_mult": 2.2,
+      "dmg_mult": 1.50,
+      "phases": [
+        {
+          "name": "Mandíbulas de Sangre",
+          "min_hp": 1.00,
+          "mods": [
+            {
+              "on": "ON_ATTACK",
+              "if": {"type": "RANDOM", "chance": 0.30},
+              "then": {"type": "LIFESTEAL", "ratio": 0.25, "target": "self"}
+            }
+          ]
+        },
+        {
+          "name": "Muerte Destinada",
+          "min_hp": 0.60,
+          "enrage": 0.24,
+          "mods": [
+            {
+              "on": "ON_HIT_TAKEN",
+              "if": {"type": "ALWAYS"},
+              "then": {"type": "APPLY_STATUS", "tag": "BLEED", "stacks": 2, "turns": 3, "target": "foe"}
+            }
+          ]
+        },
+        {
+          "name": "Llama Negra del Abismo",
+          "min_hp": 0.25,
+          "enrage": 0.45,
+          "mods": [
+            {
+              "on": "ON_TURN_START",
+              "if": {"type": "ALWAYS"},
+              "then": {"type": "APPLY_STATUS", "tag": "CURSE", "stacks": 2, "turns": 3, "target": "foe"}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "avatar_entropia",
+      "name": "Engendro del Vacío",
+      "emoji": "🌌",
+      "hp_mult": 2.3,
+      "dmg_mult": 1.45,
+      "phases": [
+        {
+          "name": "Frío del Vacío",
+          "min_hp": 1.00,
+          "mods": [
+            {
+              "on": "ON_TURN_START",
+              "if": {"type": "RANDOM", "chance": 0.35},
+              "then": {"type": "APPLY_STATUS", "tag": "CHILL", "stacks": 2, "turns": 3, "target": "foe"}
+            }
+          ]
+        },
+        {
+          "name": "Deterioro Gravitatorio",
+          "min_hp": 0.55,
+          "enrage": 0.26,
+          "mods": [
+            {
+              "on": "ON_ATTACK",
+              "if": {"type": "RANDOM", "chance": 0.35},
+              "then": {"type": "PURGE_STATUS", "tag": "RAGE", "target": "foe"}
+            }
+          ]
+        },
+        {
+          "name": "Singularidad Cosmológica",
+          "min_hp": 0.20,
+          "enrage": 0.48,
+          "mods": [
+            {
+              "on": "ON_TURN_START",
+              "if": {"type": "ALWAYS"},
+              "then": {"type": "DEAL_DAMAGE", "ratio": 0.20, "damage_type": "arcano", "target": "foe"}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "soberano_estelar",
+      "name": "Azote de las Estrellas",
+      "emoji": "🌟",
+      "hp_mult": 2.4,
+      "dmg_mult": 1.55,
+      "phases": [
+        {
+          "name": "Corona del Azote Estelar",
+          "min_hp": 1.00,
+          "shield_ratio": 0.04,
+          "mods": []
+        },
+        {
+          "name": "Lluvia de Meteoros",
+          "min_hp": 0.60,
+          "enrage": 0.30,
+          "mods": [
+            {
+              "on": "ON_ATTACK",
+              "if": {"type": "ALWAYS"},
+              "then": {"type": "DEAL_DAMAGE", "ratio": 0.30, "damage_type": "rayo", "target": "foe"}
+            }
+          ]
+        },
+        {
+          "name": "Impacto de Meteorito Gravitatorio",
+          "min_hp": 0.22,
+          "enrage": 0.55,
+          "heal_ratio": 0.04,
+          "mods": [
+            {
+              "on": "ON_TURN_START",
+              "if": {"type": "ALWAYS"},
+              "then": {"type": "GAIN_SHIELD", "ratio": 0.08, "target": "self"}
+            }
+          ]
+        }
+      ]
+    }
+  ],
+
+  "shifts": {
+    "fragilidad": {"name": "Monstruos Curtidos", "emoji": "💥", "desc": "Enemigos +30% de daño, +25% de botín.", "enemy_dmg_mult": 1.30, "loot_mult": 1.25},
+    "hambre": {"name": "Hambruna", "emoji": "🕳️", "desc": "No puedes usar pociones y pierdes 25% de vida máxima, +45% de oro.", "no_potions": true, "max_hp_mult": 0.75, "gold_mult": 1.45},
+    "caos": {"name": "Plaga Elemental", "emoji": "🌀", "desc": "Un estado aleatorio te golpea al inicio de cada turno, +20% de XP.", "random_status": true, "xp_mult": 1.20},
+    "marejada": {"name": "Virus del Frenesí", "emoji": "☣️", "desc": "El enemigo golpea dos veces cada 3 turnos y suelta más objetos.", "double_strike": 3, "loot_chance": 0.15},
+    "silencio": {"name": "Adrenalina", "emoji": "💉", "desc": "Las habilidades cuestan el doble, sufres +25% de daño enemigo y ganas +20% de daño.", "skill_cost_mult": 2.0, "enemy_dmg_mult": 1.25, "attack_mult": 1.20}
+  },
+
+  "anomalies": {
+    "camara_ignea": {"name": "Fosa Vulcánica", "emoji": "🌋", "floor_mult": 1.0, "gold_mult": 1.40, "dust_reward": 3, "loot_bonus": 1, "min_mutation_level": 1,
+     "desc": "Todo arde: los enemigos prenden fuego y el botín es mayor.",
+     "enemy_mods": [{"on": "ON_ATTACK", "if": {"type": "ALWAYS"}, "then": {"type": "APPLY_STATUS", "tag": "BURN", "stacks": 2, "turns": 3, "target": "foe"}}]},
+    "cripta_helada": {"name": "Paso de la Tundra", "emoji": "🧊", "floor_mult": 1.10, "gold_mult": 1.30, "dust_reward": 5, "loot_bonus": 1, "min_mutation_level": 1,
+     "desc": "El frío ralentiza: enemigos congelan y fortifican su defensa.",
+     "enemy_mods": [
+       {"on": "ON_ATTACK", "if": {"type": "ALWAYS"}, "then": {"type": "APPLY_STATUS", "tag": "CHILL", "stacks": 2, "turns": 3, "target": "foe"}},
+       {"on": "ON_TURN_START", "if": {"type": "ALWAYS"}, "then": {"type": "APPLY_STATUS", "tag": "FORTIFY", "stacks": 2, "turns": 2, "target": "self"}}
+     ]},
+    "foso_aberrante": {"name": "Ciénaga Ponzoñosa", "emoji": "☣️", "floor_mult": 1.20, "gold_mult": 1.35, "dust_reward": 7, "loot_bonus": 1, "min_mutation_level": 2,
+     "desc": "Aberraciones que sangran y envenenan sin descanso.",
+     "enemy_mods": [{"on": "ON_ATTACK", "if": {"type": "RANDOM", "chance": 0.6}, "then": {"type": "APPLY_STATUS", "tag": "POISON", "stacks": 3, "turns": 5, "target": "foe"}}]},
+    "santuario_roto": {"name": "Santuario Ancestral", "emoji": "⛩️", "floor_mult": 1.35, "gold_mult": 1.50, "dust_reward": 10, "loot_bonus": 2, "min_mutation_level": 3,
+     "desc": "Un guardián caído que se enfurece y devora tu energía.",
+     "enemy_mods": [
+       {"on": "ON_TURN_START", "if": {"type": "RANDOM", "chance": 0.5}, "then": {"type": "STEAL_ENERGY", "value": 15, "target": "foe"}},
+       {"on": "ON_CRIT", "if": {"type": "ALWAYS"}, "then": {"type": "APPLY_STATUS", "tag": "VULNERABLE", "stacks": 2, "turns": 3, "target": "foe"}}
+     ]}
+  },
+
+  "mutations": {
+    "tag_transmutation": {"name": "Transmutación", "emoji": "🧬", "max_level": 3, "cost_base": 10, "cost_growth": 2.0,
+     "desc": "Transmuta un estado en otro al aplicarlo. Cada nivel desbloquea un enlace.",
+     "links": [["BURN", "BLEED"], ["POISON", "BURN"], ["BLEED", "POISON"], ["CHILL", "VULNERABLE"], ["STUN", "MARK"], ["CURSE", "WEAKEN"]]},
+    "quantum_sockets": {"name": "Enclaves Cuánticos", "emoji": "🔷", "max_level": 5, "cost_base": 15, "cost_growth": 1.8,
+     "desc": "Añade una ranura de disparador extra por nivel a todo tu equipo equipado."},
+    "gambit_automator": {"name": "Equipo de Mercenarios", "emoji": "⚔️", "max_level": 5, "cost_base": 20, "cost_growth": 1.9,
+     "desc": "Simula pisos ya superados en segundo plano. Cada nivel simula un piso más por ciclo y mejora las recompensas.",
+     "reward_ratio_base": 0.10, "reward_ratio_per_level": 0.04},
+    "dimensional_shifts": {"name": "Desplazamientos Dimensionales", "emoji": "🌌", "max_level": 3, "cost_base": 25, "cost_growth": 2.0,
+     "desc": "Desbloquea los Desplazamientos Dimensionales. Cada nivel permite un afijo activo más."},
+    "training_room": {"name": "Área de Entrenamiento", "emoji": "🥋", "max_level": 5, "cost_base": 12, "cost_growth": 1.7,
+     "desc": "Desbloquea combates de entrenamiento sin riesgo. Cada nivel sube el techo del muñeco y las sesiones diarias.",
+     "sessions_base": 2, "sessions_per_level": 1},
+    "alternative_floors": {"name": "Pisos Anómalos", "emoji": "🚪", "max_level": 3, "cost_base": 18, "cost_growth": 2.0,
+     "desc": "Desbloquea anomalías dimensionales. Cada nivel mejora sus recompensas de polvo y botín.",
+     "reward_per_level": 0.35}
+  },
+
+  "forge": {
+    "reroll_base_floors": 1.5,
+    "reroll_rarity_mult": {"comun": 1.0, "raro": 1.1, "epico": 1.2, "legendario": 1.3, "mitico": 1.4},
+    "infuse_cost": 30,
+    "infuse_choices": 3
+  },
+
+  "echoes": {
+    "might": {"name": "Eco de Poder", "emoji": "⚔️", "desc": "+2% de ataque por nivel.", "max_level": 100, "cost_base": 30, "cost_growth": 1.08, "attack_mult": 0.02},
+    "vitality": {"name": "Eco de Vida", "emoji": "❤️", "desc": "+3% de vida máxima por nivel.", "max_level": 100, "cost_base": 25, "cost_growth": 1.08, "hp_mult": 0.03},
+    "precision": {"name": "Eco de Precisión", "emoji": "🎯", "desc": "+0.5% de crítico por nivel.", "max_level": 60, "cost_base": 40, "cost_growth": 1.09, "crit": 0.005},
+    "fortune": {"name": "Eco de Fortuna", "emoji": "💰", "desc": "+4% de oro interno por nivel.", "max_level": 100, "cost_base": 25, "cost_growth": 1.08, "gold_mult": 0.04},
+    "attunement": {"name": "Eco de Sintonía", "emoji": "✨", "desc": "+3% de Polvo obtenido por nivel.", "max_level": 100, "cost_base": 35, "cost_growth": 1.08, "dust_mult": 0.03}
+  },
+
+  "boss_shop": {
+    "badge_vacio": {"type": "badge", "name": "Insignia del Vacío", "emoji": "🌑", "cost": 25, "desc": "Una insignia oscura para tu perfil."},
+    "badge_inferno": {"type": "badge", "name": "Insignia Infernal", "emoji": "🔥", "cost": 60, "desc": "Arde en tu perfil."},
+    "badge_estelar": {"type": "badge", "name": "Insignia Estelar", "emoji": "🌟", "cost": 150, "desc": "Solo para quienes tocaron el cielo."},
+    "accent_vacio": {"type": "accent", "name": "Acento: Vacío", "emoji": "🎨", "cost": 40, "color": "#6C5CE7", "desc": "Tiñe tus embeds de mazmorra de violeta."},
+    "accent_brasa": {"type": "accent", "name": "Acento: Brasa", "emoji": "🎨", "cost": 80, "color": "#E17055", "desc": "Tiñe tus embeds de mazmorra de naranja."},
+    "accent_toxico": {"type": "accent", "name": "Acento: Tóxico", "emoji": "🎨", "cost": 120, "color": "#00B894", "desc": "Tiñe tus embeds de mazmorra de verde."},
+    "mythic_socket": {"type": "socket", "name": "Enclave Mítico", "emoji": "🔷", "cost": 120, "desc": "Añade una ranura de disparador a tu mejor objeto equipado."}
+  }
+}

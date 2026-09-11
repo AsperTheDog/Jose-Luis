@@ -193,3 +193,68 @@ class StatsTracker:
 
     async def register_bet_lost(self, user_id: int) -> None:
         await self.stats.increment(user_id, "betting_bets_lost", 1)
+
+    async def register_dungeon_floor(self, user_id: int, floor: int, gold: int, items: int = 0) -> None:
+        await self.stats.increment(user_id, "dungeon_floors_cleared", 1)
+        await self.stats.increment(user_id, "dungeon_gold_earned", gold)
+        if items:
+            await self.stats.increment(user_id, "dungeon_items_found", items)
+
+    async def register_dungeon_depth(self, user_id: int, floor: int) -> None:
+        if floor > 0:
+            await self.stats.update_max(user_id, "dungeon_highest_floor", floor)
+
+    async def register_dungeon_boss(self, user_id: int, tier: int, coins: int) -> None:
+        await self.stats.increment(user_id, "dungeon_bosses_defeated", 1)
+        await self.stats.increment(user_id, "dungeon_boss_coins_earned", coins)
+        await self.stats.update_max(user_id, "dungeon_highest_floor", tier * 10)
+
+    async def register_dungeon_combat(self, user_id: int, damage_dealt: int, damage_taken: int) -> None:
+        if damage_dealt:
+            await self.stats.increment(user_id, "dungeon_damage_dealt", damage_dealt)
+        if damage_taken:
+            await self.stats.increment(user_id, "dungeon_damage_taken", damage_taken)
+
+    async def register_dungeon_death(self, user_id: int) -> None:
+        await self.stats.increment(user_id, "dungeon_deaths", 1)
+
+    async def register_dungeon_prestige(self, user_id: int, dust: int) -> None:
+        await self.stats.increment(user_id, "dungeon_prestiges", 1)
+        await self.stats.increment(user_id, "dungeon_dust_earned", dust)
+
+    async def register_dungeon_dust(self, user_id: int, dust: int) -> None:
+        if dust:
+            await self.stats.increment(user_id, "dungeon_dust_earned", dust)
+
+    async def register_dungeon_mutation(self, user_id: int) -> None:
+        await self.stats.increment(user_id, "dungeon_mutations", 1)
+
+    async def register_dungeon_conversion(self, user_id: int, coins: int, money: int) -> None:
+        await self.stats.increment(user_id, "dungeon_coins_converted", coins)
+        await self.stats.increment(user_id, "dungeon_money_converted", money)
+        await self.register_money_obtained(user_id, money)
+
+    async def register_dungeon_item_found(self, user_id: int, amount: int = 1) -> None:
+        await self.stats.increment(user_id, "dungeon_items_found", amount)
+
+    async def register_dungeon_training(self, user_id: int, sessions: int = 1) -> None:
+        await self.stats.increment(user_id, "dungeon_training_sessions", sessions)
+
+    async def register_dungeon_auto_sim(self, user_id: int, floors: int) -> None:
+        if floors:
+            await self.stats.increment(user_id, "dungeon_auto_sims", floors)
+
+    async def register_dungeon_anomaly(self, user_id: int) -> None:
+        await self.stats.increment(user_id, "dungeon_anomalies_cleared", 1)
+
+    async def register_dungeon_reroll(self, user_id: int, sockets: int = 1) -> None:
+        await self.stats.increment(user_id, "dungeon_rerolls", sockets)
+
+    async def register_dungeon_infusion(self, user_id: int) -> None:
+        await self.stats.increment(user_id, "dungeon_infusions", 1)
+
+    async def register_dungeon_retreat(self, user_id: int) -> None:
+        await self.stats.increment(user_id, "dungeon_retreats", 1)
+
+    async def register_dungeon_echo(self, user_id: int, amount: int = 1) -> None:
+        await self.stats.increment(user_id, "dungeon_echoes", amount)

@@ -137,9 +137,9 @@ class StatsCog(commands.Cog):
 
             if category == "xp":
                 level, _, _ = self.calculate_level_and_progress(total_xp)
-                description += f"{icon} {user_name} — **Nivel {level}** ({total_xp:,} XP)\n"
+                description += f"{icon} {user_name} - **Nivel {level}** ({total_xp:,} XP)\n"
             else:
-                description += f"{icon} {user_name} — **{value:,}** {category}\n"
+                description += f"{icon} {user_name} - **{value:,}** {category}\n"
 
         embed.description = description
         await interaction.response.send_message(embed=embed)
