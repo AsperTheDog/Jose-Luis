@@ -80,8 +80,7 @@ TRIGGER_LABELS = {
     "ON_BOSS_PHASE": "Al cambiar de fase un jefe",
     "ON_FLOOR_CLEAR": "Al limpiar el piso",
 }
-DAMAGE_TYPE_LABELS = {"fisico": "físico", "fuego": "fuego", "hielo": "hielo", "rayo": "rayo",
-                      "veneno": "veneno", "arcano": "arcano"}
+DAMAGE_TYPE_LABELS = {"fisico": "físico", "fuego": "fuego", "hielo": "hielo", "rayo": "rayo", "veneno": "veneno", "arcano": "arcano"}
 
 
 def _pct(value) -> str:
@@ -96,7 +95,7 @@ async def ensure_dungeon_access(interaction: discord.Interaction) -> bool:
         )
         return False
 
-    bot: JoseLuisBot = interaction.client  # type: ignore[assignment]
+    bot: JoseLuisBot = interaction.client
     if await bot.is_bot_operator(interaction.guild.id, interaction.user):
         return True
 
@@ -122,8 +121,7 @@ class DungeonGroup(app_commands.Group):
 
 
 class CombatView(discord.ui.View):
-    def __init__(self, cog: "DungeonCog", user_id: int, potions: int, no_potions: bool = False,
-                 skill_name: str = "Habilidad", ended: bool = False):
+    def __init__(self, cog: "DungeonCog", user_id: int, potions: int, no_potions: bool = False, skill_name: str = "Habilidad", ended: bool = False):
         super().__init__(timeout=300)
         self.cog = cog
         self.user_id = user_id
@@ -132,12 +130,10 @@ class CombatView(discord.ui.View):
         self._add("Atacar", "⚔️", discord.ButtonStyle.danger, "attack", ended, row=0)
         self._add("Defender", "🛡️", discord.ButtonStyle.primary, "defend", ended, row=0)
         self._add(skill_name[:60], "✨", discord.ButtonStyle.success, "skill", ended, row=0)
-        self._add(f"Poción ({potions})", "🧪", discord.ButtonStyle.secondary, "potion",
-                  ended or no_potions or potions <= 0, row=0)
+        self._add(f"Poción ({potions})", "🧪", discord.ButtonStyle.secondary, "potion", ended or no_potions or potions <= 0, row=0)
         self._add("Huir", "🏃", discord.ButtonStyle.secondary, "flee", ended, row=1)
 
-    def _add(self, label: str, emoji: str, style: discord.ButtonStyle, action: str, disabled: bool,
-             row: int = 0) -> None:
+    def _add(self, label: str, emoji: str, style: discord.ButtonStyle, action: str, disabled: bool, row: int = 0) -> None:
         button = discord.ui.Button(label=label, emoji=emoji, style=style, disabled=disabled, row=row)
 
         async def callback(interaction: discord.Interaction, _action: str = action) -> None:
@@ -154,7 +150,7 @@ class CombatView(discord.ui.View):
 
     async def on_timeout(self) -> None:
         for child in self.children:
-            child.disabled = True  # type: ignore[attr-defined]
+            child.disabled = True
         if self.message:
             try:
                 await self.message.edit(view=self)
@@ -171,7 +167,7 @@ class InventoryView(discord.ui.View):
         bag = [item for item in items if not item.get("is_equipped")]
 
         if bag:
-            options = [
+            equip_options = [
                 discord.SelectOption(
                     label=item["name"][:100],
                     value=item["item_uid"],
@@ -180,25 +176,38 @@ class InventoryView(discord.ui.View):
                 )
                 for item in bag[:25]
             ]
-            select = discord.ui.Select(placeholder="Equipar un objeto...", options=options, row=0)
+            select = discord.ui.Select(placeholder="Equipar un objeto...", options=equip_options, row=0)
             select.callback = self._equip_callback
             self.add_item(select)
 
-        if equipped:
-            options = [
+            sell_options = [
                 discord.SelectOption(
                     label=f"{item['name']} (+{fmt_int(item_value(item))} oro)"[:100],
                     value=item["item_uid"],
                     description=f"Vender · {cog.slot_name(item['slot'])} · {item['rarity']}"[:100],
                     emoji="🪙",
                 )
-                for item in equipped[:25]
+                for item in bag[:25]
             ]
-            select = discord.ui.Select(placeholder="Vender un objeto equipado...", options=options, row=1)
+            select = discord.ui.Select(placeholder="Vender un objeto de la mochila...", options=sell_options, row=1)
             select.callback = self._sell_callback
             self.add_item(select)
 
-        close = discord.ui.Button(label="Cerrar", style=discord.ButtonStyle.secondary, row=2)
+        if equipped:
+            unequip_options = [
+                discord.SelectOption(
+                    label=item["name"][:100],
+                    value=item["item_uid"],
+                    description=f"Desequipar · {cog.slot_name(item['slot'])} · {item['rarity']}"[:100],
+                    emoji="↩️",
+                )
+                for item in equipped[:25]
+            ]
+            select = discord.ui.Select(placeholder="Desequipar un objeto...", options=unequip_options, row=2)
+            select.callback = self._unequip_callback
+            self.add_item(select)
+
+        close = discord.ui.Button(label="Cerrar", style=discord.ButtonStyle.secondary, row=3)
         close.callback = self._close
         self.add_item(close)
 
@@ -212,31 +221,40 @@ class InventoryView(discord.ui.View):
         return True
 
     async def _equip_callback(self, interaction: discord.Interaction) -> None:
-        item_uid = interaction.data["values"][0]  # type: ignore[index]
+        item_uid = interaction.data["values"][0]
         ok = await self.cog.repo.equip_item(self.user_id, item_uid)
         if not ok:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="❌ Ese objeto ya no existe.", color=discord.Color.red()), ephemeral=True
-            )
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Ese objeto ya no existe.", color=discord.Color.red()), ephemeral=True)
             return
         await self.cog.refresh_vitals(self.user_id)
         await interaction.response.defer()
         await self.cog.send_inventory(interaction, edit=True)
 
     async def _sell_callback(self, interaction: discord.Interaction) -> None:
-        item_uid = interaction.data["values"][0]  # type: ignore[index]
+        item_uid = interaction.data["values"][0]
         item = await self.cog.repo.get_item(self.user_id, item_uid)
         if not item:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="❌ Ese objeto ya no existe.", color=discord.Color.red()), ephemeral=True
-            )
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Ese objeto ya no existe.", color=discord.Color.red()), ephemeral=True)
+            return
+        if item.get("is_equipped"):
+            await interaction.response.send_message(embed=discord.Embed(description="⚠️ Desequípalo primero para poder venderlo.", color=discord.Color.orange()), ephemeral=True)
             return
         value = item_value(item)
         await self.cog.repo.delete_item(self.user_id, item_uid)
         await self.cog.repo.add_gold(self.user_id, value)
         await interaction.response.defer()
-        await self.cog.send_inventory(interaction, edit=True,
-                                      note=f"🪙 Has vendido **{item['name']}** por **{fmt_int(value)}** de oro interno.")
+        await self.cog.send_inventory(interaction, edit=True, note=f"🪙 Has vendido **{item['name']}** por **{fmt_int(value)}** de oro interno.")
+
+    async def _unequip_callback(self, interaction: discord.Interaction) -> None:
+        item_uid = interaction.data["values"][0]
+        item = await self.cog.repo.get_item(self.user_id, item_uid)
+        if not item:
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Ese objeto ya no existe.", color=discord.Color.red()), ephemeral=True)
+            return
+        await self.cog.repo.unequip_item(self.user_id, item_uid)
+        await self.cog.refresh_vitals(self.user_id)
+        await interaction.response.defer()
+        await self.cog.send_inventory(interaction, edit=True, note=f"↩️ Has desequipado **{item['name']}**: ya puedes venderlo desde la mochila.")
 
     async def _close(self, interaction: discord.Interaction) -> None:
         await interaction.response.edit_message(view=None)
@@ -255,9 +273,7 @@ class QuantityModal(discord.ui.Modal):
         try:
             amount = max(1, min(99, int(str(self.quantity.value).strip())))
         except ValueError:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="❌ Introduce un número válido.", color=discord.Color.red()), ephemeral=True
-            )
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Introduce un número válido.", color=discord.Color.red()), ephemeral=True)
             return
         await self.cog.market_buy(interaction, self.key, amount)
 
@@ -273,14 +289,12 @@ class MarketView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="❌ Este menú no es para ti.", color=discord.Color.red()), ephemeral=True
-            )
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Este menú no es para ti.", color=discord.Color.red()), ephemeral=True)
             return False
         return True
 
     async def _selected(self, interaction: discord.Interaction) -> None:
-        key = interaction.data["values"][0]  # type: ignore[index]
+        key = interaction.data["values"][0]
         await interaction.response.send_modal(QuantityModal(self.cog, self.user_id, key))
 
 
@@ -299,14 +313,12 @@ class ShopView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="❌ Este menú no es para ti.", color=discord.Color.red()), ephemeral=True
-            )
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Este menú no es para ti.", color=discord.Color.red()), ephemeral=True)
             return False
         return True
 
     async def _selected(self, interaction: discord.Interaction) -> None:
-        self.selected = interaction.data["values"][0]  # type: ignore[index]
+        self.selected = interaction.data["values"][0]
         await interaction.response.defer()
 
     async def _buy(self, interaction: discord.Interaction) -> None:
@@ -334,14 +346,12 @@ class MutationView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="❌ Este menú no es para ti.", color=discord.Color.red()), ephemeral=True
-            )
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Este menú no es para ti.", color=discord.Color.red()), ephemeral=True)
             return False
         return True
 
     async def _selected(self, interaction: discord.Interaction) -> None:
-        self.selected = interaction.data["values"][0]  # type: ignore[index]
+        self.selected = interaction.data["values"][0]
         await interaction.response.defer()
 
     async def _buy(self, interaction: discord.Interaction) -> None:
@@ -365,14 +375,12 @@ class SkillView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="❌ Este menú no es para ti.", color=discord.Color.red()), ephemeral=True
-            )
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Este menú no es para ti.", color=discord.Color.red()), ephemeral=True)
             return False
         return True
 
     async def _selected(self, interaction: discord.Interaction) -> None:
-        skill_id = interaction.data["values"][0]  # type: ignore[index]
+        skill_id = interaction.data["values"][0]
         skill = self.cog.engine.get_skill(skill_id)
         await self.cog.repo.update_user(self.user_id, active_skill=skill_id)
         await interaction.response.edit_message(
@@ -395,14 +403,12 @@ class AnomalyView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="❌ Este menú no es para ti.", color=discord.Color.red()), ephemeral=True
-            )
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Este menú no es para ti.", color=discord.Color.red()), ephemeral=True)
             return False
         return True
 
     async def _selected(self, interaction: discord.Interaction) -> None:
-        anomaly_id = interaction.data["values"][0]  # type: ignore[index]
+        anomaly_id = interaction.data["values"][0]
         await self.cog.start_anomaly(interaction, anomaly_id)
 
 
@@ -411,25 +417,20 @@ class ShiftsView(discord.ui.View):
         super().__init__(timeout=180)
         self.cog = cog
         self.user_id = user_id
-        select = discord.ui.Select(placeholder="Activa o desactiva afijos...", options=options,
-                                   min_values=0, max_values=max(1, max_values))
+        select = discord.ui.Select(placeholder="Activa o desactiva afijos...", options=options, min_values=0, max_values=max(1, max_values))
         select.callback = self._selected
         self.add_item(select)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="❌ Este menú no es para ti.", color=discord.Color.red()), ephemeral=True
-            )
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Este menú no es para ti.", color=discord.Color.red()), ephemeral=True)
             return False
         return True
 
     async def _selected(self, interaction: discord.Interaction) -> None:
-        values = interaction.data["values"]  # type: ignore[index]
+        values = interaction.data["values"]
         await self.cog.repo.update_user(self.user_id, shifts=json.dumps(values))
-        await interaction.response.edit_message(
-            embed=await self.cog.render_shifts(self.user_id), view=self
-        )
+        await interaction.response.edit_message(embed=await self.cog.render_shifts(self.user_id), view=self)
 
 
 class AutomationView(discord.ui.View):
@@ -447,9 +448,7 @@ class AutomationView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="❌ Este menú no es para ti.", color=discord.Color.red()), ephemeral=True
-            )
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Este menú no es para ti.", color=discord.Color.red()), ephemeral=True)
             return False
         return True
 
@@ -458,8 +457,7 @@ class AutomationView(discord.ui.View):
 
 
 class ForgeView(discord.ui.View):
-    def __init__(self, cog: "DungeonCog", user_id: int, items: list[dict],
-                 item_uid: Optional[str], socket_index: int):
+    def __init__(self, cog: "DungeonCog", user_id: int, items: list[dict], item_uid: Optional[str], socket_index: int):
         super().__init__(timeout=240)
         self.cog = cog
         self.user_id = user_id
@@ -511,9 +509,7 @@ class ForgeView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="❌ Esta forja no es para ti.", color=discord.Color.red()), ephemeral=True
-            )
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Esta forja no es para ti.", color=discord.Color.red()), ephemeral=True)
             return False
         return True
 
@@ -521,8 +517,7 @@ class ForgeView(discord.ui.View):
         await self.cog.send_forge(interaction, edit=True, item_uid=interaction.data["values"][0], socket_index=0)
 
     async def _pick_socket(self, interaction: discord.Interaction) -> None:
-        await self.cog.send_forge(interaction, edit=True, item_uid=self.item_uid,
-                                  socket_index=int(interaction.data["values"][0]))
+        await self.cog.send_forge(interaction, edit=True, item_uid=self.item_uid, socket_index=int(interaction.data["values"][0]))
 
     async def _reroll(self, interaction: discord.Interaction) -> None:
         await self.cog.forge_reroll(interaction, self.item_uid)
@@ -559,9 +554,7 @@ class InfuseView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="❌ Esta forja no es para ti.", color=discord.Color.red()), ephemeral=True
-            )
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Esta forja no es para ti.", color=discord.Color.red()), ephemeral=True)
             return False
         return True
 
@@ -588,9 +581,7 @@ class EchoView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="❌ Este menú no es para ti.", color=discord.Color.red()), ephemeral=True
-            )
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Este menú no es para ti.", color=discord.Color.red()), ephemeral=True)
             return False
         return True
 
@@ -600,11 +591,53 @@ class EchoView(discord.ui.View):
 
     async def _buy(self, interaction: discord.Interaction) -> None:
         if not self.selected:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="⚠️ Selecciona primero un Eco.", color=discord.Color.orange()), ephemeral=True
-            )
+            await interaction.response.send_message(embed=discord.Embed(description="⚠️ Selecciona primero un Eco.", color=discord.Color.orange()), ephemeral=True)
             return
         await self.cog.echo_buy(interaction, self.selected)
+
+
+class TrainingView(discord.ui.View):
+    def __init__(self, cog: "DungeonCog", user_id: int, enabled: bool, has_pending: bool):
+        super().__init__(timeout=180)
+        self.cog = cog
+        self.user_id = user_id
+        toggle = discord.ui.Button(label="Desactivar" if enabled else "Activar", emoji="⏹️" if enabled else "▶️", style=discord.ButtonStyle.danger if enabled else discord.ButtonStyle.success)
+        toggle.callback = self._toggle
+        self.add_item(toggle)
+        claim = discord.ui.Button(label="Recoger XP", emoji="🎓", style=discord.ButtonStyle.primary, disabled=not has_pending)
+        claim.callback = self._claim
+        self.add_item(claim)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Este menú no es para ti.", color=discord.Color.red()), ephemeral=True)
+            return False
+        return True
+
+    async def _toggle(self, interaction: discord.Interaction) -> None:
+        await self.cog.toggle_training(interaction)
+
+    async def _claim(self, interaction: discord.Interaction) -> None:
+        await self.cog.claim_training(interaction)
+
+
+class SettingsView(discord.ui.View):
+    def __init__(self, cog: "DungeonCog", user_id: int, auto: bool):
+        super().__init__(timeout=180)
+        self.cog = cog
+        self.user_id = user_id
+        button = discord.ui.Button(label="Desactivar avance automático" if auto else "Activar avance automático", emoji="⏸️" if auto else "▶️", style=discord.ButtonStyle.danger if auto else discord.ButtonStyle.success)
+        button.callback = self._toggle
+        self.add_item(button)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Este menú no es para ti.", color=discord.Color.red()), ephemeral=True)
+            return False
+        return True
+
+    async def _toggle(self, interaction: discord.Interaction) -> None:
+        await self.cog.toggle_auto_advance(interaction)
 
 
 class PrestigeConfirmView(discord.ui.View):
@@ -622,9 +655,7 @@ class PrestigeConfirmView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="❌ Esta decisión no es tuya.", color=discord.Color.red()), ephemeral=True
-            )
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Esta decisión no es tuya.", color=discord.Color.red()), ephemeral=True)
             return False
         return True
 
@@ -632,13 +663,11 @@ class PrestigeConfirmView(discord.ui.View):
         await self.cog.do_prestige(interaction, self.dust)
 
     async def _cancel(self, interaction: discord.Interaction) -> None:
-        await interaction.response.edit_message(
-            embed=discord.Embed(description="❌ Has decidido seguir luchando.", color=discord.Color.red()), view=None
-        )
+        await interaction.response.edit_message(embed=discord.Embed(description="❌ Has decidido seguir luchando.", color=discord.Color.red()), view=None)
 
 
 class DungeonCog(commands.Cog):
-    mazmorra = DungeonGroup(name="mazmorra", description="Mazmorra RPG exclusiva para suscriptores")
+    mazmorra_group = DungeonGroup(name="mazmorra", description="Mazmorra RPG exclusiva para suscriptores")
 
     def __init__(self, bot: JoseLuisBot):
         self.bot = bot
@@ -647,8 +676,6 @@ class DungeonCog(commands.Cog):
 
     def cog_unload(self) -> None:
         self.automation_task.cancel()
-
-    # ------------------------------------------------------------------ utilidades
 
     @property
     def repo(self):
@@ -672,8 +699,9 @@ class DungeonCog(commands.Cog):
         parts = []
         for tag, instance in combatant.statuses.items():
             spec = self.engine.data["statuses"].get(tag, {})
-            parts.append(f"{spec.get('emoji', '')}{spec.get('name', tag)} x{instance.stacks} ({instance.turns}t)")
-        return " · ".join(parts)[:1024]
+            label = f"{spec.get('emoji', '')} {spec.get('name', tag)}".strip()
+            parts.append(f"{label} x{instance.stacks} ({instance.turns}t)")
+        return ("📌 " + " · ".join(parts))[:1024]
 
     def describe_condition(self, cond: Optional[dict]) -> str:
         if not cond:
@@ -774,12 +802,19 @@ class DungeonCog(commands.Cog):
         return DEFAULT_ACCENT
 
     async def profile_of(self, user_id: int) -> tuple[dict, list[dict], dict, dict]:
-        return (
-            await self.repo.get_user(user_id),
-            await self.repo.get_inventory(user_id),
-            await self.repo.get_mutations(user_id),
-            await self.repo.get_echoes(user_id),
-        )
+        return (await self.repo.get_user(user_id), await self.repo.get_inventory(user_id), await self.repo.get_mutations(user_id), await self.repo.get_echoes(user_id))
+
+    async def floor_progress(self, user_id: int) -> tuple[int, int]:
+        user = await self.repo.get_user(user_id)
+        return int(user["floor_kills"]), max(1, int(self.engine.cfg["enemies_per_floor"]))
+
+    async def grant_item(self, user_id: int, item: dict) -> str:
+        cap = max(1, int(self.engine.cfg.get("inventory_cap", 15)))
+        count = len(await self.repo.get_inventory(user_id))
+        if count >= cap:
+            return f"⚠️ **{item['name']}** se ha perdido: tienes la mochila llena (**{count}/{cap}**). Vende algo para hacer sitio."
+        await self.repo.add_item(user_id, item)
+        return ""
 
     async def refresh_vitals(self, user_id: int) -> None:
         user, items, mutations, echoes = await self.profile_of(user_id)
@@ -796,13 +831,18 @@ class DungeonCog(commands.Cog):
         raw = await self.repo.get_fight(user_id)
         if not raw:
             return None
-        state = BattleState.from_dict(raw)
+        try:
+            state = BattleState.from_dict(raw)
+        except (KeyError, TypeError, ValueError) as error:
+            print(f"[dungeon] Combate ilegible del usuario {user_id}, se descarta: {error}")
+            await self.repo.clear_fight(user_id)
+            return None
         if state.stage != "active":
             await self.repo.clear_fight(user_id)
             return None
         return state
 
-    def render_combat(self, state: BattleState, accent: discord.Color, ended: bool = False) -> discord.Embed:
+    def render_combat(self, state: BattleState, accent: discord.Color, ended: bool = False, progress: Optional[tuple[int, int]] = None, summary_fields: Optional[list[tuple[str, str]]] = None) -> discord.Embed:
         enemy = state.enemy
         player = state.player
         if state.is_boss:
@@ -810,7 +850,7 @@ class DungeonCog(commands.Cog):
         elif state.is_anomaly:
             title = f"🌀 ANOMALÍA · {enemy.emoji} {enemy.name} - Piso {state.floor}"
         elif state.training:
-            title = f"🥋 Entrenamiento · {enemy.emoji} {enemy.name} - Nivel {state.floor}"
+            title = f"🥋 Simulacro · {enemy.emoji} {enemy.name} - Piso {state.floor}"
         elif state.farm:
             title = f"🔁 Repetición · {enemy.emoji} {enemy.name} - Piso {state.floor}"
         else:
@@ -821,34 +861,42 @@ class DungeonCog(commands.Cog):
 
         embed = discord.Embed(title=title, color=accent)
 
+        for summary_name, summary_value in summary_fields or []:
+            if summary_value:
+                embed.add_field(name=summary_name, value=summary_value[:1024], inline=False)
+
         enemy_value = f"❤️ `[{progress_bar(enemy.hp, enemy.max_hp)}]` **{fmt_int(enemy.hp)}/{fmt_int(enemy.max_hp)}**"
         if enemy.shield:
             enemy_value += f"\n🛡️ Escudo: **{fmt_int(enemy.shield)}**"
         if enemy.is_boss and enemy.phase_name:
             enemy_value += f"\n🌀 Postura: **{enemy.phase_name}**"
-        enemy_value += f"\n{self.statuses_str(enemy)}"
+        if enemy.statuses:
+            enemy_value += f"\n\n{self.statuses_str(enemy)}"
+        if state.training:
+            enemy_value += "\n\n♻️ *No puede morir: se recompone. Sal cuando quieras con **Huir**.*"
         embed.add_field(name="👹 Enemigo", value=enemy_value[:1024], inline=False)
 
-        player_value = (
-            f"❤️ `[{progress_bar(player.hp, player.max_hp)}]` **{fmt_int(player.hp)}/{fmt_int(player.max_hp)}**\n"
-            f"⚡ `[{progress_bar(player.energy, player.max_energy)}]` **{fmt_int(player.energy)}/{fmt_int(player.max_energy)}**"
-        )
+        player_value = (f"❤️ `[{progress_bar(player.hp, player.max_hp)}]` **{fmt_int(player.hp)}/{fmt_int(player.max_hp)}**\n" f"⚡ `[{progress_bar(player.energy, player.max_energy)}]` **{fmt_int(player.energy)}/{fmt_int(player.max_energy)}**")
         if player.shield:
             player_value += f"\n🛡️ Escudo: **{fmt_int(player.shield)}**"
-        player_value += f"\n{self.statuses_str(player)}"
+        if player.statuses:
+            player_value += f"\n\n{self.statuses_str(player)}"
         embed.add_field(name="🧙 Tú", value=player_value[:1024], inline=False)
 
-        log_text = "\n".join(state.log[-9:]) if state.log else "*La mazmorra guarda silencio...*"
-        embed.add_field(name="📜 Bitácora", value=log_text[:1024], inline=False)
+        if not ended:
+            recent = [line[:140] for line in state.log[-7:]]
+            log_text = "\n".join(recent) if recent else "*La mazmorra guarda silencio...*"
+            embed.add_field(name="📜 Bitácora", value=log_text[:1024], inline=False)
 
         skill = self.skills_of(state)
-        footer = f"Turno {state.turn} · 🧪 {state.potions} · 🎯 {skill.get('name', '?')} · Piso {state.floor}"
+        location = f"Simulacro piso {state.floor}" if state.training else f"Piso {state.floor}"
+        footer = f"Turno {state.turn} · 🧪 {state.potions} · 🎯 {skill.get('name', '?')} · {location}"
+        if progress and not ended and not (state.farm or state.is_boss or state.is_anomaly or state.training):
+            footer += f" · 👹 {progress[0]}/{progress[1]}"
         if state.shifts:
             footer += f" · 🌌 {len(state.shifts)} afijo(s)"
         embed.set_footer(text=footer[:2048])
         return embed
-
-    # ------------------------------------------------------------------ combate
 
     async def handle_action(self, interaction: discord.Interaction, view: CombatView, action: str) -> None:
         user_id = interaction.user.id
@@ -864,9 +912,7 @@ class DungeonCog(commands.Cog):
         shift_effects = self.engine.shift_effects(state.shifts)
         result = self.engine.player_action(state, action, shift_effects, random.Random())
         if not result["ok"]:
-            await interaction.response.send_message(
-                embed=discord.Embed(description=f"⚠️ {result['reason']}", color=discord.Color.orange()), ephemeral=True
-            )
+            await interaction.response.send_message(embed=discord.Embed(description=f"⚠️ {result['reason']}", color=discord.Color.orange()), ephemeral=True)
             return
 
         accent = await self.accent_color(user_id)
@@ -874,57 +920,67 @@ class DungeonCog(commands.Cog):
             await self.repo.save_fight(user_id, state.to_dict())
             skill = self.skills_of(state)
             new_view = CombatView(self, user_id, state.potions, state.no_potions, skill.get("name", "Habilidad"))
-            await interaction.response.edit_message(embed=self.render_combat(state, accent), view=new_view)
+            new_view.message = getattr(interaction, "message", None)
+            await interaction.response.edit_message(embed=self.render_combat(state, accent, progress=await self.floor_progress(user_id)), view=new_view)
         elif state.stage == "victory":
-            summary = await self.apply_victory(user_id, state)
-            embed = self.render_combat(state, accent, ended=True)
-            embed.add_field(name="🏆 Recompensas", value=summary[:1024], inline=False)
+            sections = await self.apply_victory(user_id, state)
+            embed = self.render_combat(state, accent, ended=True, progress=await self.floor_progress(user_id), summary_fields=[("🎁 Botín", "\n".join(sections["loot"])), ("🗺️ Progreso", "\n".join(sections["progress"]))])
             await interaction.response.edit_message(embed=embed, view=CombatView(self, user_id, 0, ended=True))
         elif state.stage in ("fled", "timeout"):
-            summary = await self.apply_retreat(user_id, state)
-            embed = self.render_combat(state, accent, ended=True)
-            embed.add_field(name="🏃 Retirada", value=summary[:1024], inline=False)
+            note = await self.apply_retreat(user_id, state)
+            embed = self.render_combat(state, accent, ended=True, progress=await self.floor_progress(user_id), summary_fields=[("🏃 Retirada", note)])
             await interaction.response.edit_message(embed=embed, view=CombatView(self, user_id, 0, ended=True))
         else:
-            summary = await self.apply_defeat(user_id, state)
-            embed = self.render_combat(state, accent, ended=True)
-            embed.add_field(name="💀 Consecuencias", value=summary[:1024], inline=False)
+            note = await self.apply_defeat(user_id, state)
+            embed = self.render_combat(state, accent, ended=True, progress=await self.floor_progress(user_id), summary_fields=[("💀 Derrota", note)])
             await interaction.response.edit_message(embed=embed, view=CombatView(self, user_id, 0, ended=True))
 
-    async def apply_victory(self, user_id: int, state: BattleState) -> str:
+    async def apply_victory(self, user_id: int, state: BattleState) -> dict[str, list[str]]:
+        if state.training:
+            await self.repo.clear_fight(user_id)
+            return {"loot": [], "progress": ["🎯 El simulacro no concede recompensas."]}
         user = await self.repo.get_user(user_id)
         rewards = state.rewards
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         updates: dict = {"potions": state.potions, "runs": int(user["runs"]) + 1}
-        lines = [f"💰 **+{fmt_int(rewards['gold'])}** oro interno", f"⭐ **+{fmt_int(rewards['xp'])}** XP"]
+        loot = [f"💰 **+{fmt_int(rewards['gold'])}** oro interno", f"⭐ **+{fmt_int(rewards['xp'])}** XP"]
+        progress: list[str] = []
 
         level, xp, gained = self.engine.gain_xp(user["level"], user["xp"], rewards["xp"])
         updates["level"] = level
         updates["xp"] = xp
         if gained:
-            lines.append(f"⬆️ ¡Has subido **{gained}** nivel(es)!")
+            loot.append(f"⬆️ ¡Subes al nivel **{level}**!")
 
+        item_added = False
         if rewards.get("item"):
-            await self.repo.add_item(user_id, rewards["item"])
             item = rewards["item"]
-            lines.append(f"🎁 **{item['name']}** ({self.rarity_emoji(item['rarity'])} {item['rarity']})")
+            warning = await self.grant_item(user_id, item)
+            if warning:
+                loot.append(warning)
+            else:
+                item_added = True
+                loot.append(f"🎁 **{item['name']}** {self.rarity_emoji(item['rarity'])}")
 
         if rewards.get("coins"):
             await self.repo.add_boss_coins(user_id, rewards["coins"])
-            lines.append(f"🪙 **+{fmt_int(rewards['coins'])}** Monedas de Jefe")
+            loot.append(f"🪙 **+{fmt_int(rewards['coins'])}** Monedas")
 
         if rewards.get("dust"):
             await self.repo.add_dust(user_id, rewards["dust"])
-            lines.append(f"✨ **+{fmt_int(rewards['dust'])}** Polvo Intergaláctico")
+            loot.append(f"✨ **+{fmt_int(rewards['dust'])}** Polvo")
+
+        if rewards.get("gold"):
+            await self.repo.add_gold(user_id, rewards["gold"])
 
         if state.training:
             updates["training_used"] = int(user["training_used"]) + 1
         elif state.is_boss:
             tier = self.engine.boss_tier_for_floor(state.floor)
             highest = max(int(user["highest_floor"]), state.floor)
-            updates.update(floor=state.floor + 1, highest_floor=highest, boss_tier=tier,
-                           last_boss_at=now, last_boss_floor=state.floor)
+            updates.update(floor=state.floor + 1, highest_floor=highest, boss_tier=tier, last_boss_at=now, last_boss_floor=state.floor)
             await self.bot.global_stats.register_dungeon_depth(user_id, highest)
+            await self.bot.global_stats.register_dungeon_floor_cleared(user_id)
             await self.bot.global_stats.register_dungeon_boss(user_id, tier, rewards["coins"])
             await self.repo.add_log(user_id, "boss", f"Derrotaste al jefe del piso {state.floor}.")
         elif state.is_anomaly:
@@ -935,18 +991,36 @@ class DungeonCog(commands.Cog):
         elif state.farm:
             pass
         else:
-            highest = max(int(user["highest_floor"]), state.floor)
-            updates.update(floor=state.floor + 1, highest_floor=highest)
-            await self.bot.global_stats.register_dungeon_depth(user_id, highest)
+            needed = max(1, int(self.engine.cfg["enemies_per_floor"]))
+            if int(user["floor_kills"]) >= needed:
+                progress.append(f"🔁 El piso **{state.floor}** ya está despejado: estos enemigos no cuentan. Usa `/mazmorra avanzar` para bajar.")
+            else:
+                kills = int(user["floor_kills"]) + 1
+                if kills >= needed:
+                    highest = max(int(user["highest_floor"]), state.floor)
+                    updates["highest_floor"] = highest
+                    await self.bot.global_stats.register_dungeon_depth(user_id, highest)
+                    await self.bot.global_stats.register_dungeon_floor_cleared(user_id)
+                    if bool(user["auto_advance"]):
+                        updates.update(floor=state.floor + 1, floor_kills=0)
+                        progress.append(f"🚪 ¡Piso **{state.floor}** despejado! Desciendes al piso **{state.floor + 1}**.")
+                        await self.repo.add_log(user_id, "floor", f"Despejaste el piso {state.floor}.")
+                    else:
+                        updates["floor_kills"] = needed
+                        progress.append(f"🚪 ¡Piso **{state.floor}** despejado! Avance automático desactivado: usa `/mazmorra avanzar` para bajar.")
+                else:
+                    updates["floor_kills"] = kills
+                    progress.append(f"👹 Enemigos derrotados: **{kills}/{needed}**")
 
         await self.repo.update_user(user_id, **updates)
         await self.repo.clear_fight(user_id)
         await self.refresh_vitals(user_id)
 
-        await self.bot.global_stats.register_dungeon_floor(user_id, state.floor, rewards["gold"],
-                                                            1 if rewards.get("item") else 0)
+        await self.bot.global_stats.register_dungeon_loot(user_id, rewards["gold"], 1 if item_added else 0)
+        if not state.training:
+            await self.bot.global_stats.register_dungeon_kill(user_id)
         await self.bot.global_stats.register_dungeon_combat(user_id, state.damage_dealt, state.damage_taken)
-        return "\n".join(lines)
+        return {"loot": loot, "progress": progress}
 
     async def apply_defeat(self, user_id: int, state: BattleState) -> str:
         user = await self.repo.get_user(user_id)
@@ -958,8 +1032,7 @@ class DungeonCog(commands.Cog):
         await self.bot.global_stats.register_dungeon_death(user_id)
         await self.bot.global_stats.register_dungeon_combat(user_id, state.damage_dealt, state.damage_taken)
         await self.repo.add_log(user_id, "death", f"Caíste en el piso {state.floor}.")
-        return (f"Pierdes **{fmt_int(penalty)}** de oro interno, pero conservas tu piso {user['floor']}.\n"
-                f"Vuelve a intentarlo cuando quieras.")
+        return (f"Pierdes **{fmt_int(penalty)}** de oro interno, pero conservas tu piso {user['floor']}.\n" f"Vuelve a intentarlo cuando quieras.")
 
     async def apply_retreat(self, user_id: int, state: BattleState) -> str:
         user = await self.repo.get_user(user_id)
@@ -974,8 +1047,7 @@ class DungeonCog(commands.Cog):
             reason = "El combate se alargó demasiado y tuviste que retirarte."
         else:
             reason = "Te retiraste del combate."
-        return (f"{reason} Conservas tu piso y tu equipo, pero no ganas recompensas."
-                + (f" Pierdes **{fmt_int(penalty)}** de oro." if penalty else ""))
+        return (f"{reason} Conservas tu piso y tu equipo, pero no ganas recompensas." + (f" Pierdes **{fmt_int(penalty)}** de oro." if penalty else ""))
 
     async def start_fight_message(self, interaction: discord.Interaction, state: BattleState) -> None:
         user_id = interaction.user.id
@@ -989,9 +1061,7 @@ class DungeonCog(commands.Cog):
         except discord.HTTPException:
             pass
 
-    # ------------------------------------------------------------------ comandos
-
-    @mazmorra.command(name="explorar", description="Desciende por los pisos de la mazmorra.")
+    @mazmorra_group.command(name="explorar", description="Desciende por los pisos de la mazmorra.")
     @app_commands.describe(piso="Repite un piso ya superado para farmear equipo (opcional).")
     async def explore(self, interaction: discord.Interaction, piso: Optional[int] = None) -> None:
         user_id = interaction.user.id
@@ -1000,7 +1070,7 @@ class DungeonCog(commands.Cog):
             accent = await self.accent_color(user_id)
             skill = self.skills_of(state)
             view = CombatView(self, user_id, state.potions, state.no_potions, skill.get("name", "Habilidad"))
-            await interaction.response.send_message(embed=self.render_combat(state, accent), view=view)
+            await interaction.response.send_message(embed=self.render_combat(state, accent, progress=await self.floor_progress(user_id)), view=view)
             view.message = await interaction.original_response()
             return
 
@@ -1033,12 +1103,29 @@ class DungeonCog(commands.Cog):
                 return
             farm = False
 
-        state = self.engine.start_floor(user, items, mutations, floor, shifts,
-                                        user.get("active_skill") or "golpe_pesado", int(user["potions"]),
-                                        farm=farm, echoes=echoes)
+        state = self.engine.start_floor(user, items, mutations, floor, shifts, user.get("active_skill") or self.engine.default_skill_id(), int(user["potions"]), farm=farm, echoes=echoes)
         await self.start_fight_message(interaction, state)
 
-    @mazmorra.command(name="jefe", description="Desafía al Jefe que bloquea tu progreso.")
+    @mazmorra_group.command(name="avanzar", description="Desciende al siguiente piso cuando ya lo has despejado.")
+    async def advance(self, interaction: discord.Interaction) -> None:
+        user_id = interaction.user.id
+        if await self.active_fight(user_id) is not None:
+            await interaction.response.send_message(embed=discord.Embed(description="⚠️ Termina tu combate actual primero.", color=discord.Color.orange()), ephemeral=True)
+            return
+        user = await self.repo.get_user(user_id)
+        floor = int(user["floor"])
+        needed = max(1, int(self.engine.cfg["enemies_per_floor"]))
+        if self.engine.is_gate_floor(floor):
+            await interaction.response.send_message(embed=discord.Embed(description="⚠️ Este piso está bloqueado por un Jefe: resuélvelo con `/mazmorra jefe`.", color=discord.Color.orange()), ephemeral=True)
+            return
+        if int(user["floor_kills"]) < needed:
+            await interaction.response.send_message(embed=discord.Embed(description=f"⚠️ Todavía no has despejado el piso **{floor}**: **{int(user['floor_kills'])}/{needed}** enemigos.", color=discord.Color.orange()), ephemeral=True)
+            return
+        await self.repo.update_user(user_id, floor=floor + 1, floor_kills=0)
+        await self.repo.add_log(user_id, "floor", f"Descendiste al piso {floor + 1}.")
+        await interaction.response.send_message(embed=discord.Embed(title="🚪 Desciendes", description=f"Bajas al piso **{floor + 1}**.", color=discord.Color.green()))
+
+    @mazmorra_group.command(name="jefe", description="Desafía al Jefe que bloquea tu progreso.")
     async def boss(self, interaction: discord.Interaction) -> None:
         user_id = interaction.user.id
         state = await self.active_fight(user_id)
@@ -1077,12 +1164,10 @@ class DungeonCog(commands.Cog):
         items = await self.repo.get_inventory(user_id)
         echoes = await self.repo.get_echoes(user_id)
         tier = self.engine.boss_tier_for_floor(floor)
-        state = self.engine.start_boss(user, items, mutations, tier, _json_list(user.get("shifts")),
-                                       user.get("active_skill") or "golpe_pesado", int(user["potions"]),
-                                       echoes=echoes)
+        state = self.engine.start_boss(user, items, mutations, tier, _json_list(user.get("shifts")), user.get("active_skill") or self.engine.default_skill_id(), int(user["potions"]), echoes=echoes)
         await self.start_fight_message(interaction, state)
 
-    @mazmorra.command(name="perfil", description="Consulta tu progreso en la mazmorra.")
+    @mazmorra_group.command(name="perfil", description="Consulta tu progreso en la mazmorra.")
     async def profile(self, interaction: discord.Interaction) -> None:
         user_id = interaction.user.id
         user = await self.repo.get_user(user_id)
@@ -1113,8 +1198,8 @@ class DungeonCog(commands.Cog):
         )
         embed.add_field(
             name="🗺️ Progreso",
-            value=(f"**Piso actual:** {int(user['floor'])}\n**Piso máximo:** {int(user['highest_floor'])}\n"
-                   f"**Jefes superados:** {tier}\n**Polvo:** {fmt_int(int(user['dust']))}"),
+            value=(f"**Piso actual:** {int(user['floor'])} ({int(user['floor_kills'])}/{max(1, int(self.engine.cfg['enemies_per_floor']))} enemigos)\n**Piso máximo:** {int(user['highest_floor'])}\n"
+                   f"**Avance automático:** {'sí' if bool(user['auto_advance']) else 'no'}\n**Jefes superados:** {tier}\n**Polvo:** {fmt_int(int(user['dust']))}"),
             inline=True,
         )
         embed.add_field(
@@ -1127,21 +1212,14 @@ class DungeonCog(commands.Cog):
         )
 
         equipped = [item for item in items if item.get("is_equipped")]
-        gear_text = "\n".join(
-            f"{self.rarity_emoji(item['rarity'])} **{item['name']}** ({self.slot_name(item['slot'])}, "
-            f"{len(item['sockets'])} ranuras)" for item in equipped
-        ) or "*Ninguno*"
+        gear_text = "\n".join(f"{self.rarity_emoji(item['rarity'])} **{item['name']}** ({self.slot_name(item['slot'])}, " f"{len(item['sockets'])} ranuras)" for item in equipped ) or "*Ninguno*"
         embed.add_field(name="🎒 Equipo", value=gear_text[:1024], inline=False)
 
         if mutations:
-            mut_text = ", ".join(
-                f"{self.engine.data['mutations'][mid]['emoji']} {self.engine.data['mutations'][mid]['name']} "
-                f"nivel {lvl}" for mid, lvl in mutations.items() if mid in self.engine.data["mutations"]
-            )
+            mut_text = ", ".join(f"{self.engine.data['mutations'][mid]['emoji']} {self.engine.data['mutations'][mid]['name']} " f"nivel {lvl}" for mid, lvl in mutations.items() if mid in self.engine.data["mutations"])
             embed.add_field(name="🧬 Mutaciones", value=mut_text[:1024], inline=False)
 
-        badges = [self.engine.data["boss_shop"][cid] for cid in cosmetics
-                  if cid in self.engine.data["boss_shop"] and self.engine.data["boss_shop"][cid].get("type") == "badge"]
+        badges = [self.engine.data["boss_shop"][cid] for cid in cosmetics if cid in self.engine.data["boss_shop"] and self.engine.data["boss_shop"][cid].get("type") == "badge"]
         if badges:
             embed.add_field(name="🏅 Insignias", value=" ".join(b["emoji"] for b in badges), inline=False)
 
@@ -1166,7 +1244,8 @@ class DungeonCog(commands.Cog):
         )
         embed.add_field(
             name="Mochila",
-            value=(f"{len(items) - len(equipped)} objeto(s). Selecciona abajo para equipar o vender.\n"
+            value=(f"**{len(items)}/{max(1, int(self.engine.cfg.get('inventory_cap', 15)))}** objetos en total ({len(equipped)} equipados).\n"
+                   f"**Solo se venden objetos desequipados**: usa el menú de abajo para desequipar lo que quieras soltar.\n"
                    f"Usa `/mazmorra forja` para reforjar o infundir ranuras."),
             inline=False,
         )
@@ -1176,11 +1255,11 @@ class DungeonCog(commands.Cog):
         else:
             await interaction.response.send_message(embed=embed, view=view)
 
-    @mazmorra.command(name="inventario", description="Gestiona tu equipo.")
+    @mazmorra_group.command(name="inventario", description="Gestiona tu equipo.")
     async def inventory(self, interaction: discord.Interaction) -> None:
         await self.send_inventory(interaction)
 
-    @mazmorra.command(name="forja", description="Refuerza, bloquea e infunde las ranuras de tu equipo.")
+    @mazmorra_group.command(name="forja", description="Refuerza, bloquea e infunde las ranuras de tu equipo.")
     async def forge(self, interaction: discord.Interaction) -> None:
         items = await self.repo.get_inventory(interaction.user.id)
         if not items:
@@ -1192,8 +1271,7 @@ class DungeonCog(commands.Cog):
         first = next((item for item in items if item.get("is_equipped")), items[0])
         await self.send_forge(interaction, item_uid=first["item_uid"], socket_index=0)
 
-    async def send_forge(self, interaction: discord.Interaction, edit: bool = False,
-                         item_uid: Optional[str] = None, socket_index: int = 0, note: str = "") -> None:
+    async def send_forge(self, interaction: discord.Interaction, edit: bool = False, item_uid: Optional[str] = None, socket_index: int = 0, note: str = "") -> None:
         user_id = interaction.user.id
         items = await self.repo.get_inventory(user_id)
         if not items:
@@ -1251,13 +1329,10 @@ class DungeonCog(commands.Cog):
         sockets = self.engine.reroll_sockets(item, random.SystemRandom())
         await self.repo.set_item_sockets(user_id, item_uid, sockets)
         await self.refresh_vitals(user_id)
-        await self.bot.global_stats.register_dungeon_reroll(
-            user_id, sum(1 for mod in sockets if not mod.get("locked")))
-        await self.send_forge(interaction, edit=True, item_uid=item_uid, socket_index=0,
-                              note=f"🔨 Has reforjado las ranuras libres por **{fmt_int(cost)}** oro.")
+        await self.bot.global_stats.register_dungeon_reroll(user_id, sum(1 for mod in sockets if not mod.get("locked")))
+        await self.send_forge(interaction, edit=True, item_uid=item_uid, socket_index=0, note=f"🔨 Has reforjado las ranuras libres por **{fmt_int(cost)}** oro.")
 
-    async def forge_toggle_lock(self, interaction: discord.Interaction, item_uid: str,
-                                socket_index: int) -> None:
+    async def forge_toggle_lock(self, interaction: discord.Interaction, item_uid: str, socket_index: int) -> None:
         user_id = interaction.user.id
         item = await self.repo.get_item(user_id, item_uid)
         if not item or not item["sockets"]:
@@ -1271,11 +1346,9 @@ class DungeonCog(commands.Cog):
         sockets[index]["locked"] = not sockets[index].get("locked")
         await self.repo.set_item_sockets(user_id, item_uid, sockets)
         state = "bloqueada 🔒" if sockets[index]["locked"] else "desbloqueada 🔓"
-        await self.send_forge(interaction, edit=True, item_uid=item_uid, socket_index=index,
-                              note=f"Ranura **{index + 1}** {state}.")
+        await self.send_forge(interaction, edit=True, item_uid=item_uid, socket_index=index, note=f"Ranura **{index + 1}** {state}.")
 
-    async def forge_offer_infusion(self, interaction: discord.Interaction, item_uid: str,
-                                   socket_index: int) -> None:
+    async def forge_offer_infusion(self, interaction: discord.Interaction, item_uid: str, socket_index: int) -> None:
         user_id = interaction.user.id
         cost = self.engine.socket_infuse_cost()
         user = await self.repo.get_user(user_id)
@@ -1302,12 +1375,9 @@ class DungeonCog(commands.Cog):
         )
         for index, mod in enumerate(candidates):
             embed.add_field(name=f"Opción {index + 1}", value=self.describe_mod(mod)[:1024], inline=False)
-        await interaction.response.edit_message(
-            embed=embed, view=InfuseView(self, user_id, item_uid, socket_index, candidates)
-        )
+        await interaction.response.edit_message(embed=embed, view=InfuseView(self, user_id, item_uid, socket_index, candidates))
 
-    async def forge_apply_infusion(self, interaction: discord.Interaction, item_uid: str,
-                                   socket_index: int, chosen: dict) -> None:
+    async def forge_apply_infusion(self, interaction: discord.Interaction, item_uid: str, socket_index: int, chosen: dict) -> None:
         user_id = interaction.user.id
         cost = self.engine.socket_infuse_cost()
         if not await self.repo.spend_boss_coins(user_id, cost):
@@ -1332,10 +1402,9 @@ class DungeonCog(commands.Cog):
         await self.repo.set_item_sockets(user_id, item_uid, sockets)
         await self.refresh_vitals(user_id)
         await self.bot.global_stats.register_dungeon_infusion(user_id)
-        await self.send_forge(interaction, edit=True, item_uid=item_uid, socket_index=index,
-                              note=f"🪙 Ranura **{index + 1}** infundida: {self.describe_mod(chosen)}")
+        await self.send_forge(interaction, edit=True, item_uid=item_uid, socket_index=index, note=f"🪙 Ranura **{index + 1}** infundida: {self.describe_mod(chosen)}")
 
-    @mazmorra.command(name="tienda", description="Compra pociones y mejoras con oro interno.")
+    @mazmorra_group.command(name="mejoras", description="Compra pociones y mejoras con oro interno.")
     async def market(self, interaction: discord.Interaction) -> None:
         user_id = interaction.user.id
         user = await self.repo.get_user(user_id)
@@ -1409,13 +1478,10 @@ class DungeonCog(commands.Cog):
             await self.repo.update_user(user_id, upgrades=json.dumps(upgrades))
             await self.refresh_vitals(user_id)
             spec = self.engine.data["upgrades"][upgrade_key]
-            message = (f"{spec['emoji']} **{spec['name']}** sube a nivel **{current + amount}** "
-                       f"por **{fmt_int(cost)}** oro.")
-        await interaction.response.edit_message(
-            embed=discord.Embed(description=message, color=discord.Color.green()), view=None
-        )
+            message = (f"{spec['emoji']} **{spec['name']}** sube a nivel **{current + amount}** " f"por **{fmt_int(cost)}** oro.")
+        await interaction.response.edit_message(embed=discord.Embed(description=message, color=discord.Color.green()), view=None)
 
-    @mazmorra.command(name="trofeos", description="Gasta Monedas de Jefe en insignias, acentos y enclaves.")
+    @mazmorra_group.command(name="trofeos", description="Gasta Monedas de Jefe en insignias, acentos y enclaves.")
     async def shop(self, interaction: discord.Interaction) -> None:
         user_id = interaction.user.id
         user = await self.repo.get_user(user_id)
@@ -1445,16 +1511,12 @@ class DungeonCog(commands.Cog):
         user_id = interaction.user.id
         spec = self.engine.data["boss_shop"].get(entry_id)
         if spec is None:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="❌ Ese artículo no existe.", color=discord.Color.red()), ephemeral=True
-            )
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Ese artículo no existe.", color=discord.Color.red()), ephemeral=True)
             return
 
         cosmetics = await self.repo.get_cosmetics(user_id)
         if spec["type"] != "socket" and entry_id in cosmetics:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="❌ Ya posees esa recompensa.", color=discord.Color.orange()), ephemeral=True
-            )
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Ya posees esa recompensa.", color=discord.Color.orange()), ephemeral=True)
             return
 
         if spec["type"] == "socket":
@@ -1486,25 +1548,20 @@ class DungeonCog(commands.Cog):
                 )
                 return
             rng = random.SystemRandom()
-            mod = self.engine.generate_mod(rng, self.engine.data["rarities"].get(target["rarity"], {}).get("power", 1.0),
-                                           int(target["floor_found"]))
+            mod = self.engine.generate_mod(rng, self.engine.data["rarities"].get(target["rarity"], {}).get("power", 1.0), int(target["floor_found"]))
             sockets = list(target["sockets"]) + [mod]
             await self.repo.set_item_sockets(user_id, target["item_uid"], sockets)
             await self.refresh_vitals(user_id)
-            message = (f"🔷 **{target['name']}** gana una ranura nueva "
-                       f"(`{mod['on']} → {mod['then']['type']}`). Ahora tiene **{len(sockets)}**.")
+            message = (f"🔷 **{target['name']}** gana una ranura nueva " f"(`{mod['on']} → {mod['then']['type']}`). Ahora tiene **{len(sockets)}**.")
         else:
             await self.repo.add_cosmetic(user_id, entry_id)
-            group = [cid for cid, other in self.engine.data["boss_shop"].items()
-                     if other.get("type") == spec["type"]]
+            group = [cid for cid, other in self.engine.data["boss_shop"].items() if other.get("type") == spec["type"]]
             await self.repo.equip_cosmetic(user_id, entry_id, group)
             message = f"{spec.get('emoji', '🪙')} Has adquirido **{spec['name']}**."
             if spec["type"] == "accent":
                 message += " Tus embeds de mazmorra ya usan este acento."
 
-        await interaction.response.edit_message(
-            embed=discord.Embed(description=message, color=discord.Color.green()), view=None
-        )
+        await interaction.response.edit_message(embed=discord.Embed(description=message, color=discord.Color.green()), view=None)
 
     async def pick_socket_target(self, user_id: int) -> Optional[dict]:
         items = [item for item in await self.repo.get_inventory(user_id) if item.get("is_equipped")]
@@ -1513,10 +1570,9 @@ class DungeonCog(commands.Cog):
         order = {name: index for index, name in enumerate(self.engine.data["rarities"].keys())}
         return min(items, key=lambda item: (len(item["sockets"]), -order.get(item["rarity"], 0)))
 
-    @mazmorra.command(name="canjear", description="Canjea Monedas de Jefe por Choskris (tope diario).")
+    @mazmorra_group.command(name="canjear", description="Canjea Monedas de Jefe por Choskris (tope diario).")
     @app_commands.describe(cantidad="Cuántas Monedas de Jefe quieres canjear.")
-    async def convert(self, interaction: discord.Interaction,
-                      cantidad: app_commands.Range[int, 1, 1_000_000]) -> None:
+    async def convert(self, interaction: discord.Interaction, cantidad: app_commands.Range[int, 1, 1_000_000]) -> None:
         user_id = interaction.user.id
         user = await self.repo.get_user(user_id)
         tier = int(user["boss_tier"])
@@ -1528,11 +1584,8 @@ class DungeonCog(commands.Cog):
         max_by_cap = remaining_money // rate
         coins = min(int(cantidad), int(user["boss_coins"]), max_by_cap)
         if coins <= 0:
-            reason = ("No tienes Monedas de Jefe suficientes." if int(user["boss_coins"]) <= 0
-                      else f"Has alcanzado el tope diario ({fmt_int(cap)} Choskris).")
-            await interaction.response.send_message(
-                embed=discord.Embed(description=f"⚠️ {reason}", color=discord.Color.orange()), ephemeral=True
-            )
+            reason = ("No tienes Monedas de Jefe suficientes." if int(user["boss_coins"]) <= 0 else f"Has alcanzado el tope diario ({fmt_int(cap)} Choskris).")
+            await interaction.response.send_message(embed=discord.Embed(description=f"⚠️ {reason}", color=discord.Color.orange()), ephemeral=True)
             return
         money = coins * rate
         await self.repo.spend_boss_coins(user_id, coins)
@@ -1550,7 +1603,7 @@ class DungeonCog(commands.Cog):
             )
         )
 
-    @mazmorra.command(name="mutaciones", description="Gasta Polvo Intergaláctico en mutaciones del sistema.")
+    @mazmorra_group.command(name="mutaciones", description="Gasta Polvo Intergaláctico en mutaciones del sistema.")
     async def mutations_menu(self, interaction: discord.Interaction) -> None:
         user_id = interaction.user.id
         user = await self.repo.get_user(user_id)
@@ -1584,9 +1637,7 @@ class DungeonCog(commands.Cog):
         user_id = interaction.user.id
         spec = self.engine.data["mutations"].get(mutation_id)
         if spec is None:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="❌ Esa mutación no existe.", color=discord.Color.red()), ephemeral=True
-            )
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Esa mutación no existe.", color=discord.Color.red()), ephemeral=True)
             return
         user = await self.repo.get_user(user_id)
         owned = await self.repo.get_mutations(user_id)
@@ -1616,7 +1667,7 @@ class DungeonCog(commands.Cog):
             view=None,
         )
 
-    @mazmorra.command(name="ecos", description="Gasta Polvo en Ecos permanentes, sin techo práctico.")
+    @mazmorra_group.command(name="ecos", description="Gasta Polvo en Ecos permanentes, sin techo práctico.")
     async def echoes_menu(self, interaction: discord.Interaction) -> None:
         user_id = interaction.user.id
         user = await self.repo.get_user(user_id)
@@ -1655,9 +1706,7 @@ class DungeonCog(commands.Cog):
         user_id = interaction.user.id
         spec = self.engine.data["echoes"].get(echo_id)
         if spec is None:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="❌ Ese Eco no existe.", color=discord.Color.red()), ephemeral=True
-            )
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Ese Eco no existe.", color=discord.Color.red()), ephemeral=True)
             return
         owned = await self.repo.get_echoes(user_id)
         level = int(owned.get(echo_id, 0))
@@ -1690,7 +1739,7 @@ class DungeonCog(commands.Cog):
             view=None,
         )
 
-    @mazmorra.command(name="habilidades", description="Elige la habilidad que usa el botón de combate.")
+    @mazmorra_group.command(name="habilidades", description="Elige la habilidad que usa el botón de combate.")
     async def skill_menu(self, interaction: discord.Interaction) -> None:
         user_id = interaction.user.id
         user = await self.repo.get_user(user_id)
@@ -1703,7 +1752,7 @@ class DungeonCog(commands.Cog):
             return
         options = []
         for skill in skills:
-            mark = "✅ " if skill["id"] == user.get("active_skill") else ""
+            mark = "✅ " if skill["id"] == self.engine.resolve_skill_id(user.get("active_skill")) else ""
             options.append(discord.SelectOption(
                 label=f"{mark}{skill['name']}"[:100],
                 value=skill["id"],
@@ -1716,14 +1765,93 @@ class DungeonCog(commands.Cog):
             view=SkillView(self, user_id, options),
         )
 
-    @mazmorra.command(name="entrenar", description="Entrena sin riesgo contra un muñeco (requiere mutación).")
-    @app_commands.describe(nivel="Nivel del muñeco de entrenamiento.")
-    async def train(self, interaction: discord.Interaction,
-                    nivel: app_commands.Range[int, 1, 9999]) -> None:
+    @mazmorra_group.command(name="entrenar", description="Entrena en segundo plano para ganar XP poco a poco.")
+    async def train(self, interaction: discord.Interaction) -> None:
+        await self.send_training(interaction)
+
+    def passive_training_rate(self, mutation_level: int) -> float:
+        spec = self.engine.data["mutations"]["training_room"]
+        return float(spec.get("passive_base_pct", 0.0)) + float(spec.get("passive_pct_per_level", 0.0)) * max(0, mutation_level - 1)
+
+    def passive_training_pending(self, user: dict, mutation_level: int) -> tuple[float, int]:
+        since = parse_dt(user.get("training_since"))
+        if not bool(user["training_enabled"]) or since is None:
+            return 0.0, 0
+        cap = float(self.engine.data["mutations"]["training_room"].get("passive_cap_hours", 24))
+        elapsed = (datetime.datetime.now(datetime.timezone.utc) - since).total_seconds() / 3600.0
+        hours = min(max(0.0, elapsed), cap)
+        return hours, int(self.engine.level_xp_needed(int(user["level"])) * self.passive_training_rate(mutation_level) * hours)
+
+    async def send_training(self, interaction: discord.Interaction, edit: bool = False, note: str = "") -> None:
         user_id = interaction.user.id
         mutations = await self.repo.get_mutations(user_id)
-        mut_level = self.engine.mutation_level(mutations, "training_room")
-        if mut_level <= 0:
+        mutation_level = self.engine.mutation_level(mutations, "training_room")
+        if mutation_level <= 0:
+            await interaction.response.send_message(
+                embed=discord.Embed(description=f"🔒 Necesitas la mutación **{self.mutation_name('training_room')}**.",
+                                    color=discord.Color.dark_red()),
+                ephemeral=True,
+            )
+            return
+        user = await self.repo.get_user(user_id)
+        enabled = bool(user["training_enabled"])
+        hours, pending = self.passive_training_pending(user, mutation_level)
+        spec = self.engine.data["mutations"]["training_room"]
+        cap = float(spec.get("passive_cap_hours", 24))
+        embed = discord.Embed(
+            title=f"{spec['emoji']} {self.mutation_name('training_room')}",
+            description=note or "Entrenamiento pasivo: acumula XP mientras esté activo, aunque no estés jugando.",
+            color=discord.Color.dark_teal(),
+        )
+        embed.add_field(name="Estado", value="🟢 Activado" if enabled else "⚪ Desactivado", inline=True)
+        embed.add_field(name="Ritmo", value=f"**{self.passive_training_rate(mutation_level) * 100:.1f}%** de nivel por hora", inline=True)
+        embed.add_field(name="Tope", value=f"**{cap:.0f} h** (recógelo a diario)", inline=True)
+        embed.add_field(name="Acumulado", value=(f"**{fmt_int(pending)}** XP en **{hours:.1f} h**" if pending else "*Nada todavía*"), inline=False)
+        view = TrainingView(self, user_id, enabled, pending > 0)
+        if edit:
+            await interaction.response.edit_message(embed=embed, view=view)
+        else:
+            await interaction.response.send_message(embed=embed, view=view)
+
+    async def toggle_training(self, interaction: discord.Interaction) -> None:
+        user_id = interaction.user.id
+        user = await self.repo.get_user(user_id)
+        if bool(user["training_enabled"]):
+            note = await self.collect_training(user_id)
+            await self.repo.update_user(user_id, training_enabled=0, training_since=None)
+            await self.send_training(interaction, edit=True, note=f"{note}\n\n⚪ Entrenamiento **desactivado**.")
+        else:
+            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            await self.repo.update_user(user_id, training_enabled=1, training_since=now)
+            await self.send_training(interaction, edit=True, note="🟢 Entrenamiento **activado**: el XP se acumula desde ahora.")
+
+    async def collect_training(self, user_id: int) -> str:
+        mutations = await self.repo.get_mutations(user_id)
+        mutation_level = self.engine.mutation_level(mutations, "training_room")
+        user = await self.repo.get_user(user_id)
+        hours, xp = self.passive_training_pending(user, mutation_level)
+        if xp <= 0:
+            return "🎓 Todavía no hay XP que recoger."
+        level, remaining, gained = self.engine.gain_xp(int(user["level"]), int(user["xp"]), xp)
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        await self.repo.update_user(user_id, level=level, xp=remaining, training_since=now)
+        await self.refresh_vitals(user_id)
+        await self.bot.global_stats.register_dungeon_passive_xp(user_id, xp)
+        text = f"🎓 Recoges **{fmt_int(xp)}** XP de entrenamiento ({hours:.1f} h)."
+        if gained:
+            text += f" ⬆️ ¡Subes al nivel **{level}**!"
+        return text
+
+    async def claim_training(self, interaction: discord.Interaction) -> None:
+        note = await self.collect_training(interaction.user.id)
+        await self.send_training(interaction, edit=True, note=note)
+
+    @mazmorra_group.command(name="practicar", description="Simulacro sin recompensas contra un muñeco que no puede morir.")
+    @app_commands.describe(piso="Piso a simular (por defecto, aquel en el que estás).")
+    async def practise(self, interaction: discord.Interaction, piso: Optional[int] = None) -> None:
+        user_id = interaction.user.id
+        mutations = await self.repo.get_mutations(user_id)
+        if self.engine.mutation_level(mutations, "training_room") <= 0:
             await interaction.response.send_message(
                 embed=discord.Embed(description=f"🔒 Necesitas la mutación **{self.mutation_name('training_room')}**.",
                                     color=discord.Color.dark_red()),
@@ -1736,30 +1864,15 @@ class DungeonCog(commands.Cog):
                 ephemeral=True,
             )
             return
-
         user = await self.repo.get_user(user_id)
-        today = datetime.date.today().isoformat()
-        used = int(user["training_used"]) if user.get("training_date") == today else 0
-        spec = self.engine.data["mutations"]["training_room"]
-        max_sessions = int(spec["sessions_base"]) + int(spec["sessions_per_level"]) * (mut_level - 1)
-        if used >= max_sessions:
-            await interaction.response.send_message(
-                embed=discord.Embed(description=f"⏳ Has agotado tus **{max_sessions}** sesiones de hoy.", color=discord.Color.orange()),
-                ephemeral=True,
-            )
-            return
-
-        max_dummy = int(user["level"]) + mut_level * 3
-        dummy_level = max(1, min(int(nivel), max_dummy))
-        await self.repo.update_user(user_id, training_date=today, training_used=used)
+        ref_floor = max(1, int(piso)) if piso else max(1, int(user["floor"]))
         items = await self.repo.get_inventory(user_id)
         echoes = await self.repo.get_echoes(user_id)
-        state = self.engine.start_training(user, items, mutations, dummy_level,
-                                           user.get("active_skill") or "golpe_pesado", int(user["potions"]),
-                                           echoes=echoes)
+        state = self.engine.start_training(user, items, mutations, ref_floor, user.get("active_skill") or self.engine.default_skill_id(), int(user["potions"]), echoes=echoes)
+        await self.bot.global_stats.register_dungeon_training(user_id)
         await self.start_fight_message(interaction, state)
 
-    @mazmorra.command(name="anomalia", description="Entra en un piso alternativo (requiere mutación).")
+    @mazmorra_group.command(name="anomalia", description="Entra en un piso alternativo (requiere mutación).")
     async def anomaly(self, interaction: discord.Interaction) -> None:
         user_id = interaction.user.id
         mutations = await self.repo.get_mutations(user_id)
@@ -1813,18 +1926,13 @@ class DungeonCog(commands.Cog):
         mutations = await self.repo.get_mutations(user_id)
         items = await self.repo.get_inventory(user_id)
         echoes = await self.repo.get_echoes(user_id)
-        state = self.engine.start_anomaly(user, items, mutations, anomaly_id, int(user["highest_floor"]),
-                                          _json_list(user.get("shifts")),
-                                          user.get("active_skill") or "golpe_pesado", int(user["potions"]),
-                                          echoes=echoes)
+        state = self.engine.start_anomaly(user, items, mutations, anomaly_id, int(user["highest_floor"]), _json_list(user.get("shifts")), user.get("active_skill") or self.engine.default_skill_id(), int(user["potions"]), echoes=echoes)
         if state is None:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="❌ Esa anomalía no existe.", color=discord.Color.red()), ephemeral=True
-            )
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Esa anomalía no existe.", color=discord.Color.red()), ephemeral=True)
             return
         await self.start_fight_message(interaction, state)
 
-    @mazmorra.command(name="desplazamiento", description="Activa desplazamientos dimensionales para tus combates.")
+    @mazmorra_group.command(name="alteraciones", description="Activa desplazamientos dimensionales para tus combates.")
     async def shift_menu(self, interaction: discord.Interaction) -> None:
         user_id = interaction.user.id
         mutations = await self.repo.get_mutations(user_id)
@@ -1871,7 +1979,7 @@ class DungeonCog(commands.Cog):
             embed.add_field(name="Activos", value="\n".join(lines)[:1024], inline=False)
         return embed
 
-    @mazmorra.command(name="automatizar", description="Simula en segundo plano los pisos que ya has superado.")
+    @mazmorra_group.command(name="automatizar", description="Simula en segundo plano los pisos que ya has superado.")
     async def automate(self, interaction: discord.Interaction) -> None:
         user_id = interaction.user.id
         mutations = await self.repo.get_mutations(user_id)
@@ -1911,7 +2019,33 @@ class DungeonCog(commands.Cog):
             view=AutomationView(self, user_id, enabled),
         )
 
-    @mazmorra.command(name="configuraracceso", description="Configura el rol de acceso a la mazmorra (operadores).")
+    @mazmorra_group.command(name="ajustes", description="Preferencias: avance automático de piso.")
+    async def settings(self, interaction: discord.Interaction) -> None:
+        await self.send_settings(interaction)
+
+    async def send_settings(self, interaction: discord.Interaction, edit: bool = False) -> None:
+        user = await self.repo.get_user(interaction.user.id)
+        auto = bool(user["auto_advance"])
+        needed = max(1, int(self.engine.cfg["enemies_per_floor"]))
+        embed = discord.Embed(
+            title="⚙️ Ajustes",
+            description=(f"**Avance automático de piso:** {'activado' if auto else 'desactivado'}\n\n"
+                         f"Cada piso requiere derrotar **{needed}** enemigos. Con el avance automático activado desciendes justo al despejarlo; "
+                         f"con él desactivado te quedas en el piso (los enemigos que derrotes ahí ya no cuentan) hasta que uses `/mazmorra avanzar`."),
+            color=discord.Color.blurple(),
+        )
+        view = SettingsView(self, interaction.user.id, auto)
+        if edit:
+            await interaction.response.edit_message(embed=embed, view=view)
+        else:
+            await interaction.response.send_message(embed=embed, view=view)
+
+    async def toggle_auto_advance(self, interaction: discord.Interaction) -> None:
+        user = await self.repo.get_user(interaction.user.id)
+        await self.repo.update_user(interaction.user.id, auto_advance=0 if bool(user["auto_advance"]) else 1)
+        await self.send_settings(interaction, edit=True)
+
+    @mazmorra_group.command(name="acceso", description="Configura el rol de acceso a la mazmorra (operadores).")
     @app_commands.describe(rol="Rol que podrá usar la mazmorra. Sin argumento, muestra el actual.")
     async def configure(self, interaction: discord.Interaction, rol: Optional[discord.Role] = None) -> None:
         if await self.bot.filter_operators(interaction): return
@@ -1930,7 +2064,7 @@ class DungeonCog(commands.Cog):
             ephemeral=True,
         )
 
-    @mazmorra.command(name="ayuda", description="Cómo funciona la Mazmorra RPG.")
+    @mazmorra_group.command(name="ayuda", description="Cómo funciona la Mazmorra RPG.")
     async def help_command(self, interaction: discord.Interaction) -> None:
         embed = discord.Embed(
             title="🏰 Mazmorra RPG - Guía rápida",
@@ -1939,34 +2073,34 @@ class DungeonCog(commands.Cog):
         )
         embed.add_field(
             name="⚔️ Bucle principal",
-            value=("`/mazmorra explorar` - baja un piso (o repite uno con `piso:N` para farmear).\n"
+            value=(f"`/mazmorra explorar` - pelea; cada piso requiere derrotar {max(1, int(self.engine.cfg['enemies_per_floor']))} enemigos para despejarlo.\n"
                    "`/mazmorra jefe` - desafía al Jefe que bloquea cada 10 pisos (6h de espera tras ganar).\n"
-                   "`/mazmorra entrenar` y `/mazmorra anomalia` - requieren mutaciones."),
+                   "`/mazmorra avanzar` y `/mazmorra ajustes` - controlan el avance automático de piso.\n"
+                   "`/mazmorra entrenar` (XP pasivo), `/mazmorra practicar` (simulacro sin recompensas) y `/mazmorra anomalia` - requieren mutaciones."),
             inline=False,
         )
         embed.add_field(
             name="🧬 Sinergias",
-            value=("Cada objeto genera disparadores, condiciones y efectos primitivos. "
+            value=("Cada objeto genera triggers, condiciones y efectos. "
                    "Combínalos para crear builds absurdas; las mutaciones reescriben esas reglas."),
             inline=False,
         )
         embed.add_field(
             name="💱 Economía",
-            value=("El oro interno se queda dentro de la mazmorra. Las Monedas de Jefe se canjean a Choskris "
+            value=("El oro interno se queda dentro del sistema. Las Monedas de Jefe se pueden canjear por Choskris "
                    "con `/mazmorra canjear`, sujeto a un tope diario que crece con cada Jefe superado."),
             inline=False,
         )
         embed.add_field(
             name="🔨 Forja y Ecos",
             value=("`/mazmorra forja` - reforja las ranuras de un objeto, **bloquea** las que te gusten e "
-                   "**infunde** una ranura con el disparador que elijas (Monedas de Jefe).\n"
-                   "`/mazmorra ecos` - mejoras permanentes compradas con Polvo, sin techo práctico."),
+                   "**infunde** una ranura con el trigger que elijas (usa monedas de Jefe).\n"
+                   "`/mazmorra ecos` - mejoras permanentes compradas con Polvo."),
             inline=False,
         )
         embed.add_field(
-            name="🌌 Desplazamientos",
-            value=("`/mazmorra desplazamiento` - activa afijos que alteran las reglas del combate a cambio de "
-                   "una desventaja. Cuántos puedes llevar a la vez depende de la mutación homónima."),
+            name="🌌 alteraciones",
+            value="`/mazmorra alteraciones` - activa afijos que alteran las reglas del combate a cambio de una desventaja.",
             inline=False,
         )
         embed.add_field(
@@ -1977,12 +2111,12 @@ class DungeonCog(commands.Cog):
         )
         embed.add_field(
             name="✨ Prestigio",
-            value="`/prestigio` reinicia piso, nivel, oro y equipo, pero te da Polvo para mutaciones y Ecos permanentes.",
+            value="`/mazmorra prestigio` reinicia piso, nivel, oro y equipo, pero te da Polvo para mutaciones y Ecos permanentes.",
             inline=False,
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="prestigio", description="Renace: reinicia tu progreso a cambio de Polvo Intergaláctico.")
+    @mazmorra_group.command(name="prestigio", description="Renace: reinicia tu progreso a cambio de Polvo Intergaláctico.")
     async def prestige(self, interaction: discord.Interaction) -> None:
         if not await ensure_dungeon_access(interaction):
             return
@@ -2074,17 +2208,19 @@ class DungeonCog(commands.Cog):
             xp += reward["xp"]
             if reward["item"]:
                 items.append(reward["item"])
-
         level, remaining_xp, gained = self.engine.gain_xp(int(user["level"]), int(user["xp"]), xp)
         await self.repo.update_user(user_id, level=level, xp=remaining_xp)
         await self.repo.add_gold(user_id, gold)
+        kept = lost = 0
         for item in items:
-            await self.repo.add_item(user_id, item)
+            warning = await self.grant_item(user_id, item)
+            if warning:
+                lost += 1
+            else:
+                kept += 1
         await self.refresh_vitals(user_id)
         automation = await self.repo.get_automation(user_id)
-        report = (f"Piso {floor} ×{mut_level}: +{fmt_int(gold)} oro, +{fmt_int(xp)} XP"
-                  + (f", {len(items)} objeto(s)" if items else "")
-                  + (f", nivel {level}" if gained else ""))
+        report = f"Piso {floor} ×{mut_level}: +{fmt_int(gold)} oro, +{fmt_int(xp)} XP" + (f", {kept} objeto(s)" if kept else "") + (f", {lost} perdido(s) por mochila llena" if lost else "") + (f", nivel {level}" if gained else "")
         await self.repo.set_automation(user_id, sims=int(automation["sims"]) + mut_level, last_tick=datetime.datetime.now(datetime.timezone.utc).isoformat(), last_report=report)
         await self.bot.global_stats.register_dungeon_auto_sim(user_id, mut_level)
 

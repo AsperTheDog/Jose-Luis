@@ -27,11 +27,11 @@ class GlobalStatsRepository(BaseRepository):
         "gacha_shards_destroyed", "gacha_dust_obtained", "gacha_dust_spent",
         "betting_bets_placed", "betting_bets_won", "betting_bets_lost",
         "betting_money_gained", "betting_money_lost",
-        "dungeon_floors_cleared", "dungeon_bosses_defeated", "dungeon_gold_earned",
+        "dungeon_floors_cleared", "dungeon_enemies_defeated", "dungeon_bosses_defeated", "dungeon_gold_earned",
         "dungeon_items_found", "dungeon_prestiges", "dungeon_dust_earned",
         "dungeon_mutations", "dungeon_boss_coins_earned", "dungeon_coins_converted",
         "dungeon_money_converted", "dungeon_deaths", "dungeon_damage_dealt",
-        "dungeon_damage_taken", "dungeon_training_sessions", "dungeon_auto_sims",
+        "dungeon_damage_taken", "dungeon_training_sessions", "dungeon_passive_xp", "dungeon_auto_sims",
         "dungeon_anomalies_cleared", "dungeon_rerolls", "dungeon_infusions",
         "dungeon_retreats", "dungeon_echoes",
     )

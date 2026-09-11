@@ -108,6 +108,7 @@ CREATE TABLE IF NOT EXISTS user_global_stats
 
     -- Dungeon RPG
     dungeon_floors_cleared    BIGINT DEFAULT 0,
+    dungeon_enemies_defeated  BIGINT DEFAULT 0,
     dungeon_bosses_defeated   BIGINT DEFAULT 0,
     dungeon_highest_floor     BIGINT DEFAULT 0,
     dungeon_gold_earned       BIGINT DEFAULT 0,
@@ -122,6 +123,7 @@ CREATE TABLE IF NOT EXISTS user_global_stats
     dungeon_damage_dealt      BIGINT DEFAULT 0,
     dungeon_damage_taken      BIGINT DEFAULT 0,
     dungeon_training_sessions BIGINT DEFAULT 0,
+    dungeon_passive_xp        BIGINT DEFAULT 0,
     dungeon_auto_sims         BIGINT DEFAULT 0,
     dungeon_anomalies_cleared BIGINT DEFAULT 0,
     dungeon_rerolls           BIGINT DEFAULT 0,

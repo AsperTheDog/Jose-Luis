@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import random
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -25,6 +26,15 @@ def progress_bar(current: int, maximum: int, size: int = 10, fill: str = "█", 
 
 def fmt_int(value: int) -> str:
     return f"{int(value):,}".replace(",", ".")
+
+
+def grow(base: float, exponent: float, cap: float = 1e300) -> float:
+    """``base ** exponent`` saturado en ``cap``: las corridas profundas no deben desbordar."""
+    try:
+        value = float(base) ** exponent
+    except OverflowError:
+        return cap
+    return value if value < cap else cap
 
 
 def _weighted_choice(rng: random.Random, weights: dict[str, float]) -> Optional[str]:
@@ -235,14 +245,29 @@ class DungeonEngine:
         self.data = data if data is not None else load_data()
         self.cfg = self.data["config"]
 
+    @staticmethod
+    def pluralize_adjective(word: str) -> str:
+        if word.endswith("z"):
+            return word[:-1] + "ces"
+        if word[-1].lower() in "aeiouáéíóú":
+            return word + "s"
+        return word + "es"
+
+    def item_name(self, base: dict, prefix: dict) -> str:
+        """Nombre en español: sustantivo primero y adjetivo concordado (p. ej. «Bastón Ardiente»)."""
+        adjective = prefix.get("f" if base.get("gender") == "f" else "m", prefix.get("m", ""))
+        if base.get("plural"):
+            adjective = self.pluralize_adjective(adjective)
+        return f"{base.get('name', '')} {adjective}".strip()
+
     def enemy_max_hp(self, floor: int) -> int:
-        return max(1, int(self.cfg["enemy_hp_base"] * self.cfg["enemy_hp_growth"] ** floor))
+        return max(1, int(self.cfg["enemy_hp_base"] * grow(self.cfg["enemy_hp_growth"], floor)))
 
     def enemy_attack(self, floor: int) -> int:
-        return max(1, int(self.cfg["enemy_dmg_base"] * self.cfg["enemy_dmg_growth"] ** floor))
+        return max(1, int(self.cfg["enemy_dmg_base"] * grow(self.cfg["enemy_dmg_growth"], floor)))
 
     def enemy_defense(self, floor: int) -> int:
-        return max(0, int(self.cfg["enemy_def_base"] * self.cfg["enemy_def_growth"] ** floor))
+        return max(0, int(self.cfg["enemy_def_base"] * grow(self.cfg["enemy_def_growth"], floor)))
 
     def level_xp_needed(self, level: int) -> int:
         return max(1, int(self.cfg["level_xp_base"] * level ** self.cfg["level_xp_exponent"]))
@@ -254,11 +279,11 @@ class DungeonEngine:
         return max(0.05, 1.0 - 0.20 * delta)
 
     def xp_reward(self, floor: int, level: int) -> int:
-        base = self.cfg["xp_base"] * self.cfg["xp_growth"] ** floor
+        base = self.cfg["xp_base"] * grow(self.cfg["xp_growth"], floor)
         return max(1, int(base * self.xp_multiplier(level, floor)))
 
     def gold_reward(self, floor: int) -> int:
-        return max(1, int(self.cfg["gold_base"] * self.cfg["gold_growth"] ** floor))
+        return max(1, int(self.cfg["gold_base"] * grow(self.cfg["gold_growth"], floor)))
 
     def dust_for(self, floor: int) -> int:
         if floor <= 0:
@@ -267,11 +292,11 @@ class DungeonEngine:
 
     def conversion_cap(self, tier: int) -> int:
         tier = max(1, int(tier))
-        cap = self.cfg["conversion_cap_base"] * self.cfg["conversion_cap_growth"] ** (tier - 1)
+        cap = self.cfg["conversion_cap_base"] * grow(self.cfg["conversion_cap_growth"], tier - 1)
         return int(min(self.cfg["conversion_cap_max"], cap))
 
     def potion_price(self, level: int) -> int:
-        return int(self.cfg["potion_price_base"] * self.cfg["potion_price_growth"] ** max(0, level - 1))
+        return int(self.cfg["potion_price_base"] * grow(self.cfg["potion_price_growth"], max(0, level - 1)))
 
     def upgrade_cost(self, key: str, current_level: int) -> int:
         spec = self.data["upgrades"][key]
@@ -299,6 +324,16 @@ class DungeonEngine:
     def skill_cost(self, skill: dict, shift_effects: Optional[dict] = None) -> int:
         mult = (shift_effects or {}).get("skill_cost_mult", 1.0)
         return int(skill["cost"] * mult)
+
+    def default_skill_id(self) -> str:
+        starters = sorted(self.data["skills"], key=lambda skill: (int(skill.get("level", 1)), skill.get("id", "")))
+        return starters[0]["id"] if starters else ""
+
+    def resolve_skill_id(self, skill_id: Optional[str]) -> str:
+        """Devuelve un id de habilidad válido; sanea ids obsoletos o vacíos."""
+        if skill_id and self.get_skill(skill_id):
+            return skill_id
+        return self.default_skill_id()
 
     def available_skills(self, level: int) -> list[dict]:
         return [skill for skill in self.data["skills"] if skill["level"] <= level]
@@ -365,10 +400,10 @@ class DungeonEngine:
         mult = 0.75 + 0.25 * float(rarity_spec["stat_mult"])
 
         stats = {
-            "attack": int(self.cfg["gear_attack_base"] * weights.get("attack", 0.0) * mult * self.cfg["gear_attack_growth"] ** floor),
-            "defense": int(self.cfg["gear_defense_base"] * weights.get("defense", 0.0) * mult * self.cfg["gear_defense_growth"] ** floor),
-            "max_hp": int(self.cfg["gear_hp_base"] * weights.get("max_hp", 0.0) * mult * self.cfg["gear_hp_growth"] ** floor),
-            "max_energy": int(self.cfg["gear_energy_base"] * weights.get("max_energy", 0.0) * mult * self.cfg["gear_energy_growth"] ** floor),
+            "attack": int(self.cfg["gear_attack_base"] * weights.get("attack", 0.0) * mult * grow(self.cfg["gear_attack_growth"], floor)),
+            "defense": int(self.cfg["gear_defense_base"] * weights.get("defense", 0.0) * mult * grow(self.cfg["gear_defense_growth"], floor)),
+            "max_hp": int(self.cfg["gear_hp_base"] * weights.get("max_hp", 0.0) * mult * grow(self.cfg["gear_hp_growth"], floor)),
+            "max_energy": int(self.cfg["gear_energy_base"] * weights.get("max_energy", 0.0) * mult * grow(self.cfg["gear_energy_growth"], floor)),
             "crit": round(self.cfg["gear_crit_mult"] * weights.get("crit", 0.0) * mult, 4),
         }
         stats = {key: value for key, value in stats.items() if value}
@@ -377,8 +412,8 @@ class DungeonEngine:
         sockets = [self.generate_mod(rng, rarity_spec["power"], floor) for _ in range(socket_count)]
 
         return {
-            "item_uid": f"{rng.getrandbits(48):012x}",
-            "name": f"{prefix} {base}",
+            "item_uid": uuid.uuid4().hex[:12],
+            "name": self.item_name(base, prefix),
             "slot": slot,
             "rarity": rarity,
             "stats": stats,
@@ -439,17 +474,13 @@ class DungeonEngine:
 
         if etype == "DEAL_DAMAGE":
             ratio = rng.uniform(template["ratio_min"], template["ratio_max"]) * power
-            return {"type": etype, "target": "foe", "ratio": round(ratio, 2),
-                    "damage_type": rng.choice(template["types"])}
+            return {"type": etype, "target": "foe", "ratio": round(ratio, 2), "damage_type": rng.choice(template["types"])}
         if etype == "APPLY_STATUS":
             tag = rng.choice(template["tags"])
             target = "foe" if tag in OFFENSIVE_TAGS else "self"
-            return {"type": "APPLY_STATUS", "target": target, "tag": tag,
-                    "stacks": rng.randint(template["stacks_min"], template["stacks_max"]),
-                    "turns": rng.randint(template["turns_min"], template["turns_max"])}
+            return {"type": "APPLY_STATUS", "target": target, "tag": tag, "stacks": rng.randint(template["stacks_min"], template["stacks_max"]), "turns": rng.randint(template["turns_min"], template["turns_max"])}
         if etype == "BUFF_SELF":
-            return {"type": "APPLY_STATUS", "target": "self", "tag": rng.choice(template["tags"]),
-                    "stacks": 1, "turns": int(template["turns"])}
+            return {"type": "APPLY_STATUS", "target": "self", "tag": rng.choice(template["tags"]), "stacks": 1, "turns": int(template["turns"])}
         if etype == "GAIN_SHIELD":
             return {"type": etype, "target": "self", "ratio": round(rng.uniform(template["ratio_min"], template["ratio_max"]) * power, 2)}
         if etype == "HEAL_HP":
@@ -504,8 +535,13 @@ class DungeonEngine:
         total = 1.0
         for echo_id, level in (echoes or {}).items():
             spec = self.data["echoes"].get(echo_id)
-            if spec and key in spec and level:
-                total *= 1.0 + float(spec[key]) * int(level)
+            if not spec or key not in spec or not level:
+                continue
+            level = int(level)
+            if spec.get("compound"):
+                total *= (1.0 + float(spec[key])) ** level
+            else:
+                total *= 1.0 + float(spec[key]) * level
         return total
 
     def echo_flat(self, echoes: dict, key: str) -> float:
@@ -562,8 +598,7 @@ class DungeonEngine:
             "mods": mods,
         }
 
-    def make_player(self, user: dict, items: list[dict], mutations: dict, shift_effects: dict,
-                    echoes: Optional[dict] = None) -> Combatant:
+    def make_player(self, user: dict, items: list[dict], mutations: dict, shift_effects: dict, echoes: Optional[dict] = None) -> Combatant:
         stats = self.player_stats(user, items, mutations, echoes)
         attack = int(stats["attack"] * shift_effects.get("attack_mult", 1.0))
         max_hp = max(1, int(stats["max_hp"] * shift_effects.get("max_hp_mult", 1.0)))
@@ -852,8 +887,7 @@ class DungeonEngine:
                 rt.log(f"⚡ **{actor.name}** encadena un ataque extra.")
                 self.basic_attack(rt, actor)
 
-    def apply_status(self, rt: Runtime, source: Combatant, target: Combatant, tag: str,
-                     stacks: int = 1, turns: int = 2, power: Optional[int] = None) -> None:
+    def apply_status(self, rt: Runtime, source: Combatant, target: Combatant, tag: str, stacks: int = 1, turns: int = 2, power: Optional[int] = None) -> None:
         spec = self.data["statuses"].get(tag)
         if not spec or stacks <= 0:
             return
@@ -868,8 +902,7 @@ class DungeonEngine:
             existing.turns = max(existing.turns, turns)
             existing.power = max(existing.power, power)
         else:
-            target.statuses[tag] = StatusInstance(tag=tag, stacks=min(int(spec.get("max_stacks", 99)), stacks),
-                                                   turns=turns, power=power)
+            target.statuses[tag] = StatusInstance(tag=tag, stacks=min(int(spec.get("max_stacks", 99)), stacks), turns=turns, power=power)
         rt.log(f"{spec.get('emoji', '')} **{target.name}** sufre **{spec['name']}** x{stacks} ({turns}t).")
 
         self.fire(rt, "ON_STATUS_APPLIED", source.mods, source)
@@ -893,8 +926,7 @@ class DungeonEngine:
                     raw *= float(spec["low_hp_bonus"])
                 damage = max(1, int(raw))
                 self.fire(rt, "ON_STATUS_TICK", applier.mods, applier)
-                self.deal_damage(rt, applier, owner, damage, spec.get("damage_type", "fisico"),
-                                 can_crit=False, pierce=bool(spec.get("pierce")), apply_mods=False)
+                self.deal_damage(rt, applier, owner, damage, spec.get("damage_type", "fisico"), can_crit=False, pierce=bool(spec.get("pierce")), apply_mods=False)
             elif spec.get("kind") == "buff" and spec.get("heal_ratio"):
                 heal = int(owner.max_hp * float(spec["heal_ratio"]) * instance.stacks * self.heal_multiplier(owner))
                 if heal > 0:
@@ -905,9 +937,7 @@ class DungeonEngine:
             if instance.turns <= 0:
                 owner.statuses.pop(tag, None)
 
-    def deal_damage(self, rt: Runtime, source: Combatant, target: Combatant, amount: int,
-                    damage_type: str = "fisico", can_crit: bool = True, pierce: bool = False,
-                    apply_mods: bool = True) -> int:
+    def deal_damage(self, rt: Runtime, source: Combatant, target: Combatant, amount: int, damage_type: str = "fisico", can_crit: bool = True, pierce: bool = False, apply_mods: bool = True) -> int:
         if rt.depth > 10:
             return 0
         if amount <= 0 or target.hp <= 0:
@@ -953,6 +983,12 @@ class DungeonEngine:
                     self.fire(rt, "ON_SHIELD_BREAK", target.mods, target)
 
             dealt = max(0, amount)
+            guarded = False
+            if dealt > 0 and rt.state.training and target is rt.state.player:
+                allowed = max(0, target.hp - 1)      # el entrenamiento nunca te derriba
+                if dealt > allowed:
+                    dealt = allowed
+                    guarded = True
             if dealt > 0:
                 target.hp -= dealt
 
@@ -964,7 +1000,10 @@ class DungeonEngine:
             rt.events["last_damage"] = dealt
             rt.events["is_crit"] = is_crit
             crit_tag = " ¡CRÍTICO!" if is_crit else ""
-            rt.log(f"{'🔪' if source is rt.state.player else '💥'} **{source.name}** golpea a **{target.name}** por **{fmt_int(dealt)}** ({damage_type}){crit_tag}.")
+            if guarded:
+                rt.log(f"🥋 **{source.name}** golpea, pero el entrenamiento no permite derribarte: sigues con **1 PV**.")
+            else:
+                rt.log(f"{'🔪' if source is rt.state.player else '💥'} **{source.name}** golpea a **{target.name}** por **{fmt_int(dealt)}** ({damage_type}){crit_tag}.")
 
             if dealt > 0:
                 if is_crit:
@@ -988,6 +1027,10 @@ class DungeonEngine:
         if state.stage != "active":
             return
         if state.enemy.hp <= 0:
+            if state.training:
+                state.enemy.hp = state.enemy.max_hp      # el muñeco de pruebas no puede morir
+                rt.log(f"🎯 **{state.enemy.name}** se recompone: en el simulacro no puede ser destruido.")
+                return
             state.enemy.hp = 0
             state.stage = "victory"
             rt.log(f"☠️ **{state.enemy.name}** ha caído.")
@@ -1015,10 +1058,7 @@ class DungeonEngine:
         coins = 0
         dust = 0
 
-        if state.training:
-            gold = int(gold * 0.25)
-            xp = max(1, int(xp * 0.5))
-        elif state.is_boss:
+        if state.is_boss:
             gold *= 4
             xp *= 4
             coins = self.boss_coins_for_tier(self.boss_tier_for_floor(floor))
@@ -1051,7 +1091,7 @@ class DungeonEngine:
         rt.log(f"🛡️ **{combatant.name}** se blinda con **{fmt_int(gained)}** de escudo.")
 
     def can_use_skill(self, state: BattleState, shift_effects: dict) -> tuple[bool, str]:
-        skill = self.get_skill(state.skill_id)
+        skill = self.get_skill(state.skill_id) or self.get_skill(self.default_skill_id())
         if not skill:
             return False, "No tienes una habilidad activa."
         if state.cooldowns.get(skill["id"], 0) > 0:
@@ -1080,8 +1120,7 @@ class DungeonEngine:
                 return {"ok": False, "reason": reason}
         if action == "potion":
             if state.no_potions:
-                blocker = next((self.data["shifts"][shift_id]["name"] for shift_id in state.shifts
-                                if self.data["shifts"].get(shift_id, {}).get("no_potions")), None)
+                blocker = next((self.data["shifts"][shift_id]["name"] for shift_id in state.shifts if self.data["shifts"].get(shift_id, {}).get("no_potions")), None)
                 label = f"**{blocker}**" if blocker else "Un desplazamiento dimensional"
                 return {"ok": False, "reason": f"{label} te impide usar pociones."}
             if state.potions <= 0:
@@ -1103,12 +1142,11 @@ class DungeonEngine:
             self.gain_shield(rt, state.player, self.cfg["defend_shield_ratio"])
             state.player.defending = True
             if state.player.max_energy > 0:
-                state.player.energy = min(state.player.max_energy,
-                                          state.player.energy + self.cfg["defend_energy"])
+                state.player.energy = min(state.player.max_energy, state.player.energy + self.cfg["defend_energy"])
             self.fire(rt, "ON_DEFEND", state.player.mods, state.player)
             self.fire(rt, "ON_ENERGY_GAIN", state.player.mods, state.player)
         elif action == "skill":
-            skill = self.get_skill(state.skill_id)
+            skill = self.get_skill(state.skill_id) or self.get_skill(self.default_skill_id())
             cost = self.skill_cost(skill, shift_effects)
             state.player.energy = max(0, state.player.energy - cost)
             state.cooldowns[skill["id"]] = int(skill.get("cooldown", 0))
@@ -1126,7 +1164,7 @@ class DungeonEngine:
             self.enemy_turn(rt, shift_effects)
         if state.stage == "active":
             self.end_of_round(rt)
-        if state.stage == "active" and state.turn >= int(self.cfg["max_turns"]):
+        if state.stage == "active" and not state.training and state.turn >= int(self.cfg["max_turns"]):
             state.stage = "timeout"
             rt.log(f"⏳ El combate se alarga demasiado (turno {state.turn}). Te retiras agotado.")
             self.fire(rt, "ON_BATTLE_END", state.player.mods, state.player)
@@ -1163,8 +1201,7 @@ class DungeonEngine:
             if state.stage != "active":
                 break
             if archetype_ai == "conjurador" and rt.rng.random() < 0.35:
-                tags = [tag for tag, spec in self.data["statuses"].items()
-                        if spec.get("kind") in ("dot", "debuff", "control")]
+                tags = [tag for tag, spec in self.data["statuses"].items() if spec.get("kind") in ("dot", "debuff", "control")]
                 self.apply_status(rt, enemy, player, rt.rng.choice(tags), 1, 3)
 
         self.fire(rt, "ON_TURN_END", enemy.mods, enemy)
@@ -1176,8 +1213,7 @@ class DungeonEngine:
         if state.stage != "active":
             return
         if state.player.max_energy > 0:
-            state.player.energy = min(state.player.max_energy,
-                                      state.player.energy + self.energy_regen(state.player))
+            state.player.energy = min(state.player.max_energy, state.player.energy + self.energy_regen(state.player))
         for skill_id in list(state.cooldowns.keys()):
             state.cooldowns[skill_id] = max(0, state.cooldowns[skill_id] - 1)
 
@@ -1191,8 +1227,7 @@ class DungeonEngine:
         spec = self.data["forge"]
         rarity_mult = float(spec["reroll_rarity_mult"].get(item.get("rarity", "comun"), 1.0))
         unlocked = sum(1 for mod in item.get("sockets", []) if not mod.get("locked"))
-        return int(self.gold_reward(int(item.get("floor_found", 1)))
-                   * float(spec["reroll_base_floors"]) * rarity_mult * max(1, unlocked))
+        return int(self.gold_reward(int(item.get("floor_found", 1))) * float(spec["reroll_base_floors"]) * rarity_mult * max(1, unlocked))
 
     def socket_infuse_cost(self) -> int:
         return int(self.data["forge"]["infuse_cost"])
@@ -1211,9 +1246,7 @@ class DungeonEngine:
         count = int(count or self.data["forge"]["infuse_choices"])
         return [self.roll_socket_mod(item, rng) for _ in range(max(1, count))]
 
-    def _make_state(self, user: dict, items: list[dict], mutations: dict, floor: int,
-                    enemy: Combatant, seed: int, shifts: list[str], skill_id: str, potions: int,
-                    echoes: Optional[dict] = None, **flags) -> BattleState:
+    def _make_state(self, user: dict, items: list[dict], mutations: dict, floor: int, enemy: Combatant, seed: int, shifts: list[str], skill_id: str, potions: int, echoes: Optional[dict] = None, **flags) -> BattleState:
         shift_effects = self.shift_effects(shifts)
         player = self.make_player(user, items, mutations, shift_effects, echoes)
         state = BattleState(
@@ -1225,7 +1258,7 @@ class DungeonEngine:
             potions=int(potions),
             seed=int(seed),
             shifts=list(shifts),
-            skill_id=skill_id or "golpe_pesado",
+            skill_id=self.resolve_skill_id(skill_id),
             no_potions=bool(shift_effects.get("no_potions")),
             mutations=mutations,
             echoes=echoes or {},
@@ -1236,29 +1269,20 @@ class DungeonEngine:
         rt.log(f"⚔️ Te enfrentas a **{enemy.emoji} {enemy.name}** (Piso {floor}).")
         return state
 
-    def start_floor(self, user: dict, items: list[dict], mutations: dict, floor: int,
-                    shifts: Optional[list[str]] = None, skill_id: str = "golpe_pesado",
-                    potions: int = 0, seed: Optional[int] = None, farm: bool = False,
-                    echoes: Optional[dict] = None) -> BattleState:
+    def start_floor(self, user: dict, items: list[dict], mutations: dict, floor: int, shifts: Optional[list[str]] = None, skill_id: str = "golpe_pesado", potions: int = 0, seed: Optional[int] = None, farm: bool = False, echoes: Optional[dict] = None) -> BattleState:
         seed = seed if seed is not None else random.SystemRandom().getrandbits(32)
         rng = random.Random(seed)
         enemy = self.make_enemy(floor, rng)
         return self._make_state(user, items, mutations, floor, enemy, seed, shifts or [], skill_id, potions, echoes=echoes, farm=farm)
 
-    def start_boss(self, user: dict, items: list[dict], mutations: dict, tier: int,
-                   shifts: Optional[list[str]] = None, skill_id: str = "golpe_pesado",
-                   potions: int = 0, seed: Optional[int] = None,
-                   echoes: Optional[dict] = None) -> BattleState:
+    def start_boss(self, user: dict, items: list[dict], mutations: dict, tier: int, shifts: Optional[list[str]] = None, skill_id: str = "golpe_pesado", potions: int = 0, seed: Optional[int] = None, echoes: Optional[dict] = None) -> BattleState:
         seed = seed if seed is not None else random.SystemRandom().getrandbits(32)
         rng = random.Random(seed)
         floor = tier * self.cfg["boss_interval"]
         boss = self.make_boss(tier, rng)
         return self._make_state(user, items, mutations, floor, boss, seed, shifts or [], skill_id, potions, echoes=echoes, is_boss=True)
 
-    def start_anomaly(self, user: dict, items: list[dict], mutations: dict, anomaly_id: str,
-                      highest_floor: int, shifts: Optional[list[str]] = None,
-                      skill_id: str = "golpe_pesado", potions: int = 0,
-                      seed: Optional[int] = None, echoes: Optional[dict] = None) -> Optional[BattleState]:
+    def start_anomaly(self, user: dict, items: list[dict], mutations: dict, anomaly_id: str, highest_floor: int, shifts: Optional[list[str]] = None, skill_id: str = "golpe_pesado", potions: int = 0, seed: Optional[int] = None, echoes: Optional[dict] = None) -> Optional[BattleState]:
         spec = self.data["anomalies"].get(anomaly_id)
         if not spec:
             return None
@@ -1269,22 +1293,25 @@ class DungeonEngine:
         enemy = self.make_enemy(floor, rng, extra_mods=spec.get("enemy_mods", []))
         return self._make_state(user, items, mutations, floor, enemy, seed, shifts or [], skill_id, potions, echoes=echoes, is_anomaly=True, anomaly_id=anomaly_id)
 
-    def start_training(self, user: dict, items: list[dict], mutations: dict, dummy_level: int,
-                       skill_id: str = "golpe_pesado", potions: int = 0,
-                       seed: Optional[int] = None, echoes: Optional[dict] = None) -> BattleState:
+    def start_training(self, user: dict, items: list[dict], mutations: dict, ref_floor: int, skill_id: str = "golpe_pesado", potions: int = 0, seed: Optional[int] = None, echoes: Optional[dict] = None) -> BattleState:
         seed = seed if seed is not None else random.SystemRandom().getrandbits(32)
         rng = random.Random(seed)
-        max_hp = max(1, int(self.enemy_max_hp(max(1, dummy_level)) * 1.4))
+        spec = self.data["mutations"]["training_room"]
+        floor_ref = max(1, int(ref_floor))
+        # El muñeco se mide contra un enemigo real del piso actual: `dummy_hp_ratio` = 1 dura
+        # como un enemigo normal, y el daño se escala aparte con `dummy_damage_ratio`.
+        max_hp = max(1, int(self.enemy_max_hp(floor_ref) * float(spec.get("dummy_hp_ratio", 2.0))))
+        attack = max(0, int(self.enemy_attack(floor_ref) * float(spec.get("dummy_damage_ratio", 0.0))))
         dummy = Combatant(
             name="Muñeco de Entrenamiento",
             emoji="🎯",
             max_hp=max_hp,
             hp=max_hp,
-            attack=0,
+            attack=attack,
             defense=0,
             crit=0.0,
             dodge=0.0,
             archetype="dummy",
             mods=[],
         )
-        return self._make_state(user, items, mutations, max(1, dummy_level), dummy, seed, [], skill_id, potions, echoes=echoes, training=True)
+        return self._make_state(user, items, mutations, floor_ref, dummy, seed, [], skill_id, potions, echoes=echoes, training=True)

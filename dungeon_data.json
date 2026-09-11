@@ -1,9 +1,10 @@
 {
   "config": {
     "boss_interval": 10,
+    "enemies_per_floor": 10,
     "enemy_hp_base": 60,
     "enemy_hp_growth": 1.18,
-    "enemy_dmg_base": 2,
+    "enemy_dmg_base": 3,
     "enemy_dmg_growth": 1.12,
     "enemy_def_base": 1,
     "player_base_hp": 60,
@@ -43,6 +44,7 @@
     "drop_chance_base": 0.50,
     "drop_chance_per_floor": 0.008,
     "drop_chance_max": 0.90,
+    "inventory_cap": 15,
     "gear_attack_base": 2.2,
     "gear_attack_growth": 1.18,
     "gear_defense_base": 2,
@@ -215,12 +217,28 @@
   },
 
   "gear_slots": {
-    "arma": {"name": "Arma", "emoji": "⚔️", "bases": ["Filo", "Maza", "Lanza", "Hacha", "Daga", "Bastón", "Guadaña", "Cetro"], "stats": {"attack": 1.0, "defense": 0.05, "max_hp": 0.05, "max_energy": 0.10, "crit": 0.35}},
-    "armadura": {"name": "Armadura", "emoji": "🛡️", "bases": ["Coraza", "Túnica", "Placas", "Manto", "Égida", "Caparazón"], "stats": {"attack": 0.15, "defense": 1.0, "max_hp": 1.0, "max_energy": 0.15, "crit": 0.0}},
-    "reliquia": {"name": "Reliquia", "emoji": "🔮", "bases": ["Amuleto", "Anillo", "Tótem", "Talismán", "Cristal", "Sigilo"], "stats": {"attack": 0.35, "defense": 0.20, "max_hp": 0.30, "max_energy": 0.60, "crit": 1.0}}
+    "arma": {"name": "Arma", "emoji": "⚔️", "bases": [{"name": "Filo", "gender": "m"}, {"name": "Maza", "gender": "f"}, {"name": "Lanza", "gender": "f"}, {"name": "Hacha", "gender": "f"}, {"name": "Daga", "gender": "f"}, {"name": "Bastón", "gender": "m"}, {"name": "Guadaña", "gender": "f"}, {"name": "Cetro", "gender": "m"}], "stats": {"attack": 1.0, "defense": 0.05, "max_hp": 0.05, "max_energy": 0.10, "crit": 0.35}},
+    "armadura": {"name": "Armadura", "emoji": "🛡️", "bases": [{"name": "Coraza", "gender": "f"}, {"name": "Túnica", "gender": "f"}, {"name": "Placas", "gender": "f", "plural": true}, {"name": "Manto", "gender": "m"}, {"name": "Égida", "gender": "f"}, {"name": "Caparazón", "gender": "m"}], "stats": {"attack": 0.15, "defense": 1.0, "max_hp": 1.0, "max_energy": 0.15, "crit": 0.0}},
+    "reliquia": {"name": "Reliquia", "emoji": "🔮", "bases": [{"name": "Amuleto", "gender": "m"}, {"name": "Anillo", "gender": "m"}, {"name": "Tótem", "gender": "m"}, {"name": "Talismán", "gender": "m"}, {"name": "Cristal", "gender": "m"}, {"name": "Sigilo", "gender": "m"}], "stats": {"attack": 0.35, "defense": 0.20, "max_hp": 0.30, "max_energy": 0.60, "crit": 1.0}}
   },
 
-  "prefixes": ["Oxidado", "Arcano", "Ardiente", "Gélido", "Umbrío", "Vil", "Sagrado", "Rúnico", "Abisal", "Etéreo", "Titánico", "Voraz", "Espectral", "Solar", "Profano"],
+  "prefixes": [
+    {"m": "Oxidado", "f": "Oxidada"},
+    {"m": "Arcano", "f": "Arcana"},
+    {"m": "Ardiente", "f": "Ardiente"},
+    {"m": "Gélido", "f": "Gélida"},
+    {"m": "Umbrío", "f": "Umbría"},
+    {"m": "Vil", "f": "Vil"},
+    {"m": "Sagrado", "f": "Sagrada"},
+    {"m": "Rúnico", "f": "Rúnica"},
+    {"m": "Abisal", "f": "Abisal"},
+    {"m": "Etéreo", "f": "Etérea"},
+    {"m": "Titánico", "f": "Titánica"},
+    {"m": "Voraz", "f": "Voraz"},
+    {"m": "Espectral", "f": "Espectral"},
+    {"m": "Solar", "f": "Solar"},
+    {"m": "Profano", "f": "Profana"}
+  ],
 
   "skills": [
     {
@@ -876,8 +894,9 @@
     "dimensional_shifts": {"name": "Desplazamientos Dimensionales", "emoji": "🌌", "max_level": 3, "cost_base": 25, "cost_growth": 2.0,
      "desc": "Desbloquea los Desplazamientos Dimensionales. Cada nivel permite un afijo activo más."},
     "training_room": {"name": "Área de Entrenamiento", "emoji": "🥋", "max_level": 5, "cost_base": 12, "cost_growth": 1.7,
-     "desc": "Desbloquea combates de entrenamiento sin riesgo. Cada nivel sube el techo del muñeco y las sesiones diarias.",
-     "sessions_base": 2, "sessions_per_level": 1},
+     "desc": "Nivel pasivo: acumula XP lentamente mientras está activo. También desbloquea un simulacro sin recompensas para probar builds.",
+     "passive_base_pct": 0.02, "passive_pct_per_level": 0.02, "passive_cap_hours": 24,
+     "dummy_hp_ratio": 2.0, "dummy_damage_ratio": 1.0},
     "alternative_floors": {"name": "Pisos Anómalos", "emoji": "🚪", "max_level": 3, "cost_base": 18, "cost_growth": 2.0,
      "desc": "Desbloquea anomalías dimensionales. Cada nivel mejora sus recompensas de polvo y botín.",
      "reward_per_level": 0.35}
@@ -891,11 +910,11 @@
   },
 
   "echoes": {
-    "might": {"name": "Eco de Poder", "emoji": "⚔️", "desc": "+2% de ataque por nivel.", "max_level": 100, "cost_base": 30, "cost_growth": 1.08, "attack_mult": 0.02},
-    "vitality": {"name": "Eco de Vida", "emoji": "❤️", "desc": "+3% de vida máxima por nivel.", "max_level": 100, "cost_base": 25, "cost_growth": 1.08, "hp_mult": 0.03},
-    "precision": {"name": "Eco de Precisión", "emoji": "🎯", "desc": "+0.5% de crítico por nivel.", "max_level": 60, "cost_base": 40, "cost_growth": 1.09, "crit": 0.005},
-    "fortune": {"name": "Eco de Fortuna", "emoji": "💰", "desc": "+4% de oro interno por nivel.", "max_level": 100, "cost_base": 25, "cost_growth": 1.08, "gold_mult": 0.04},
-    "attunement": {"name": "Eco de Sintonía", "emoji": "✨", "desc": "+3% de Polvo obtenido por nivel.", "max_level": 100, "cost_base": 35, "cost_growth": 1.08, "dust_mult": 0.03}
+    "might": {"name": "Eco de Poder", "emoji": "⚔️", "desc": "+4% de ataque por nivel, compuesto.", "max_level": 200, "cost_base": 5, "cost_growth": 1.05, "attack_mult": 0.04, "compound": true},
+    "vitality": {"name": "Eco de Vida", "emoji": "❤️", "desc": "+4% de vida máxima por nivel, compuesto.", "max_level": 200, "cost_base": 5, "cost_growth": 1.05, "hp_mult": 0.04, "compound": true},
+    "precision": {"name": "Eco de Precisión", "emoji": "🎯", "desc": "+0.5% de crítico por nivel.", "max_level": 60, "cost_base": 12, "cost_growth": 1.06, "crit": 0.005},
+    "fortune": {"name": "Eco de Fortuna", "emoji": "💰", "desc": "+4% de oro interno por nivel.", "max_level": 100, "cost_base": 8, "cost_growth": 1.05, "gold_mult": 0.04},
+    "attunement": {"name": "Eco de Sintonía", "emoji": "✨", "desc": "+3% de Polvo obtenido por nivel.", "max_level": 100, "cost_base": 10, "cost_growth": 1.06, "dust_mult": 0.03}
   },
 
   "boss_shop": {

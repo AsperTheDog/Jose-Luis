@@ -194,11 +194,16 @@ class StatsTracker:
     async def register_bet_lost(self, user_id: int) -> None:
         await self.stats.increment(user_id, "betting_bets_lost", 1)
 
-    async def register_dungeon_floor(self, user_id: int, floor: int, gold: int, items: int = 0) -> None:
-        await self.stats.increment(user_id, "dungeon_floors_cleared", 1)
+    async def register_dungeon_kill(self, user_id: int) -> None:
+        await self.stats.increment(user_id, "dungeon_enemies_defeated", 1)
+
+    async def register_dungeon_loot(self, user_id: int, gold: int, items: int = 0) -> None:
         await self.stats.increment(user_id, "dungeon_gold_earned", gold)
         if items:
             await self.stats.increment(user_id, "dungeon_items_found", items)
+
+    async def register_dungeon_floor_cleared(self, user_id: int) -> None:
+        await self.stats.increment(user_id, "dungeon_floors_cleared", 1)
 
     async def register_dungeon_depth(self, user_id: int, floor: int) -> None:
         if floor > 0:
@@ -239,6 +244,10 @@ class StatsTracker:
 
     async def register_dungeon_training(self, user_id: int, sessions: int = 1) -> None:
         await self.stats.increment(user_id, "dungeon_training_sessions", sessions)
+
+    async def register_dungeon_passive_xp(self, user_id: int, amount: int) -> None:
+        if amount > 0:
+            await self.stats.increment(user_id, "dungeon_passive_xp", amount)
 
     async def register_dungeon_auto_sim(self, user_id: int, floors: int) -> None:
         if floors:

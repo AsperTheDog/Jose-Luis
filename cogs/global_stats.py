@@ -415,6 +415,7 @@ class GlobalStatsCog(commands.Cog):
             name="🗺️ Progreso",
             value=(
                 f"**Pisos superados:** {data.get('dungeon_floors_cleared', 0):,}\n"
+                f"**Enemigos derrotados:** {data.get('dungeon_enemies_defeated', 0):,}\n"
                 f"**Piso máximo:** {data.get('dungeon_highest_floor', 0):,}\n"
                 f"**Jefes derrotados:** {data.get('dungeon_bosses_defeated', 0):,}\n"
                 f"**Anomalías cerradas:** {data.get('dungeon_anomalies_cleared', 0):,}"
@@ -427,7 +428,7 @@ class GlobalStatsCog(commands.Cog):
                 f"**Daño infligido:** {data.get('dungeon_damage_dealt', 0):,}\n"
                 f"**Daño recibido:** {data.get('dungeon_damage_taken', 0):,}\n"
                 f"**Muertes:** {data.get('dungeon_deaths', 0):,}\n"
-                f"**Entrenamientos:** {data.get('dungeon_training_sessions', 0):,}"
+                f"**Simulacros:** {data.get('dungeon_training_sessions', 0):,}"
             ),
             inline=True,
         )
@@ -447,6 +448,7 @@ class GlobalStatsCog(commands.Cog):
                 f"**Prestigios:** {data.get('dungeon_prestiges', 0):,}\n"
                 f"**Polvo obtenido:** {data.get('dungeon_dust_earned', 0):,}\n"
                 f"**Mutaciones compradas:** {data.get('dungeon_mutations', 0):,}\n"
+                f"**XP pasiva:** {data.get('dungeon_passive_xp', 0):,}\n"
                 f"**Ecos despertados:** {data.get('dungeon_echoes', 0):,}"
             ),
             inline=True,
