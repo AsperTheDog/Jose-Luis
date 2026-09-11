@@ -20,8 +20,6 @@ from db.repositories import (
 
 
 class BotDatabase:
-    """Composition root: one Database connection plus every domain repository."""
-
     def __init__(self, path: str = "bot_data.db"):
         self.db = Database(path)
 

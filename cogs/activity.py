@@ -21,7 +21,7 @@ class StatsCog(commands.Cog):
     @staticmethod
     def calculate_level_and_progress(xp: int) -> Tuple[int, int, int]:
         level = 1
-        xp_needed = 100  # Level 1 requirement
+        xp_needed = 100
 
         while xp >= xp_needed:
             xp -= xp_needed

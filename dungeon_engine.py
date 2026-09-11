@@ -29,7 +29,6 @@ def fmt_int(value: int) -> str:
 
 
 def grow(base: float, exponent: float, cap: float = 1e300) -> float:
-    """``base ** exponent`` saturado en ``cap``: las corridas profundas no deben desbordar."""
     try:
         value = float(base) ** exponent
     except OverflowError:
@@ -254,7 +253,6 @@ class DungeonEngine:
         return word + "es"
 
     def item_name(self, base: dict, prefix: dict) -> str:
-        """Nombre en español: sustantivo primero y adjetivo concordado (p. ej. «Bastón Ardiente»)."""
         adjective = prefix.get("f" if base.get("gender") == "f" else "m", prefix.get("m", ""))
         if base.get("plural"):
             adjective = self.pluralize_adjective(adjective)
@@ -330,7 +328,6 @@ class DungeonEngine:
         return starters[0]["id"] if starters else ""
 
     def resolve_skill_id(self, skill_id: Optional[str]) -> str:
-        """Devuelve un id de habilidad válido; sanea ids obsoletos o vacíos."""
         if skill_id and self.get_skill(skill_id):
             return skill_id
         return self.default_skill_id()
@@ -985,7 +982,7 @@ class DungeonEngine:
             dealt = max(0, amount)
             guarded = False
             if dealt > 0 and rt.state.training and target is rt.state.player:
-                allowed = max(0, target.hp - 1)      # el entrenamiento nunca te derriba
+                allowed = max(0, target.hp - 1)
                 if dealt > allowed:
                     dealt = allowed
                     guarded = True
@@ -1028,7 +1025,7 @@ class DungeonEngine:
             return
         if state.enemy.hp <= 0:
             if state.training:
-                state.enemy.hp = state.enemy.max_hp      # el muñeco de pruebas no puede morir
+                state.enemy.hp = state.enemy.max_hp
                 rt.log(f"🎯 **{state.enemy.name}** se recompone: en el simulacro no puede ser destruido.")
                 return
             state.enemy.hp = 0
@@ -1298,8 +1295,6 @@ class DungeonEngine:
         rng = random.Random(seed)
         spec = self.data["mutations"]["training_room"]
         floor_ref = max(1, int(ref_floor))
-        # El muñeco se mide contra un enemigo real del piso actual: `dummy_hp_ratio` = 1 dura
-        # como un enemigo normal, y el daño se escala aparte con `dummy_damage_ratio`.
         max_hp = max(1, int(self.enemy_max_hp(floor_ref) * float(spec.get("dummy_hp_ratio", 2.0))))
         attack = max(0, int(self.enemy_attack(floor_ref) * float(spec.get("dummy_damage_ratio", 0.0))))
         dummy = Combatant(

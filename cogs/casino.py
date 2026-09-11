@@ -254,7 +254,6 @@ class PokerGame:
         self.players_acted = 0
 
     def start_game(self):
-        # Repartir 2 cartas a cada jugador
         for p in self.players:
             p.hand = [self.deck.pop(), self.deck.pop()]
 
@@ -298,11 +297,11 @@ class PokerGame:
         self.players_acted = 0
         self.phase += 1
 
-        if self.phase == 1:  # Flop
+        if self.phase == 1:
             self.community_cards.extend([self.deck.pop(), self.deck.pop(), self.deck.pop()])
-        elif self.phase == 2:  # Turn
+        elif self.phase == 2:
             self.community_cards.append(self.deck.pop())
-        elif self.phase == 3:  # River
+        elif self.phase == 3:
             self.community_cards.append(self.deck.pop())
 
         if self.phase == 4:
@@ -670,7 +669,6 @@ class BlackjackView(discord.ui.View):
         self.bot = bot
         self.total_bet = bet
 
-        # Create a realistic 6-deck shoe using standard Unicode suit symbols (matching Poker)
         suits = ['♠', '♥', '♦', '♣']
         ranks = [
             ("2", 2), ("3", 3), ("4", 4), ("5", 5), ("6", 6),
@@ -687,7 +685,6 @@ class BlackjackView(discord.ui.View):
 
     @staticmethod
     def calculate_score(hand: list[BlackjackCard]) -> tuple[int, bool]:
-        """Returns total score and whether the hand is 'soft' (contains active Ace as 11)."""
         total = sum(card.value for card in hand)
         aces = sum(1 for card in hand if card.rank == "A")
 
@@ -732,7 +729,6 @@ class BlackjackView(discord.ui.View):
 
     @discord.ui.button(label="Pedir", style=discord.ButtonStyle.primary, emoji="🃏")
     async def hit(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Double down is only available on first turn
         self.double_down.disabled = True
 
         self.player_hand.append(self.deck.pop())
@@ -759,7 +755,6 @@ class BlackjackView(discord.ui.View):
             )
             return
 
-        # Deduct extra bet for double down
         await self.bot.db.economy.update_balance(self.user.id, -self.bet)
         self.total_bet += self.bet
 
@@ -772,7 +767,6 @@ class BlackjackView(discord.ui.View):
             await self.stand_logic(interaction)
 
     async def stand_logic(self, interaction: discord.Interaction):
-        # Dealer draws until reaching 17 or higher
         while True:
             d_score, _ = self.calculate_score(self.dealer_hand)
             if d_score >= 17:
@@ -801,7 +795,7 @@ class BlackjackView(discord.ui.View):
         d_score, _ = self.calculate_score(self.dealer_hand)
 
         if result_type == "natural_bj":
-            payout = int(self.total_bet * 2.5)  # 3:2 payout on Natural Blackjack
+            payout = int(self.total_bet * 2.5)
             title = "🎉 ¡BLACKJACK NATURAL!"
             description = f"¡Obtuviste un Blackjack natural! Cobras **`{payout:,}`** choskris (pago 3:2)."
             color = discord.Color.gold()
@@ -825,7 +819,7 @@ class BlackjackView(discord.ui.View):
             await self.bot.global_stats.register_blackjack_win(self.user.id, payout, self.total_bet)
 
         elif result_type == "push":
-            payout = self.total_bet  # Return original stake
+            payout = self.total_bet
             title = "🤝 EMPATE (PUSH)"
             description = f"Ambos tienen **{p_score}**. Se te devuelven tus **`{payout:,}`** choskris."
             color = discord.Color.gold()
@@ -838,7 +832,7 @@ class BlackjackView(discord.ui.View):
             await self.bot.global_stats.register_cards_loss(self.user.id, self.total_bet)
             await self.bot.global_stats.register_blackjack_loss(self.user.id, self.total_bet)
 
-        else:  # loss
+        else:
             title = "❌ DERROTA"
             description = f"La mano del crupier (**{d_score}**) supera a la tuya (**{p_score}**). Pierdes **`{self.total_bet:,}`** choskris."
             color = discord.Color.red()

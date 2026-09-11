@@ -2,8 +2,6 @@ from db.repositories.global_stats import GlobalStatsRepository
 
 
 class StatsTracker:
-    """Use-case layer that records gameplay events into global stats columns."""
-
     def __init__(self, stats: GlobalStatsRepository):
         self.stats = stats
 

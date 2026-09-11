@@ -49,7 +49,7 @@ class AscensorView(discord.ui.View):
 
 class DrinkConfirmView(discord.ui.View):
     def __init__(self, bot, user_id: int, gain: int, total_cost: int, refill_alert: str):
-        super().__init__(timeout=60.0)  # El botón caduca a los 60 segundos
+        super().__init__(timeout=60.0)
         self.bot = bot
         self.user_id = user_id
         self.gain = gain

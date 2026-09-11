@@ -50,8 +50,6 @@ def _loads(value: Any, fallback: Any) -> Any:
 
 
 class DungeonRepository(BaseRepository):
-    # ------------------------------------------------------------------ usuarios
-
     async def ensure_user(self, user_id: int) -> None:
         await self._db.execute("INSERT OR IGNORE INTO dungeon_users (user_id, potions) VALUES (?, 3)", (user_id,))
         await self._db.commit()
@@ -103,8 +101,6 @@ class DungeonRepository(BaseRepository):
         cursor = await self._db.execute("UPDATE dungeon_users SET boss_coins = boss_coins - ?, updated_at = CURRENT_TIMESTAMP " "WHERE user_id = ? AND boss_coins >= ?", (int(amount), user_id, int(amount)))
         await self._db.commit()
         return cursor.rowcount > 0
-
-    # ------------------------------------------------------------------ inventario
 
     async def get_inventory(self, user_id: int) -> list[dict]:
         await self.ensure_user(user_id)
@@ -178,8 +174,6 @@ class DungeonRepository(BaseRepository):
     async def equipped_items(self, user_id: int) -> list[dict]:
         return [item for item in await self.get_inventory(user_id) if item.get("is_equipped")]
 
-    # ------------------------------------------------------------------ mutaciones
-
     async def get_mutations(self, user_id: int) -> dict[str, int]:
         async with self._db.execute("SELECT mutation_id, level FROM dungeon_mutations WHERE user_id = ?", (user_id,)) as cursor:
             rows = await cursor.fetchall()
@@ -189,8 +183,6 @@ class DungeonRepository(BaseRepository):
         await self._db.execute("INSERT INTO dungeon_mutations (user_id, mutation_id, level) VALUES (?, ?, ?) " "ON CONFLICT(user_id, mutation_id) DO UPDATE SET level = excluded.level", (user_id, mutation_id, int(level)))
         await self._db.commit()
 
-    # ------------------------------------------------------------------ ecos
-
     async def get_echoes(self, user_id: int) -> dict[str, int]:
         async with self._db.execute("SELECT echo_id, level FROM dungeon_echoes WHERE user_id = ?", (user_id,)) as cursor:
             rows = await cursor.fetchall()
@@ -199,8 +191,6 @@ class DungeonRepository(BaseRepository):
     async def set_echo(self, user_id: int, echo_id: str, level: int) -> None:
         await self._db.execute("INSERT INTO dungeon_echoes (user_id, echo_id, level) VALUES (?, ?, ?) " "ON CONFLICT(user_id, echo_id) DO UPDATE SET level = excluded.level", (user_id, echo_id, int(level)))
         await self._db.commit()
-
-    # ------------------------------------------------------------------ combate activo
 
     async def get_fight(self, user_id: int) -> Optional[dict]:
         async with self._db.execute("SELECT state FROM dungeon_active_fight WHERE user_id = ?", (user_id,)) as cursor:
@@ -216,8 +206,6 @@ class DungeonRepository(BaseRepository):
     async def clear_fight(self, user_id: int) -> None:
         await self._db.execute("DELETE FROM dungeon_active_fight WHERE user_id = ?", (user_id,))
         await self._db.commit()
-
-    # ------------------------------------------------------------------ cosméticos
 
     async def get_cosmetics(self, user_id: int) -> dict[str, int]:
         async with self._db.execute("SELECT cosmetic_id, equipped FROM dungeon_cosmetics WHERE user_id = ?", (user_id,)) as cursor:
@@ -235,8 +223,6 @@ class DungeonRepository(BaseRepository):
         await self._db.execute("UPDATE dungeon_cosmetics SET equipped = 1 WHERE user_id = ? AND cosmetic_id = ?", (user_id, cosmetic_id))
         await self._db.commit()
 
-    # ------------------------------------------------------------------ bitácora
-
     async def add_log(self, user_id: int, kind: str, message: str) -> None:
         await self._db.execute("INSERT INTO dungeon_log (user_id, kind, message) VALUES (?, ?, ?)", (user_id, kind, message))
         await self._db.commit()
@@ -245,8 +231,6 @@ class DungeonRepository(BaseRepository):
         async with self._db.execute("SELECT kind, message, created_at FROM dungeon_log WHERE user_id = ? ORDER BY id DESC LIMIT ?", (user_id, int(limit)),) as cursor:
             rows = await cursor.fetchall()
         return [dict(row) for row in rows]
-
-    # ------------------------------------------------------------------ automatización
 
     async def get_automation(self, user_id: int) -> dict:
         async with self._db.execute("SELECT * FROM dungeon_automation WHERE user_id = ?", (user_id,)) as cursor:

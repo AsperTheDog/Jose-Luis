@@ -182,7 +182,6 @@ class CyberHackEngine:
             stack = [self.start_pos]
             self.grid[self.start_pos[1]][self.start_pos[0]] = EMPTY
 
-            # 1. Generar Laberinto
             while stack:
                 x, y = stack[-1]
                 neighbors = []
@@ -200,7 +199,6 @@ class CyberHackEngine:
                 else:
                     stack.pop()
 
-            # 2. Añadir Bucles
             for y in range(1, self.height - 1):
                 for x in range(1, self.width - 1):
                     if self.grid[y][x] == WALL:
@@ -210,7 +208,6 @@ class CyberHackEngine:
                             if random.random() < self.loop_chance:
                                 self.grid[y][x] = EMPTY
 
-            # 3. Colocar Proxies
             dead_ends, valid_cells = [], []
             for y in range(1, self.height - 1):
                 for x in range(1, self.width - 1):
