@@ -1569,6 +1569,9 @@ class DungeonCog(commands.Cog):
     @mazmorra_group.command(name="canjear", description="Canjea Monedas de Jefe por Choskris (tope diario).")
     @app_commands.describe(cantidad="Cuántas Monedas de Jefe quieres canjear.")
     async def convert(self, interaction: discord.Interaction, cantidad: app_commands.Range[int, 1, 1_000_000]) -> None:
+        await interaction.response.send_message("🏗️ Este comando está desactivado porque el juego está en beta 🏗️", ephemeral=True)
+        return
+
         user_id = interaction.user.id
         user = await self.repo.get_user(user_id)
         tier = int(user["boss_tier"])
@@ -2068,6 +2071,12 @@ class DungeonCog(commands.Cog):
             color=discord.Color.dark_teal(),
         )
         embed.add_field(
+            name="🏗️ Alerta: Juego en beta abierta 🏗️",
+            value=(f"Este juego está en beta, es posible que el progreso se reinicie para todos en algún momento, y no se puede usar para ganar choskris aún. "
+                   "Por favor jugad al juego igualmente para que lo vea en acción y salga de beta lo antes posible"),
+            inline=False,
+        )
+        embed.add_field(
             name="⚔️ Bucle principal",
             value=(f"`/mazmorra explorar` - pelea; cada piso requiere derrotar {max(1, int(self.engine.cfg['enemies_per_floor']))} enemigos para despejarlo.\n"
                    "`/mazmorra jefe` - desafía al Jefe que bloquea cada 10 pisos (6h de espera tras ganar).\n"
@@ -2084,7 +2093,8 @@ class DungeonCog(commands.Cog):
         embed.add_field(
             name="💱 Economía",
             value=("El oro interno se queda dentro del sistema. Las Monedas de Jefe se pueden canjear por Choskris "
-                   "con `/mazmorra canjear`, sujeto a un tope diario que crece con cada Jefe superado."),
+                   "con `/mazmorra canjear`, sujeto a un tope diario que crece con cada Jefe superado."
+                   "\n🏗️ Este comando está desactivado porque el juego está en beta aún 🏗️"),
             inline=False,
         )
         embed.add_field(
