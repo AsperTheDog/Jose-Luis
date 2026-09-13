@@ -141,8 +141,8 @@
 
   "trigger_tags": {
     "ON_BATTLE_START": {"tags": ["once", "at_start", "crit_unrolled", "implies_full_energy", "implies_no_shield", "implies_no_status", "implies_foe_full", "offense"]},
-    "ON_BATTLE_END": {"tags": ["once", "at_end", "offense"]},
-    "ON_FLOOR_CLEAR": {"tags": ["once", "at_end", "implies_foe_dying", "loot"]},
+    "ON_BATTLE_END": {"tags": ["once", "at_end", "implies_fight_over", "offense"]},
+    "ON_FLOOR_CLEAR": {"tags": ["once", "at_end", "implies_foe_dying", "implies_fight_over", "loot"]},
     "ON_TURN_START": {"tags": ["very_frequent", "anytime", "crit_unrolled", "offense"]},
     "ON_TURN_END": {"tags": ["very_frequent", "anytime", "utility"]},
     "ON_ATTACK": {"tags": ["very_frequent", "anytime", "crit_unrolled", "offense"]},
@@ -154,7 +154,7 @@
     "ON_SKILL_USE": {"tags": ["frequent", "anytime", "crit_unrolled", "implies_skill", "offense"]},
     "ON_STATUS_APPLIED": {"tags": ["frequent", "anytime", "implies_status_applied", "control"]},
     "ON_STATUS_TICK": {"tags": ["frequent", "anytime", "implies_foe_status", "control"]},
-    "ON_KILL": {"tags": ["rare", "at_end", "implies_foe_dying", "offense"]},
+    "ON_KILL": {"tags": ["rare", "at_end", "implies_foe_dying", "implies_fight_over", "offense"]},
     "ON_LOW_HP": {"tags": ["rare", "anytime", "implies_hp_low", "defense"]},
     "ON_SHIELD_BREAK": {"tags": ["rare", "anytime", "implies_no_shield", "defense"]},
     "ON_POTION_USE": {"tags": ["rare", "anytime", "crit_unrolled", "implies_heal", "sustain"]},
@@ -166,8 +166,8 @@
     "condition_chance": 0.5,
     "max_attempts": 8,
     "default_power": 1,
-    "max_power": 3,
-    "power_by_frequency": {"very_frequent": 1, "frequent": 2, "rare": 3, "once": 3},
+    "max_power": 5,
+    "power_by_frequency": {"very_frequent": 1, "frequent": 2, "rare": 3, "once": 5},
     "power_bonus_by_condition": {
       "requires_hp_low": 1,
       "requires_energy_low": 1,
@@ -191,8 +191,9 @@
       "implies_no_status": {"asserts": ["self_status", "foe_status", "foe_stacks"]},
       "implies_hp_low": {"asserts": ["self_hp"]},
       "implies_crit": {"asserts": ["crit"]},
-      "implies_foe_dying": {"asserts": ["foe_hp", "foe_life"]},
+      "implies_foe_dying": {"asserts": ["foe_hp"]},
       "implies_foe_full": {"asserts": ["foe_hp"]},
+      "implies_fight_over": {"asserts": ["combat"]},
       "implies_foe_status": {"asserts": ["foe_status"]},
       "implies_defend": {"asserts": ["self_shield"]},
       "crit_unrolled": {"asserts": ["crit"]},
@@ -208,7 +209,7 @@
       "requires_crit": {"constrains": "crit"},
       "requires_foe_hp_low": {"constrains": "foe_hp"},
       "requires_wounded_foe": {"constrains": "foe_hp"},
-      "needs_living_foe": {"constrains": "foe_life"},
+      "needs_active_fight": {"constrains": "combat"},
       "requires_late_turn": {"constrains": "time"},
       "requires_depth": {"constrains": "depth"},
       "random_gate": {"constrains": "chance"}
@@ -216,7 +217,8 @@
     "incompatible": [
       ["very_frequent", "economy"],
       ["frequent", "economy"],
-      ["very_frequent", "tempo"]
+      ["very_frequent", "tempo"],
+      ["requires_energy_high", "refills_energy"]
     ]
   },
 
@@ -255,21 +257,21 @@
   ],
 
   "effect_templates": {
-    "DEAL_DAMAGE": {"weight": 22, "power": 1, "tags": ["damage", "offense", "needs_living_foe"], "ratio_min": 0.15, "ratio_max": 0.50, "types": ["fisico", "fuego", "hielo", "rayo", "veneno", "arcano"]},
-    "APPLY_STATUS": {"weight": 16, "power": 1, "tags": ["control", "offense", "needs_living_foe"], "status_tags": ["BURN", "BLEED", "POISON", "STUN", "CHILL", "WEAKEN", "VULNERABLE", "MARK", "CURSE"], "stacks_min": 1, "stacks_max": 2, "turns_min": 2, "turns_max": 3},
-    "BUFF_SELF": {"weight": 10, "power": 1, "tags": ["buff", "defense"], "status_tags": ["RAGE", "FORTIFY", "REGEN", "HASTE", "THORNS"], "turns": 2},
-    "GAIN_SHIELD": {"weight": 9, "power": 2, "tags": ["defense", "mitigation"], "ratio_min": 0.05, "ratio_max": 0.15},
-    "HEAL_HP": {"weight": 9, "power": 2, "tags": ["sustain", "heal"], "ratio_min": 0.03, "ratio_max": 0.10},
-    "REFUND_ENERGY": {"weight": 6, "power": 1, "tags": ["utility", "energy"], "value_min": 4, "value_max": 12},
-    "STEAL_ENERGY": {"weight": 3, "power": 1, "tags": ["utility", "energy", "offense"], "value_min": 4, "value_max": 10},
-    "LIFESTEAL": {"weight": 4, "power": 2, "tags": ["sustain", "heal", "damage"], "ratio_min": 0.02, "ratio_max": 0.08},
-    "PURGE_STATUS": {"weight": 3, "power": 1, "tags": ["utility", "control", "needs_living_foe"], "status_tags": ["BURN", "BLEED", "POISON", "STUN", "CHILL", "WEAKEN", "VULNERABLE", "MARK", "CURSE", "RAGE", "FORTIFY", "REGEN", "HASTE", "THORNS"]},
-    "CLEANSE": {"weight": 3, "power": 1, "tags": ["utility", "heal"], "value_min": 1, "value_max": 2},
-    "GAIN_GOLD": {"weight": 3, "power": 3, "tags": ["economy", "scales_with_depth"], "value_min": 6, "value_max": 40, "floor_scale": 0.5},
-    "GRANT_XP": {"weight": 3, "power": 3, "tags": ["economy", "progression"], "value_min": 2, "value_max": 8},
-    "EXECUTE": {"weight": 2, "power": 3, "tags": ["damage", "offense", "requires_wounded_foe"], "pct_min": 0.08, "pct_max": 0.18},
-    "REFLECT": {"weight": 2, "power": 2, "tags": ["defense", "mitigation"], "tag": "THORNS", "turns_min": 2, "turns_max": 3},
-    "EXTRA_TURN": {"weight": 2, "power": 3, "tags": ["offense", "tempo", "needs_living_foe"], "chance": 0.05}
+    "DEAL_DAMAGE": {"weight": 22, "power": 1, "cost_key": "ratio", "surcharge": [0.30, 0.55], "tags": ["damage", "offense", "needs_active_fight"], "ratio_min": 0.15, "ratio_max": 0.50, "types": ["fisico", "fuego", "hielo", "rayo", "veneno", "arcano"]},
+    "APPLY_STATUS": {"weight": 16, "power": 1, "cost_unit": "status_total", "surcharge": [1.2, 2.4], "tags": ["control", "offense", "needs_active_fight"], "status_tags": ["BURN", "BLEED", "POISON", "STUN", "CHILL", "WEAKEN", "VULNERABLE", "MARK", "CURSE"], "stacks_min": 1, "stacks_max": 2, "turns_min": 2, "turns_max": 3},
+    "BUFF_SELF": {"weight": 10, "power": 1, "cost_key": "turns", "surcharge": [3, 4], "tags": ["buff", "defense", "needs_active_fight"], "status_tags": ["RAGE", "FORTIFY", "REGEN", "HASTE", "THORNS"], "turns": 2},
+    "GAIN_SHIELD": {"weight": 9, "power": 2, "cost_key": "ratio", "surcharge": [0.10, 0.18], "tags": ["defense", "mitigation", "needs_active_fight"], "ratio_min": 0.05, "ratio_max": 0.15},
+    "HEAL_HP": {"weight": 9, "power": 2, "cost_key": "ratio", "surcharge": [0.06, 0.11], "tags": ["sustain", "heal"], "ratio_min": 0.03, "ratio_max": 0.10},
+    "REFUND_ENERGY": {"weight": 6, "power": 1, "cost_key": "value", "surcharge": [8, 12], "tags": ["utility", "energy", "refills_energy", "needs_active_fight"], "value_min": 4, "value_max": 12},
+    "STEAL_ENERGY": {"weight": 3, "power": 1, "cost_key": "value", "surcharge": [7, 10], "tags": ["utility", "energy", "offense"], "value_min": 4, "value_max": 10},
+    "LIFESTEAL": {"weight": 4, "power": 2, "cost_key": "ratio", "surcharge": [0.04, 0.06], "tags": ["sustain", "heal", "damage"], "ratio_min": 0.02, "ratio_max": 0.08},
+    "PURGE_STATUS": {"weight": 3, "power": 1, "tags": ["utility", "control", "needs_active_fight"], "status_tags": ["RAGE", "FORTIFY", "REGEN", "HASTE", "THORNS"]},
+    "CLEANSE": {"weight": 3, "power": 1, "cost_key": "value", "surcharge": [2], "tags": ["utility", "heal", "needs_active_fight"], "value_min": 1, "value_max": 2},
+    "GAIN_GOLD": {"weight": 3, "power": 3, "cost_unit": "kill_gold", "surcharge": [0.15, 0.40], "tags": ["economy", "scales_with_depth"], "value_min": 6, "value_max": 40, "floor_scale": 0.5},
+    "GRANT_XP": {"weight": 3, "power": 3, "cost_unit": "kill_xp", "surcharge": [0.15, 0.40], "tags": ["economy", "progression"], "value_min": 2, "value_max": 8, "floor_scale": 0.5},
+    "EXECUTE": {"weight": 2, "power": 3, "cost_key": "pct", "surcharge": [0.12, 0.16], "tags": ["damage", "offense", "requires_wounded_foe", "needs_active_fight"], "pct_min": 0.08, "pct_max": 0.18},
+    "REFLECT": {"weight": 2, "power": 2, "cost_key": "turns", "surcharge": [3, 4], "tags": ["defense", "mitigation", "needs_active_fight"], "tag": "THORNS", "turns_min": 2, "turns_max": 3},
+    "EXTRA_TURN": {"weight": 2, "power": 3, "cost_key": "chance", "surcharge": [0.06, 0.10], "tags": ["offense", "tempo", "needs_active_fight"], "chance": 0.05}
   },
 
   "statuses": {
@@ -277,12 +279,12 @@
     "BLEED": {"name": "Hemorragia", "emoji": "🩸", "kind": "dot", "damage_type": "fisico", "dot_ratio": 0.20, "low_hp_bonus": 1.4, "turns": 4, "max_stacks": 4, "desc": "Sangra; se agrava cuando la vida es baja."},
     "POISON": {"name": "Veneno", "emoji": "☠️", "kind": "dot", "damage_type": "veneno", "dot_ratio": 0.16, "pierce": true, "turns": 5, "max_stacks": 6, "desc": "Corroe ignorando los escudos."},
     "SHIELD": {"name": "Escudo", "emoji": "🛡️", "kind": "shield", "desc": "Absorbe el daño entrante."},
-    "STUN": {"name": "Aturdimiento", "emoji": "💫", "kind": "control", "skip": true, "turns": 1, "max_stacks": 1, "desc": "Pierde el siguiente turno."},
-    "CHILL": {"name": "Congelación", "emoji": "❄️", "kind": "debuff", "attack_mult": -0.10, "turns": 3, "max_stacks": 5, "desc": "Reduce el daño infligido."},
-    "WEAKEN": {"name": "Debilidad", "emoji": "📉", "kind": "debuff", "attack_mult": -0.08, "taken_mult": 0.06, "turns": 3, "max_stacks": 5, "desc": "Reduce su daño y aumenta el recibido."},
-    "VULNERABLE": {"name": "Vulnerable", "emoji": "🎯", "kind": "debuff", "taken_mult": 0.10, "turns": 3, "max_stacks": 6, "desc": "Recibe más daño."},
-    "MARK": {"name": "Marca", "emoji": "🔻", "kind": "debuff", "taken_mult": 0.12, "crit_bonus": 0.08, "turns": 2, "max_stacks": 1, "desc": "Recibe más daño y es más fácil de criticar."},
-    "CURSE": {"name": "Maldición", "emoji": "🕯️", "kind": "debuff", "heal_mult": -0.25, "dot_mult": 0.20, "turns": 4, "max_stacks": 3, "desc": "Cura menos y sufre más daño de estado."},
+    "STUN": {"name": "Aturdimiento", "emoji": "💫", "kind": "control", "skip": true, "cost_weight": 3.0, "turns": 1, "max_stacks": 1, "desc": "Pierde el siguiente turno."},
+    "CHILL": {"name": "Congelación", "emoji": "❄️", "kind": "debuff", "attack_mult": -0.10, "cost_weight": 0.5, "turns": 3, "max_stacks": 5, "desc": "Reduce el daño infligido."},
+    "WEAKEN": {"name": "Debilidad", "emoji": "📉", "kind": "debuff", "attack_mult": -0.08, "taken_mult": 0.06, "cost_weight": 0.5, "turns": 3, "max_stacks": 5, "desc": "Reduce su daño y aumenta el recibido."},
+    "VULNERABLE": {"name": "Vulnerable", "emoji": "🎯", "kind": "debuff", "taken_mult": 0.10, "cost_weight": 0.6, "turns": 3, "max_stacks": 6, "desc": "Recibe más daño."},
+    "MARK": {"name": "Marca", "emoji": "🔻", "kind": "debuff", "taken_mult": 0.12, "crit_bonus": 0.08, "cost_weight": 0.6, "turns": 2, "max_stacks": 1, "desc": "Recibe más daño y es más fácil de criticar."},
+    "CURSE": {"name": "Maldición", "emoji": "🕯️", "kind": "debuff", "heal_mult": -0.25, "dot_mult": 0.20, "cost_weight": 0.5, "turns": 4, "max_stacks": 3, "desc": "Cura menos y sufre más daño de estado."},
     "RAGE": {"name": "Ira", "emoji": "😡", "kind": "buff", "attack_mult": 0.10, "turns": 3, "max_stacks": 5, "desc": "Aumenta el daño infligido."},
     "FORTIFY": {"name": "Fortificar", "emoji": "🪨", "kind": "buff", "defense_mult": 0.20, "turns": 3, "max_stacks": 5, "desc": "Aumenta la defensa."},
     "REGEN": {"name": "Regeneración", "emoji": "💚", "kind": "buff", "heal_ratio": 0.03, "turns": 3, "max_stacks": 5, "desc": "Recupera vida en cada turno."},

@@ -425,7 +425,6 @@ class DungeonEngine:
         return {str(tag) for tag in template.get("tags", [])}
 
     def tags_compatible(self, left: set[str], right: set[str]) -> bool:
-        """False si un tag de un lado afirma una propiedad que el otro lado restringe, o si el par está vetado."""
         rules = self.data.get("tag_rules", {})
         meta = rules.get("tag_meta", {})
         for side, other in ((left, right), (right, left)):
@@ -479,7 +478,7 @@ class DungeonEngine:
             if condition:
                 mod["if"] = condition
             return mod
-        return {"on": "ON_ATTACK", "then": {"type": "DEAL_DAMAGE", "target": "foe", "ratio": round(float(power), 2), "damage_type": "fisico"}}
+        return {"on": "ON_ATTACK", "then": {"type": "DEAL_DAMAGE", "target": "foe", "ratio": 0.2, "damage_type": "fisico"}}
 
     def generate_condition(self, rng: random.Random, trigger_tags: Optional[set[str]] = None) -> dict:
         templates = self.data["condition_templates"]
@@ -507,7 +506,9 @@ class DungeonEngine:
             target = "foe" if ctype == "TARGET_HAS_STATUS" else "self"
             return {"type": "HAS_STATUS", "target": target, "tag": tag}
         if ctype == "STATUS_STACKS_ABOVE":
-            return {"type": "HAS_STATUS", "target": "foe", "tag": rng.choice(sorted(OFFENSIVE_TAGS)), "stacks": rng.randint(template["value_min"], template["value_max"])}
+            tag = rng.choice(sorted(OFFENSIVE_TAGS))
+            ceiling = min(int(template["value_max"]), int(self.data["statuses"].get(tag, {}).get("max_stacks", 1)))
+            return {"type": "HAS_STATUS", "target": "foe", "tag": tag, "stacks": rng.randint(min(int(template["value_min"]), ceiling), max(1, ceiling))}
         if ctype == "RANDOM":
             return {"type": "RANDOM", "chance": round(rng.uniform(template["chance_min"], template["chance_max"]), 2)}
         if ctype == "TURN_ABOVE":
@@ -516,9 +517,76 @@ class DungeonEngine:
             return {"type": "FLOOR_ABOVE", "value": rng.randint(template["value_min"], template["value_max"])}
         return {"type": "ALWAYS"}
 
+    def status_weight(self, tag: str) -> float:
+        spec = self.data["statuses"].get(tag, {})
+        if spec.get("kind") == "dot":
+            return float(spec.get("dot_ratio", 0.2))
+        return float(spec.get("cost_weight", 1.0))
+
+    def effect_strength(self, effect: dict, template: dict, floor: int) -> float:
+        unit = template.get("cost_unit")
+        if unit == "kill_gold":
+            return float(effect.get("value", 0) or 0) / max(1.0, float(self.gold_reward(floor)))
+        if unit == "kill_xp":
+            base = self.cfg["xp_base"] * grow(self.cfg["xp_growth"], floor)
+            return float(effect.get("value", 0) or 0) / max(1.0, float(base))
+        if unit == "status_total":
+            return max(1, int(effect.get("stacks", 1))) * max(1, int(effect.get("turns", 1))) * self.status_weight(effect.get("tag", ""))
+        return float(effect.get(template.get("cost_key", "ratio"), 0) or 0)
+
+    def effect_cost(self, effect: dict, floor: int) -> int:
+        template = self.data["effect_templates"].get(effect.get("type", ""), {})
+        cost = int(template.get("power", 1))
+        strength = self.effect_strength(effect, template, floor)
+        for limit in template.get("surcharge", []):
+            if strength > float(limit):
+                cost += 1
+        return cost
+
+    def strength_ceiling(self, template: dict, budget: int) -> Optional[float]:
+        room = int(budget) - int(template.get("power", 1))
+        if room < 0:
+            return -1.0
+        limits = [float(limit) for limit in template.get("surcharge", [])]
+        return limits[room] if room < len(limits) else None
+
+    def clamp_effect(self, effect: dict, budget: int, floor: int) -> dict:
+        template = self.data["effect_templates"].get(effect.get("type", ""))
+        if not isinstance(template, dict):
+            return effect
+        ceiling = self.strength_ceiling(template, budget)
+        if ceiling is None:
+            return effect
+        if ceiling < 0:
+            return {}
+        unit = template.get("cost_unit")
+        if unit == "kill_gold":
+            cap = int(ceiling * self.gold_reward(floor))
+            effect["value"] = max(1, min(int(effect.get("value", 0) or 0), max(1, cap)))
+        elif unit == "kill_xp":
+            cap = int(ceiling * self.cfg["xp_base"] * grow(self.cfg["xp_growth"], floor))
+            effect["value"] = max(1, min(int(effect.get("value", 0) or 0), max(1, cap)))
+        elif unit == "status_total":
+            weight = max(0.05, self.status_weight(effect.get("tag", "")))
+            for turns in (int(effect.get("turns", 1)), 1):
+                stacks = int(ceiling / max(0.05, weight * max(1, turns)))
+                if stacks >= 1:
+                    effect["stacks"] = min(int(effect.get("stacks", 1)), stacks)
+                    effect["turns"] = min(int(effect.get("turns", 1)), max(1, turns))
+                    break
+        else:
+            key = template.get("cost_key", "ratio")
+            if key in effect:
+                if key in ("ratio", "chance", "pct"):
+                    effect[key] = round(min(float(effect[key]), ceiling), 2)
+                else:
+                    effect[key] = max(1, min(int(float(effect[key])), int(ceiling)))
+        return effect if self.effect_cost(effect, floor) <= budget else {}
+
     def generate_effect(self, rng: random.Random, power: float, floor: int, trigger_tags: Optional[set[str]] = None, condition_tags: Optional[set[str]] = None) -> Optional[dict]:
         templates = self.data["effect_templates"]
         names = [name for name in self.data["enabled_effects"] if name in templates]
+        budget = int(self.data.get("tag_rules", {}).get("max_power", 5))
         if trigger_tags is not None:
             budget = self.power_budget(trigger_tags, condition_tags or set())
             allowed = []
@@ -536,7 +604,9 @@ class DungeonEngine:
         etype = _weighted_choice(rng, weights)
         if etype is None:
             return None
-        return self.build_effect(rng, etype, power, floor)
+        effect = self.build_effect(rng, etype, power, floor)
+        clamped = self.clamp_effect(effect, budget, floor)
+        return clamped or None
 
     def build_effect(self, rng: random.Random, etype: str, power: float, floor: int) -> dict:
         template = self.data["effect_templates"][etype]
@@ -547,7 +617,9 @@ class DungeonEngine:
         if etype == "APPLY_STATUS":
             tag = rng.choice(template["status_tags"])
             target = "foe" if tag in OFFENSIVE_TAGS else "self"
-            return {"type": "APPLY_STATUS", "target": target, "tag": tag, "stacks": rng.randint(template["stacks_min"], template["stacks_max"]), "turns": rng.randint(template["turns_min"], template["turns_max"])}
+            cap = max(1, int(self.data["statuses"].get(tag, {}).get("max_stacks", 1)))
+            stacks = rng.randint(min(int(template["stacks_min"]), cap), min(int(template["stacks_max"]), cap))
+            return {"type": "APPLY_STATUS", "target": target, "tag": tag, "stacks": stacks, "turns": rng.randint(template["turns_min"], template["turns_max"])}
         if etype == "BUFF_SELF":
             return {"type": "APPLY_STATUS", "target": "self", "tag": rng.choice(template["status_tags"]), "stacks": 1, "turns": int(template["turns"])}
         if etype == "GAIN_SHIELD":
@@ -567,7 +639,7 @@ class DungeonEngine:
             value = int(rng.randint(template["value_min"], template["value_max"]) * grow(self.cfg["gold_growth"], floor * float(template.get("floor_scale", 0.5))))
             return {"type": etype, "target": "self", "value": value}
         if etype == "GRANT_XP":
-            return {"type": etype, "target": "self", "value": rng.randint(template["value_min"], template["value_max"])}
+            return {"type": etype, "target": "self", "value": int(rng.randint(template["value_min"], template["value_max"]) * grow(self.cfg["xp_growth"], floor * float(template.get("floor_scale", 0.5))))}
         if etype == "EXECUTE":
             return {"type": etype, "target": "foe", "pct": round(rng.uniform(template["pct_min"], template["pct_max"]), 2)}
         if etype == "REFLECT":
@@ -1228,6 +1300,7 @@ class DungeonEngine:
             state.cooldowns[skill["id"]] = int(skill.get("cooldown", 0))
             rt.log(f"{skill.get('emoji', '✨')} Usas **{skill['name']}** (-{cost}⚡).")
             self.fire(rt, "ON_SKILL_USE", skill.get("mods", []), state.player)
+            self.fire(rt, "ON_SKILL_USE", state.player.mods, state.player)
         elif action == "potion":
             state.potions -= 1
             heal = int(state.player.max_hp * self.cfg["potion_heal_ratio"] * self.heal_multiplier(state.player))

@@ -75,7 +75,7 @@ TRIGGER_LABELS = {
     "ON_ENERGY_GAIN": "Al ganar energía",
     "ON_POTION_USE": "Al usar una poción",
     "ON_SKILL_USE": "Al usar una habilidad",
-    "ON_STATUS_TICK": "Al tickear un estado",
+    "ON_STATUS_TICK": "Al activarse un estado",
     "ON_DODGE": "Al esquivar",
     "ON_BOSS_PHASE": "Al cambiar de fase un jefe",
     "ON_FLOOR_CLEAR": "Al limpiar el piso",
@@ -716,14 +716,14 @@ class DungeonCog(commands.Cog):
             return f"si tu energía {sign} {cond.get('pct')}%"
         if ctype in ("SHIELD_ABOVE", "SHIELD_BELOW"):
             sign = ">" if ctype == "SHIELD_ABOVE" else "<"
-            return f"si tu escudo {sign} {cond.get('pct') or cond.get('value')}%"
+            return f"si tu escudo {sign} {cond.get('pct') or cond.get('value')}% de tu vida"
         if ctype == "IS_CRITICAL":
-            return "si el golpe es crítico"
+            return "si el último golpe fue crítico"
         if ctype == "HAS_STATUS":
             spec = self.engine.data["statuses"].get(cond.get("tag", ""), {})
             stacks = int(cond.get("stacks", 1))
             suffix = f" x{stacks}+" if stacks > 1 else ""
-            return f"si {who} tiene {spec.get('name', cond.get('tag', ''))}{suffix}"
+            return f"si {who} {'tiene' if target == 'foe' else 'tienes'} {spec.get('name', cond.get('tag', ''))}{suffix}"
         if ctype == "RANDOM":
             return f"{_pct(cond.get('chance', 0))} de probabilidad"
         if ctype == "TURN_ABOVE":
@@ -736,36 +736,39 @@ class DungeonCog(commands.Cog):
         etype = effect.get("type", "")
         if etype == "DEAL_DAMAGE":
             kind = DAMAGE_TYPE_LABELS.get(effect.get("damage_type"), effect.get("damage_type", ""))
-            return f"{_pct(effect.get('ratio', 0))} de daño {kind}"
+            return f"infliges {_pct(effect.get('ratio', 0))} de daño {kind} al enemigo"
         if etype == "APPLY_STATUS":
             spec = self.engine.data["statuses"].get(effect.get("tag", ""), {})
-            return f"aplica {spec.get('name', effect.get('tag', ''))} x{effect.get('stacks', 1)}"
+            name = f"{spec.get('name', effect.get('tag', ''))} x{effect.get('stacks', 1)}"
+            return f"aplica {name} al enemigo" if effect.get("target") == "foe" else f"te aplica {name}"
         if etype == "GAIN_SHIELD":
-            return f"escudo del {_pct(effect.get('ratio', 0))} de la vida"
+            return f"obtienes un escudo del {_pct(effect.get('ratio', 0))} de tu vida"
         if etype == "HEAL_HP":
-            return f"cura {_pct(effect.get('ratio', 0))} de la vida"
+            return f"te curas {_pct(effect.get('ratio', 0))} de tu vida"
         if etype == "REFUND_ENERGY":
-            return f"+{effect.get('value')} energía"
+            return f"recuperas {effect.get('value')} de energía"
         if etype == "STEAL_ENERGY":
-            return f"roba {effect.get('value')} de energía"
+            return f"le robas {effect.get('value')} de energía al enemigo"
         if etype == "LIFESTEAL":
-            return f"roba vida ({_pct(effect.get('ratio', 0))} del daño)"
+            return f"te curas un {_pct(effect.get('ratio', 0))} del último golpe del combate"
         if etype == "PURGE_STATUS":
             spec = self.engine.data["statuses"].get(effect.get("tag", ""), {})
-            return f"purga {spec.get('name', effect.get('tag', ''))}"
+            return f"purga {spec.get('name', effect.get('tag', ''))} del enemigo"
         if etype == "CLEANSE":
-            return f"limpia {effect.get('value')} estados"
+            count = int(effect.get("value", 1))
+            plural = "s" if count != 1 else ""
+            return f"te limpia {count} estado{plural} negativo{plural}"
         if etype == "GAIN_GOLD":
-            return f"+{fmt_int(effect.get('value', 0))} oro"
+            return f"ganas {fmt_int(effect.get('value', 0))} de oro"
         if etype == "GRANT_XP":
-            return f"+{effect.get('value')} XP"
+            return f"ganas {effect.get('value')} de XP"
         if etype == "EXECUTE":
-            return f"ejecuta por debajo del {_pct(effect.get('pct', 0))}"
+            return f"ejecutas al enemigo si está por debajo del {_pct(effect.get('pct', 0))} de vida"
         if etype == "REFLECT":
             spec = self.engine.data["statuses"].get(effect.get("tag", "THORNS"), {})
-            return f"aplica {spec.get('name', 'Espinas')} x{effect.get('stacks', 1)}"
+            return f"te aplica {spec.get('name', 'Espinas')} x{effect.get('stacks', 1)}"
         if etype == "EXTRA_TURN":
-            return f"ataque extra ({_pct(effect.get('chance', 0))})"
+            return f"vuelves a atacar ({_pct(effect.get('chance', 0))} de probabilidad)"
         return str(etype).lower()
 
     def describe_mod(self, mod: dict) -> str:
@@ -821,11 +824,6 @@ class DungeonCog(commands.Cog):
         return max(0.0, float(self.engine.cfg.get(key, 0.0)))
 
     async def sync_vitals(self, user_id: int, hp: Optional[int] = None, dead: bool = False, full: bool = False) -> dict:
-        """Ajusta la vida guardada al equipo actual y la regenera según el tiempo transcurrido.
-
-        ``hp`` fija el resultado de un combate, ``dead`` marca la derrota (recuperación)
-        y ``full`` restaura al máximo (renacer o fila nueva).
-        """
         user = await self.repo.get_user(user_id)
         items = await self.repo.get_inventory(user_id)
         mutations = await self.repo.get_mutations(user_id)
@@ -1118,7 +1116,6 @@ class DungeonCog(commands.Cog):
         return (f"{reason} Conservas tu piso y tu equipo, pero no ganas recompensas." + (f" Pierdes **{fmt_int(penalty)}** de oro." if penalty else ""))
 
     async def resolve_finished_fight(self, interaction: discord.Interaction, state: BattleState, accent: discord.Color) -> None:
-        """Un combate que termina nada más empezar (efectos de ON_BATTLE_START) se resuelve ya, sin dejar la fila colgada."""
         user_id = interaction.user.id
         if state.stage == "victory":
             sections = await self.apply_victory(user_id, state)
