@@ -418,20 +418,74 @@ class DungeonEngine:
             "floor_found": floor,
         }
 
+    def element_tags(self, source: str, name: str) -> set[str]:
+        template = self.data.get(source, {}).get(name)
+        if not isinstance(template, dict):
+            return set()
+        return {str(tag) for tag in template.get("tags", [])}
+
+    def tags_compatible(self, left: set[str], right: set[str]) -> bool:
+        """False si un tag de un lado afirma una propiedad que el otro lado restringe, o si el par está vetado."""
+        rules = self.data.get("tag_rules", {})
+        meta = rules.get("tag_meta", {})
+        for side, other in ((left, right), (right, left)):
+            constrained = {meta[tag]["constrains"] for tag in side if tag in meta and "constrains" in meta[tag]}
+            if not constrained:
+                continue
+            for tag in other:
+                if constrained.intersection(meta.get(tag, {}).get("asserts", [])):
+                    return False
+        for tag_a, tag_b in rules.get("incompatible", []):
+            if (tag_a in left and tag_b in right) or (tag_b in left and tag_a in right):
+                return False
+        return True
+
+    def power_budget(self, trigger_tags: set[str], condition_tags: set[str]) -> int:
+        rules = self.data.get("tag_rules", {})
+        table = rules.get("power_by_frequency", {})
+        limits = [int(table[tag]) for tag in trigger_tags if tag in table]
+        budget = min(limits) if limits else int(rules.get("default_power", 1))
+        bonuses = rules.get("power_bonus_by_condition", {})
+        extra = [int(bonuses[tag]) for tag in condition_tags if tag in bonuses]
+        return min(int(rules.get("max_power", 3)), budget + (max(extra) if extra else 0))
+
+    def condition_tags(self, condition: dict) -> set[str]:
+        ctype = (condition or {}).get("type", "ALWAYS")
+        source = ctype
+        if ctype == "HAS_STATUS":
+            source = "STATUS_STACKS_ABOVE" if "stacks" in condition else ("TARGET_HAS_STATUS" if condition.get("target") == "foe" else "SELF_HAS_STATUS")
+        elif ctype in ("HP_BELOW", "HP_ABOVE") and condition.get("target") == "foe":
+            source = "FOE_HP_BELOW"
+        return self.element_tags("condition_templates", source)
+
     def generate_mod(self, rng: random.Random, power: float, floor: int) -> dict:
+        rules = self.data.get("tag_rules", {})
         triggers = self.data["enabled_triggers"]
         weights = {name: self.data["trigger_weights"].get(name, 1) for name in triggers}
-        trigger = _weighted_choice(rng, weights) or "ON_ATTACK"
+        for _ in range(max(1, int(rules.get("max_attempts", 8)))):
+            trigger = _weighted_choice(rng, weights)
+            if not trigger:
+                break
+            trigger_tags = self.element_tags("trigger_tags", trigger)
+            condition: dict = {}
+            if rng.random() < float(rules.get("condition_chance", 0.5)):
+                candidate = self.generate_condition(rng, trigger_tags)
+                if candidate.get("type", "ALWAYS") != "ALWAYS":
+                    condition = candidate
+            effect = self.generate_effect(rng, power, floor, trigger_tags, self.condition_tags(condition))
+            if effect is None:
+                continue
+            mod: dict = {"on": trigger, "then": effect}
+            if condition:
+                mod["if"] = condition
+            return mod
+        return {"on": "ON_ATTACK", "then": {"type": "DEAL_DAMAGE", "target": "foe", "ratio": round(float(power), 2), "damage_type": "fisico"}}
 
-        mod: dict = {"on": trigger}
-        if rng.random() < 0.5:
-            mod["if"] = self.generate_condition(rng)
-        mod["then"] = self.generate_effect(rng, power, floor)
-        return mod
-
-    def generate_condition(self, rng: random.Random) -> dict:
+    def generate_condition(self, rng: random.Random, trigger_tags: Optional[set[str]] = None) -> dict:
         templates = self.data["condition_templates"]
         names = [name for name in self.data["enabled_conditions"] if name in templates]
+        if trigger_tags:
+            names = [name for name in names if self.tags_compatible(trigger_tags, self.element_tags("condition_templates", name))]
         weights = {name: templates[name].get("weight", 1) for name in names}
         ctype = _weighted_choice(rng, weights) or "ALWAYS"
         template = templates.get(ctype, {})
@@ -462,22 +516,40 @@ class DungeonEngine:
             return {"type": "FLOOR_ABOVE", "value": rng.randint(template["value_min"], template["value_max"])}
         return {"type": "ALWAYS"}
 
-    def generate_effect(self, rng: random.Random, power: float, floor: int) -> dict:
+    def generate_effect(self, rng: random.Random, power: float, floor: int, trigger_tags: Optional[set[str]] = None, condition_tags: Optional[set[str]] = None) -> Optional[dict]:
         templates = self.data["effect_templates"]
         names = [name for name in self.data["enabled_effects"] if name in templates]
+        if trigger_tags is not None:
+            budget = self.power_budget(trigger_tags, condition_tags or set())
+            allowed = []
+            for name in names:
+                effect_tags = self.element_tags("effect_templates", name)
+                if int(templates[name].get("power", 1)) > budget:
+                    continue
+                if not self.tags_compatible(trigger_tags, effect_tags):
+                    continue
+                if not self.tags_compatible(condition_tags or set(), effect_tags):
+                    continue
+                allowed.append(name)
+            names = allowed
         weights = {name: templates[name].get("weight", 1) for name in names}
-        etype = _weighted_choice(rng, weights) or "DEAL_DAMAGE"
-        template = templates[etype]
+        etype = _weighted_choice(rng, weights)
+        if etype is None:
+            return None
+        return self.build_effect(rng, etype, power, floor)
+
+    def build_effect(self, rng: random.Random, etype: str, power: float, floor: int) -> dict:
+        template = self.data["effect_templates"][etype]
 
         if etype == "DEAL_DAMAGE":
             ratio = rng.uniform(template["ratio_min"], template["ratio_max"]) * power
             return {"type": etype, "target": "foe", "ratio": round(ratio, 2), "damage_type": rng.choice(template["types"])}
         if etype == "APPLY_STATUS":
-            tag = rng.choice(template["tags"])
+            tag = rng.choice(template["status_tags"])
             target = "foe" if tag in OFFENSIVE_TAGS else "self"
             return {"type": "APPLY_STATUS", "target": target, "tag": tag, "stacks": rng.randint(template["stacks_min"], template["stacks_max"]), "turns": rng.randint(template["turns_min"], template["turns_max"])}
         if etype == "BUFF_SELF":
-            return {"type": "APPLY_STATUS", "target": "self", "tag": rng.choice(template["tags"]), "stacks": 1, "turns": int(template["turns"])}
+            return {"type": "APPLY_STATUS", "target": "self", "tag": rng.choice(template["status_tags"]), "stacks": 1, "turns": int(template["turns"])}
         if etype == "GAIN_SHIELD":
             return {"type": etype, "target": "self", "ratio": round(rng.uniform(template["ratio_min"], template["ratio_max"]) * power, 2)}
         if etype == "HEAL_HP":
@@ -488,18 +560,18 @@ class DungeonEngine:
         if etype == "LIFESTEAL":
             return {"type": etype, "target": "self", "ratio": round(rng.uniform(template["ratio_min"], template["ratio_max"]), 2)}
         if etype == "PURGE_STATUS":
-            return {"type": etype, "target": "foe", "tag": rng.choice(template["tags"])}
+            return {"type": etype, "target": "foe", "tag": rng.choice(template["status_tags"])}
         if etype == "CLEANSE":
             return {"type": etype, "target": "self", "value": rng.randint(template["value_min"], template["value_max"])}
         if etype == "GAIN_GOLD":
-            value = int(rng.randint(template["value_min"], template["value_max"]) * self.cfg["gold_growth"] ** (floor * 0.5))
+            value = int(rng.randint(template["value_min"], template["value_max"]) * grow(self.cfg["gold_growth"], floor * float(template.get("floor_scale", 0.5))))
             return {"type": etype, "target": "self", "value": value}
         if etype == "GRANT_XP":
             return {"type": etype, "target": "self", "value": rng.randint(template["value_min"], template["value_max"])}
         if etype == "EXECUTE":
             return {"type": etype, "target": "foe", "pct": round(rng.uniform(template["pct_min"], template["pct_max"]), 2)}
         if etype == "REFLECT":
-            return {"type": "APPLY_STATUS", "target": "self", "tag": "THORNS", "stacks": 1, "turns": 3}
+            return {"type": "APPLY_STATUS", "target": "self", "tag": template.get("tag", "THORNS"), "stacks": 1, "turns": rng.randint(template["turns_min"], template["turns_max"])}
         if etype == "EXTRA_TURN":
             return {"type": etype, "target": "self", "chance": template["chance"]}
         return {"type": "DEAL_DAMAGE", "target": "foe", "ratio": round(power, 2), "damage_type": "fisico"}
@@ -599,11 +671,12 @@ class DungeonEngine:
         stats = self.player_stats(user, items, mutations, echoes)
         attack = int(stats["attack"] * shift_effects.get("attack_mult", 1.0))
         max_hp = max(1, int(stats["max_hp"] * shift_effects.get("max_hp_mult", 1.0)))
+        stored_hp = int(user.get("hp") or 0)
         return Combatant(
             name=user.get("name") or "Aventurero",
             emoji="🧙",
             max_hp=max_hp,
-            hp=max_hp,
+            hp=max_hp if stored_hp <= 0 else min(max_hp, stored_hp),
             attack=max(1, attack),
             defense=stats["defense"],
             max_energy=stats["max_energy"],
@@ -879,6 +952,11 @@ class DungeonEngine:
                 amount = int(target.max_hp * float(effect.get("pct", 0.2)))
                 rt.log(f"⚖️ **{actor.name}** ejecuta a **{target.name}**.")
                 self.deal_damage(rt, actor, target, amount, "arcano", can_crit=False, pierce=True)
+        elif etype == "REFLECT":
+            tag = effect.get("tag", "THORNS")
+            spec = self.data["statuses"].get(tag, {})
+            turns = int(effect["turns"]) if "turns" in effect else int(spec.get("turns", 3))
+            self.apply_status(rt, actor, target, tag, int(effect.get("stacks", 1)), turns)
         elif etype == "EXTRA_TURN":
             if rt.rng.random() < float(effect.get("chance", 0.1)):
                 rt.log(f"⚡ **{actor.name}** encadena un ataque extra.")
@@ -1104,6 +1182,7 @@ class DungeonEngine:
         shift_effects = shift_effects or self.shift_effects(state.shifts)
         rng = rng or random.Random()
         rt = Runtime(self, state, rng)
+        rt.events["is_crit"] = False
 
         if action == "flee":
             state.stage = "fled"
@@ -1174,6 +1253,7 @@ class DungeonEngine:
         if state.stage != "active":
             return
 
+        rt.events["is_crit"] = False
         self.fire(rt, "ON_TURN_START", enemy.mods, enemy)
         self.apply_boss_phase(rt)
 
@@ -1205,6 +1285,9 @@ class DungeonEngine:
 
     def end_of_round(self, rt: Runtime) -> None:
         state = rt.state
+        self.fire(rt, "ON_TURN_END", state.player.mods, state.player)
+        if state.stage != "active":
+            return
         self.tick_statuses(rt, state.player)
         self.tick_statuses(rt, state.enemy)
         if state.stage != "active":

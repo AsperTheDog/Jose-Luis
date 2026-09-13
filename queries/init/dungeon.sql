@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS dungeon_users
     gold            INTEGER   NOT NULL DEFAULT 0,
     hp              INTEGER   NOT NULL DEFAULT 0,
     max_hp          INTEGER   NOT NULL DEFAULT 0,
+    recovering      INTEGER   NOT NULL DEFAULT 0,
+    hp_at           TIMESTAMP,
     energy          INTEGER   NOT NULL DEFAULT 100,
     max_energy      INTEGER   NOT NULL DEFAULT 100,
     potions         INTEGER   NOT NULL DEFAULT 3,

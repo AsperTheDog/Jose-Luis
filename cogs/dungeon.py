@@ -222,7 +222,7 @@ class InventoryView(discord.ui.View):
         if not ok:
             await interaction.response.send_message(embed=discord.Embed(description="❌ Ese objeto ya no existe.", color=discord.Color.red()), ephemeral=True)
             return
-        await self.cog.refresh_vitals(self.user_id)
+        await self.cog.sync_vitals(self.user_id)
         await interaction.response.defer()
         await self.cog.send_inventory(interaction, edit=True)
 
@@ -248,7 +248,7 @@ class InventoryView(discord.ui.View):
             await interaction.response.send_message(embed=discord.Embed(description="❌ Ese objeto ya no existe.", color=discord.Color.red()), ephemeral=True)
             return
         await self.cog.repo.unequip_item(self.user_id, item_uid)
-        await self.cog.refresh_vitals(self.user_id)
+        await self.cog.sync_vitals(self.user_id)
         await interaction.response.defer()
         await self.cog.send_inventory(interaction, edit=True, note=f"↩️ Has desequipado **{item['name']}**: ya puedes venderlo desde la mochila.")
 
@@ -761,6 +761,9 @@ class DungeonCog(commands.Cog):
             return f"+{effect.get('value')} XP"
         if etype == "EXECUTE":
             return f"ejecuta por debajo del {_pct(effect.get('pct', 0))}"
+        if etype == "REFLECT":
+            spec = self.engine.data["statuses"].get(effect.get("tag", "THORNS"), {})
+            return f"aplica {spec.get('name', 'Espinas')} x{effect.get('stacks', 1)}"
         if etype == "EXTRA_TURN":
             return f"ataque extra ({_pct(effect.get('chance', 0))})"
         return str(etype).lower()
@@ -798,7 +801,8 @@ class DungeonCog(commands.Cog):
         return DEFAULT_ACCENT
 
     async def profile_of(self, user_id: int) -> tuple[dict, list[dict], dict, dict]:
-        return (await self.repo.get_user(user_id), await self.repo.get_inventory(user_id), await self.repo.get_mutations(user_id), await self.repo.get_echoes(user_id))
+        user = await self.sync_vitals(user_id)
+        return (user, await self.repo.get_inventory(user_id), await self.repo.get_mutations(user_id), await self.repo.get_echoes(user_id))
 
     async def floor_progress(self, user_id: int) -> tuple[int, int]:
         user = await self.repo.get_user(user_id)
@@ -812,16 +816,81 @@ class DungeonCog(commands.Cog):
         await self.repo.add_item(user_id, item)
         return ""
 
-    async def refresh_vitals(self, user_id: int) -> None:
-        user, items, mutations, echoes = await self.profile_of(user_id)
+    def regen_rate(self, recovering: bool) -> float:
+        key = "hp_regen_recovery_pct_per_minute" if recovering else "hp_regen_pct_per_minute"
+        return max(0.0, float(self.engine.cfg.get(key, 0.0)))
+
+    async def sync_vitals(self, user_id: int, hp: Optional[int] = None, dead: bool = False, full: bool = False) -> dict:
+        """Ajusta la vida guardada al equipo actual y la regenera según el tiempo transcurrido.
+
+        ``hp`` fija el resultado de un combate, ``dead`` marca la derrota (recuperación)
+        y ``full`` restaura al máximo (renacer o fila nueva).
+        """
+        user = await self.repo.get_user(user_id)
+        items = await self.repo.get_inventory(user_id)
+        mutations = await self.repo.get_mutations(user_id)
+        echoes = await self.repo.get_echoes(user_id)
         stats = self.engine.player_stats(user, items, mutations, echoes)
-        await self.repo.update_user(
-            user_id,
-            max_hp=stats["max_hp"],
-            hp=stats["max_hp"],
-            max_energy=stats["max_energy"],
-            energy=stats["max_energy"],
+        max_hp = max(1, int(stats["max_hp"]))
+        now = datetime.datetime.now(datetime.timezone.utc)
+        stored_max = int(user.get("max_hp") or 0)
+        current = int(user.get("hp") or 0)
+        recovering = bool(int(user.get("recovering") or 0))
+        stamp = parse_dt(user.get("hp_at"))
+
+        if dead:
+            current, recovering, stamp = 0, True, now
+        elif full:
+            current, recovering, stamp = max_hp, False, now
+        elif hp is not None:
+            current, stamp = int(hp), now
+        elif stored_max <= 0:
+            current, stamp = max_hp, now
+        else:
+            if stored_max != max_hp:
+                current = int(round(current / stored_max * max_hp))
+            if current < max_hp:
+                elapsed = max(0.0, (now - (stamp or now)).total_seconds() / 60.0)
+                healed = int(max_hp * self.regen_rate(recovering) * elapsed / 100.0)
+                if healed > 0:
+                    current = min(max_hp, current + healed)
+                    stamp = now
+            else:
+                stamp = now
+
+        current = max(0, min(max_hp, current))
+        if current >= max_hp:
+            recovering = False
+        updates = {
+            "hp": current,
+            "max_hp": max_hp,
+            "max_energy": int(stats["max_energy"]),
+            "energy": int(stats["max_energy"]),
+            "recovering": 1 if recovering else 0,
+            "hp_at": (stamp or now).isoformat(),
+        }
+        await self.repo.update_user(user_id, **updates)
+        user.update(updates)
+        return user
+
+    def recovery_note(self, user: dict) -> Optional[str]:
+        if not int(user.get("recovering") or 0):
+            return None
+        max_hp = max(1, int(user.get("max_hp") or 0))
+        hp = int(user.get("hp") or 0)
+        per_minute = max(1.0, max_hp * self.regen_rate(True) / 100.0)
+        minutes = int((max_hp - hp) / per_minute) + 1
+        return (f"💀 Te recuperas de una derrota: **{fmt_int(hp)}/{fmt_int(max_hp)}** PV.\n" f"Necesitas la vida al máximo para volver a combatir (≈**{minutes} min**).\n" f"Acelera la cura bebiendo pociones con `/mazmorra pocion`.")
+
+    async def block_if_recovering(self, interaction: discord.Interaction, user: dict) -> bool:
+        note = self.recovery_note(user)
+        if not note:
+            return False
+        await interaction.response.send_message(
+            embed=discord.Embed(title="💀 Recuperación", description=note, color=discord.Color.dark_red()),
+            ephemeral=True,
         )
+        return True
 
     async def active_fight(self, user_id: int) -> Optional[BattleState]:
         raw = await self.repo.get_fight(user_id)
@@ -1010,7 +1079,7 @@ class DungeonCog(commands.Cog):
 
         await self.repo.update_user(user_id, **updates)
         await self.repo.clear_fight(user_id)
-        await self.refresh_vitals(user_id)
+        await self.sync_vitals(user_id, hp=state.player.hp)
 
         await self.bot.global_stats.register_dungeon_loot(user_id, rewards["gold"], 1 if item_added else 0)
         if not state.training:
@@ -1024,7 +1093,7 @@ class DungeonCog(commands.Cog):
         await self.repo.spend_gold(user_id, penalty)
         await self.repo.update_user(user_id, potions=state.potions)
         await self.repo.clear_fight(user_id)
-        await self.refresh_vitals(user_id)
+        await self.sync_vitals(user_id, dead=True)
         await self.bot.global_stats.register_dungeon_death(user_id)
         await self.bot.global_stats.register_dungeon_combat(user_id, state.damage_dealt, state.damage_taken)
         await self.repo.add_log(user_id, "death", f"Caíste en el piso {state.floor}.")
@@ -1037,7 +1106,10 @@ class DungeonCog(commands.Cog):
             await self.repo.spend_gold(user_id, penalty)
         await self.repo.update_user(user_id, potions=state.potions)
         await self.repo.clear_fight(user_id)
-        await self.refresh_vitals(user_id)
+        if state.training:
+            await self.sync_vitals(user_id)
+        else:
+            await self.sync_vitals(user_id, hp=state.player.hp)
         await self.bot.global_stats.register_dungeon_retreat(user_id)
         if state.stage == "timeout":
             reason = "El combate se alargó demasiado y tuviste que retirarte."
@@ -1045,10 +1117,26 @@ class DungeonCog(commands.Cog):
             reason = "Te retiraste del combate."
         return (f"{reason} Conservas tu piso y tu equipo, pero no ganas recompensas." + (f" Pierdes **{fmt_int(penalty)}** de oro." if penalty else ""))
 
+    async def resolve_finished_fight(self, interaction: discord.Interaction, state: BattleState, accent: discord.Color) -> None:
+        """Un combate que termina nada más empezar (efectos de ON_BATTLE_START) se resuelve ya, sin dejar la fila colgada."""
+        user_id = interaction.user.id
+        if state.stage == "victory":
+            sections = await self.apply_victory(user_id, state)
+            fields = [("🎁 Botín", "\n".join(sections["loot"])), ("🗺️ Progreso", "\n".join(sections["progress"]))]
+        elif state.stage == "defeat":
+            fields = [("💀 Derrota", await self.apply_defeat(user_id, state))]
+        else:
+            fields = [("🏃 Retirada", await self.apply_retreat(user_id, state))]
+        embed = self.render_combat(state, accent, ended=True, progress=await self.floor_progress(user_id), summary_fields=fields)
+        await interaction.response.send_message(embed=embed, view=CombatView(self, user_id, 0, ended=True))
+
     async def start_fight_message(self, interaction: discord.Interaction, state: BattleState) -> None:
         user_id = interaction.user.id
-        await self.repo.save_fight(user_id, state.to_dict())
         accent = await self.accent_color(user_id)
+        if state.stage != "active":
+            await self.resolve_finished_fight(interaction, state, accent)
+            return
+        await self.repo.save_fight(user_id, state.to_dict())
         skill = self.skills_of(state)
         view = CombatView(self, user_id, state.potions, state.no_potions, skill.get("name", "Habilidad"))
         await interaction.response.send_message(embed=self.render_combat(state, accent), view=view)
@@ -1072,6 +1160,8 @@ class DungeonCog(commands.Cog):
 
         user, items, mutations, echoes = await self.profile_of(user_id)
         shifts = _json_list(user.get("shifts"))
+        if await self.block_if_recovering(interaction, user):
+            return
 
         if piso is not None:
             if piso < 1 or piso > int(user["highest_floor"]):
@@ -1121,6 +1211,58 @@ class DungeonCog(commands.Cog):
         await self.repo.add_log(user_id, "floor", f"Descendiste al piso {floor + 1}.")
         await interaction.response.send_message(embed=discord.Embed(title="🚪 Desciendes", description=f"Bajas al piso **{floor + 1}**.", color=discord.Color.green()))
 
+    @mazmorra_group.command(name="pocion", description="Bebe una poción fuera de combate para recuperar vida.")
+    async def drink_potion(self, interaction: discord.Interaction) -> None:
+        user_id = interaction.user.id
+        if await self.active_fight(user_id) is not None:
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    description="⚠️ Estás en combate: usa el botón **Poción**, que gasta el turno.",
+                    color=discord.Color.orange(),
+                ),
+                ephemeral=True,
+            )
+            return
+
+        user = await self.sync_vitals(user_id)
+        potions = int(user["potions"])
+        max_hp = max(1, int(user["max_hp"]))
+        hp = int(user["hp"])
+        if potions <= 0:
+            await interaction.response.send_message(
+                embed=discord.Embed(description="❌ No te quedan pociones. Cómpralas con `/mazmorra mejoras`.", color=discord.Color.red()),
+                ephemeral=True,
+            )
+            return
+        if hp >= max_hp:
+            await interaction.response.send_message(
+                embed=discord.Embed(description="⚠️ Ya tienes la vida al máximo.", color=discord.Color.orange()),
+                ephemeral=True,
+            )
+            return
+
+        healed = max(1, int(max_hp * float(self.engine.cfg["potion_heal_ratio"])))
+        new_hp = min(max_hp, hp + healed)
+        recovering = 1 if int(user.get("recovering") or 0) and new_hp < max_hp else 0
+        await self.repo.update_user(
+            user_id,
+            potions=potions - 1,
+            hp=new_hp,
+            max_hp=max_hp,
+            recovering=recovering,
+            hp_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        )
+        lines = [
+            f"Recuperas **{fmt_int(new_hp - hp)}** PV: **{fmt_int(new_hp)}/{fmt_int(max_hp)}** ❤️",
+            f"Te quedan **{fmt_int(potions - 1)}** pociones.",
+        ]
+        if recovering:
+            lines.append(f"Sigues en recuperación: necesitas la vida al máximo para volver a combatir.")
+        await interaction.response.send_message(
+            embed=discord.Embed(title="🧪 Poción de Vida", description="\n".join(lines), color=discord.Color.green()),
+            ephemeral=True,
+        )
+
     @mazmorra_group.command(name="jefe", description="Desafía al Jefe que bloquea tu progreso.")
     async def boss(self, interaction: discord.Interaction) -> None:
         user_id = interaction.user.id
@@ -1133,7 +1275,9 @@ class DungeonCog(commands.Cog):
             )
             return
 
-        user = await self.repo.get_user(user_id)
+        user = await self.sync_vitals(user_id)
+        if await self.block_if_recovering(interaction, user):
+            return
         floor = int(user["floor"])
         if not self.engine.is_gate_floor(floor):
             await interaction.response.send_message(
@@ -1166,7 +1310,7 @@ class DungeonCog(commands.Cog):
     @mazmorra_group.command(name="perfil", description="Consulta tu progreso en la mazmorra.")
     async def profile(self, interaction: discord.Interaction) -> None:
         user_id = interaction.user.id
-        user = await self.repo.get_user(user_id)
+        user = await self.sync_vitals(user_id)
         items = await self.repo.get_inventory(user_id)
         mutations = await self.repo.get_mutations(user_id)
         cosmetics = await self.repo.get_cosmetics(user_id)
@@ -1185,13 +1329,19 @@ class DungeonCog(commands.Cog):
             value=f"`[{progress_bar(int(user['xp']), xp_needed)}]` {fmt_int(int(user['xp']))}/{fmt_int(xp_needed)} XP",
             inline=False,
         )
+        hp = int(user["hp"])
+        max_hp = int(stats["max_hp"])
         embed.add_field(
             name="⚔️ Combate",
             value=(f"**Ataque:** {fmt_int(stats['attack'])}\n**Defensa:** {fmt_int(stats['defense'])}\n"
-                   f"**Vida:** {fmt_int(stats['max_hp'])}\n**Energía:** {fmt_int(stats['max_energy'])}\n"
-                   f"**Crítico:** {stats['crit'] * 100:.1f}%"),
+                   f"**Vida:** {fmt_int(hp)}/{fmt_int(max_hp)} `[{progress_bar(hp, max_hp)}]`\n**Energía:** {fmt_int(stats['max_energy'])}\n"
+                   f"**Crítico:** {stats['crit'] * 100:.1f}%\n**Pociones:** {fmt_int(int(user['potions']))}\n"
+                   f"**Regeneración:** {self.regen_rate(bool(int(user.get('recovering') or 0))):g}%/min"),
             inline=True,
         )
+        recovery = self.recovery_note(user)
+        if recovery:
+            embed.add_field(name="💀 Recuperación", value=recovery, inline=False)
         embed.add_field(
             name="🗺️ Progreso",
             value=(f"**Piso actual:** {int(user['floor'])} ({int(user['floor_kills'])}/{max(1, int(self.engine.cfg['enemies_per_floor']))} enemigos)\n**Piso máximo:** {int(user['highest_floor'])}\n"
@@ -1324,7 +1474,7 @@ class DungeonCog(commands.Cog):
             return
         sockets = self.engine.reroll_sockets(item, random.SystemRandom())
         await self.repo.set_item_sockets(user_id, item_uid, sockets)
-        await self.refresh_vitals(user_id)
+        await self.sync_vitals(user_id)
         await self.bot.global_stats.register_dungeon_reroll(user_id, sum(1 for mod in sockets if not mod.get("locked")))
         await self.send_forge(interaction, edit=True, item_uid=item_uid, socket_index=0, note=f"🔨 Has reforjado las ranuras libres por **{fmt_int(cost)}** oro.")
 
@@ -1396,7 +1546,7 @@ class DungeonCog(commands.Cog):
         index = min(max(0, socket_index), len(sockets) - 1)
         sockets[index] = dict(chosen)
         await self.repo.set_item_sockets(user_id, item_uid, sockets)
-        await self.refresh_vitals(user_id)
+        await self.sync_vitals(user_id)
         await self.bot.global_stats.register_dungeon_infusion(user_id)
         await self.send_forge(interaction, edit=True, item_uid=item_uid, socket_index=index, note=f"🪙 Ranura **{index + 1}** infundida: {self.describe_mod(chosen)}")
 
@@ -1472,7 +1622,7 @@ class DungeonCog(commands.Cog):
                 return
             upgrades[upgrade_key] = current + amount
             await self.repo.update_user(user_id, upgrades=json.dumps(upgrades))
-            await self.refresh_vitals(user_id)
+            await self.sync_vitals(user_id)
             spec = self.engine.data["upgrades"][upgrade_key]
             message = (f"{spec['emoji']} **{spec['name']}** sube a nivel **{current + amount}** " f"por **{fmt_int(cost)}** oro.")
         await interaction.response.edit_message(embed=discord.Embed(description=message, color=discord.Color.green()), view=None)
@@ -1547,7 +1697,7 @@ class DungeonCog(commands.Cog):
             mod = self.engine.generate_mod(rng, self.engine.data["rarities"].get(target["rarity"], {}).get("power", 1.0), int(target["floor_found"]))
             sockets = list(target["sockets"]) + [mod]
             await self.repo.set_item_sockets(user_id, target["item_uid"], sockets)
-            await self.refresh_vitals(user_id)
+            await self.sync_vitals(user_id)
             message = (f"🔷 **{target['name']}** gana una ranura nueva " f"(`{mod['on']} → {mod['then']['type']}`). Ahora tiene **{len(sockets)}**.")
         else:
             await self.repo.add_cosmetic(user_id, entry_id)
@@ -1728,7 +1878,7 @@ class DungeonCog(commands.Cog):
             return
         await self.repo.add_dust(user_id, -cost)
         await self.repo.set_echo(user_id, echo_id, level + 1)
-        await self.refresh_vitals(user_id)
+        await self.sync_vitals(user_id)
         await self.bot.global_stats.register_dungeon_echo(user_id)
         await interaction.response.edit_message(
             embed=discord.Embed(
@@ -1834,7 +1984,7 @@ class DungeonCog(commands.Cog):
         level, remaining, gained = self.engine.gain_xp(int(user["level"]), int(user["xp"]), xp)
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         await self.repo.update_user(user_id, level=level, xp=remaining, training_since=now)
-        await self.refresh_vitals(user_id)
+        await self.sync_vitals(user_id)
         await self.bot.global_stats.register_dungeon_passive_xp(user_id, xp)
         text = f"🎓 Recoges **{fmt_int(xp)}** XP de entrenamiento ({hours:.1f} h)."
         if gained:
@@ -1863,7 +2013,9 @@ class DungeonCog(commands.Cog):
                 ephemeral=True,
             )
             return
-        user = await self.repo.get_user(user_id)
+        user = await self.sync_vitals(user_id)
+        if await self.block_if_recovering(interaction, user):
+            return
         ref_floor = max(1, int(piso)) if piso else max(1, int(user["floor"]))
         items = await self.repo.get_inventory(user_id)
         echoes = await self.repo.get_echoes(user_id)
@@ -1921,7 +2073,9 @@ class DungeonCog(commands.Cog):
 
     async def start_anomaly(self, interaction: discord.Interaction, anomaly_id: str) -> None:
         user_id = interaction.user.id
-        user = await self.repo.get_user(user_id)
+        user = await self.sync_vitals(user_id)
+        if await self.block_if_recovering(interaction, user):
+            return
         mutations = await self.repo.get_mutations(user_id)
         items = await self.repo.get_inventory(user_id)
         echoes = await self.repo.get_echoes(user_id)
@@ -2110,9 +2264,18 @@ class DungeonCog(commands.Cog):
             inline=False,
         )
         embed.add_field(
+            name="❤️ Vida, pociones y muerte",
+            value=(f"Tu vida **no se rellena** entre combates: se regenera poco a poco con el tiempo "
+                   f"(**{self.engine.cfg['hp_regen_pct_per_minute']}%** por minuto, o "
+                   f"**{self.engine.cfg['hp_regen_recovery_pct_per_minute']}%** mientras te recuperas de una derrota).\n"
+                   "`/mazmorra pocion` - bebe una poción **fuera de combate** (en combate se usa el botón, que gasta el turno).\n"
+                   "Si mueres quedas **en recuperación**: no puedes volver a combatir hasta estar al máximo."),
+            inline=False,
+        )
+        embed.add_field(
             name="🏃 Supervivencia",
             value=("Durante el combate puedes **Huir** en cualquier momento: conservas piso y equipo, "
-                   "pero no ganas recompensas. Ningún combate puede eternizarse."),
+                   "pero no ganas recompensas y te llevas las heridas contigo. Ningún combate puede eternizarse."),
             inline=False,
         )
         embed.add_field(
@@ -2165,7 +2328,7 @@ class DungeonCog(commands.Cog):
             shifts="[]",
             alt_floor=None,
         )
-        await self.refresh_vitals(user_id)
+        await self.sync_vitals(user_id, full=True)
         await self.bot.global_stats.register_dungeon_prestige(user_id, dust)
         await self.repo.add_log(user_id, "prestige", f"Renaciste con {dust} de Polvo.")
         await interaction.response.edit_message(
@@ -2224,7 +2387,7 @@ class DungeonCog(commands.Cog):
                 lost += 1
             else:
                 kept += 1
-        await self.refresh_vitals(user_id)
+        await self.sync_vitals(user_id)
         automation = await self.repo.get_automation(user_id)
         report = f"Piso {floor} ×{mut_level}: +{fmt_int(gold)} oro, +{fmt_int(xp)} XP" + (f", {kept} objeto(s)" if kept else "") + (f", {lost} perdido(s) por mochila llena" if lost else "") + (f", nivel {level}" if gained else "")
         await self.repo.set_automation(user_id, sims=int(automation["sims"]) + mut_level, last_tick=datetime.datetime.now(datetime.timezone.utc).isoformat(), last_report=report)

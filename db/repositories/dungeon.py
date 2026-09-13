@@ -30,6 +30,8 @@ USER_FIELDS = {
     "conversion_used",
     "training_enabled",
     "training_since",
+    "recovering",
+    "hp_at",
     "runs",
 }
 
