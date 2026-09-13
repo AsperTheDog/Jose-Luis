@@ -58,27 +58,15 @@ def _json_dict(value) -> dict:
     return loaded if isinstance(loaded, dict) else {}
 
 
-TRIGGER_LABELS = {
-    "ON_ATTACK": "Al atacar",
-    "ON_CRIT": "Al asestar un crítico",
-    "ON_DEFEND": "Al defender",
-    "ON_HIT_TAKEN": "Al recibir un golpe",
-    "ON_STATUS_APPLIED": "Al aplicar un estado",
-    "ON_TURN_START": "Al inicio del turno",
-    "ON_TURN_END": "Al final del turno",
-    "ON_KILL": "Al matar",
-    "ON_BATTLE_START": "Al empezar el combate",
-    "ON_BATTLE_END": "Al acabar el combate",
-    "ON_LOW_HP": "Con la vida baja",
-    "ON_SHIELD_BREAK": "Al romperse tu escudo",
-    "ON_HEAL": "Al curarte",
-    "ON_ENERGY_GAIN": "Al ganar energía",
-    "ON_POTION_USE": "Al usar una poción",
-    "ON_SKILL_USE": "Al usar una habilidad",
-    "ON_STATUS_TICK": "Al activarse un estado",
-    "ON_DODGE": "Al esquivar",
-    "ON_BOSS_PHASE": "Al cambiar de fase un jefe",
-    "ON_FLOOR_CLEAR": "Al limpiar el piso",
+GLOSSARY_SECTIONS = {
+    "combate": ("⚔️", "Combate", "Cómo se pelea: daño, crítico, defensa, pociones y la vida entre combates."),
+    "ranuras": ("🎲", "Ranuras", "Cuándo se dispara cada efecto, y por qué unas cifras son más grandes que otras."),
+    "condiciones": ("🔎", "Condiciones", "Los «si…» que puede llevar una ranura."),
+    "efectos": ("✨", "Efectos", "Qué hace cada ranura."),
+    "estados": ("🩸", "Estados", "Venenos, debufos y bufos: pilas, duración y qué ignoran."),
+    "equipo": ("🎒", "Equipo", "Rarezas, ranuras de equipo, forja y venta."),
+    "progresion": ("🗺️", "Progresión", "Pisos, jefes, mutaciones, anomalías y prestigio."),
+    "economia": ("💰", "Economía", "Fragmentos, mejoras, trofeos y Choskris."),
 }
 DAMAGE_TYPE_LABELS = {"fisico": "físico", "fuego": "fuego", "hielo": "hielo", "rayo": "rayo", "veneno": "veneno", "arcano": "arcano"}
 
@@ -178,10 +166,10 @@ class InventoryView(discord.ui.View):
 
             sell_options = [
                 discord.SelectOption(
-                    label=f"{item['name']} (+{fmt_int(item_value(item))} oro)"[:100],
+                    label=f"{item['name']} (+{fmt_int(item_value(item))} {cog.coin})"[:100],
                     value=item["item_uid"],
                     description=f"Vender · {cog.slot_name(item['slot'])} · {item['rarity']}"[:100],
-                    emoji="🪙",
+                    emoji=cog.coin_emoji,
                 )
                 for item in bag[:25]
             ]
@@ -239,7 +227,7 @@ class InventoryView(discord.ui.View):
         await self.cog.repo.delete_item(self.user_id, item_uid)
         await self.cog.repo.add_gold(self.user_id, value)
         await interaction.response.defer()
-        await self.cog.send_inventory(interaction, edit=True, note=f"🪙 Has vendido **{item['name']}** por **{fmt_int(value)}** de oro interno.")
+        await self.cog.send_inventory(interaction, edit=True, note=f"{self.cog.coin_emoji} Has vendido **{item['name']}** por **{fmt_int(value)}** {self.cog.coin}.")
 
     async def _unequip_callback(self, interaction: discord.Interaction) -> None:
         item_uid = interaction.data["values"][0]
@@ -303,7 +291,7 @@ class ShopView(discord.ui.View):
         select = discord.ui.Select(placeholder="Selecciona una reliquia...", options=options)
         select.callback = self._selected
         self.add_item(select)
-        buy = discord.ui.Button(label="Comprar", emoji="🪙", style=discord.ButtonStyle.success)
+        buy = discord.ui.Button(label="Comprar", emoji=cog.coin_emoji, style=discord.ButtonStyle.success)
         buy.callback = self._buy
         self.add_item(buy)
 
@@ -491,9 +479,9 @@ class ForgeView(discord.ui.View):
 
         has_sockets = bool(selected and selected["sockets"])
         for label, emoji, style, handler, row, enabled in (
-            ("Reforjar (oro)", "🔨", discord.ButtonStyle.primary, self._reroll, 2, has_sockets),
+            (f"Reforjar ({cog.coin})", "🔨", discord.ButtonStyle.primary, self._reroll, 2, has_sockets),
             ("Bloquear", "🔒", discord.ButtonStyle.secondary, self._toggle_lock, 2, has_sockets),
-            ("Infundir (monedas)", "🪙", discord.ButtonStyle.success, self._infuse, 2, has_sockets),
+            (f"Infundir ({cog.boss_coin})", cog.boss_coin_emoji, discord.ButtonStyle.success, self._infuse, 2, has_sockets),
         ):
             button = discord.ui.Button(label=label, emoji=emoji, style=style, disabled=not enabled, row=row)
             button.callback = handler
@@ -662,6 +650,52 @@ class PrestigeConfirmView(discord.ui.View):
         await interaction.response.edit_message(embed=discord.Embed(description="❌ Has decidido seguir luchando.", color=discord.Color.red()), view=None)
 
 
+class RerollAllView(discord.ui.View):
+    def __init__(self, cog: "DungeonCog", user_id: int, force: bool):
+        super().__init__(timeout=120)
+        self.cog = cog
+        self.user_id = user_id
+        self.force = force
+        confirm = discord.ui.Button(label="Rerolear todo", emoji="🎲", style=discord.ButtonStyle.danger)
+        confirm.callback = self._confirm
+        self.add_item(confirm)
+        cancel = discord.ui.Button(label="Cancelar", style=discord.ButtonStyle.secondary)
+        cancel.callback = self._cancel
+        self.add_item(cancel)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Esta decisión no es tuya.", color=discord.Color.red()), ephemeral=True)
+            return False
+        return True
+
+    async def _confirm(self, interaction: discord.Interaction) -> None:
+        await self.cog.do_reroll_all(interaction, self.force)
+
+    async def _cancel(self, interaction: discord.Interaction) -> None:
+        await interaction.response.edit_message(embed=discord.Embed(description="❌ Reroll global cancelado.", color=discord.Color.red()), view=None)
+
+
+class GlossaryView(discord.ui.View):
+    def __init__(self, cog: "DungeonCog", user_id: int, section: str):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.user_id = user_id
+        options = [discord.SelectOption(label=label, value=key, emoji=emoji, description=blurb[:100], default=key == section) for key, (emoji, label, blurb) in GLOSSARY_SECTIONS.items()]
+        select = discord.ui.Select(placeholder="Elige una sección del glosario", options=options[:25])
+        select.callback = self._pick
+        self.add_item(select)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Este glosario no es tuyo.", color=discord.Color.red()), ephemeral=True)
+            return False
+        return True
+
+    async def _pick(self, interaction: discord.Interaction) -> None:
+        await self.cog.send_glossary(interaction, interaction.data["values"][0], edit=True)
+
+
 class DungeonCog(commands.Cog):
     mazmorra_group = DungeonGroup(name="mazmorra", description="Mazmorra RPG exclusiva para suscriptores")
 
@@ -676,6 +710,22 @@ class DungeonCog(commands.Cog):
     @property
     def repo(self):
         return self.bot.db.dungeon
+
+    @property
+    def coin(self) -> str:
+        return self.engine.data.get("terms", {}).get("currency", {}).get("name", "Fragmentos")
+
+    @property
+    def coin_emoji(self) -> str:
+        return self.engine.data.get("terms", {}).get("currency", {}).get("emoji", "💠")
+
+    @property
+    def boss_coin(self) -> str:
+        return self.engine.data.get("terms", {}).get("boss_currency", {}).get("name", "Núcleos")
+
+    @property
+    def boss_coin_emoji(self) -> str:
+        return self.engine.data.get("terms", {}).get("boss_currency", {}).get("emoji", "⚛️")
 
     def slot_name(self, slot: str) -> str:
         return self.engine.data["gear_slots"].get(slot, {}).get("name", slot)
@@ -759,7 +809,7 @@ class DungeonCog(commands.Cog):
             plural = "s" if count != 1 else ""
             return f"te limpia {count} estado{plural} negativo{plural}"
         if etype == "GAIN_GOLD":
-            return f"ganas {fmt_int(effect.get('value', 0))} de oro"
+            return f"ganas {fmt_int(effect.get('value', 0))} {self.coin}"
         if etype == "GRANT_XP":
             return f"ganas {effect.get('value')} de XP"
         if etype == "EXECUTE":
@@ -772,7 +822,7 @@ class DungeonCog(commands.Cog):
         return str(etype).lower()
 
     def describe_mod(self, mod: dict) -> str:
-        trigger = TRIGGER_LABELS.get(mod.get("on"), str(mod.get("on", "?")))
+        trigger = self.engine.data["trigger_tags"].get(mod.get("on"), {}).get("name", str(mod.get("on", "?")))
         condition = self.describe_condition(mod.get("if"))
         effect = self.describe_effect(mod.get("then", {}))
         return f"{trigger}: {condition + ' → ' if condition else ''}{effect}"
@@ -789,6 +839,104 @@ class DungeonCog(commands.Cog):
         for index, mod in enumerate(item.get("sockets", [])):
             lines.append(f"`{index + 1}` {self.describe_mod(mod)}{' 🔒' if mod.get('locked') else ''}")
         return "\n".join(lines) or "*Sin estadísticas ni ranuras*"
+
+    def glossary_fields(self, section: str) -> list[tuple[str, str]]:
+        data = self.engine.data
+        cfg = self.engine.cfg
+        if section == "combate":
+            return [
+                ("⚔️ Cómo se resuelve un golpe", (f"Cada turno eliges **Atacar**, **Defender**, tu **Habilidad**, **Poción** o **Huir**.\nEl daño se reduce por la defensa de quien lo recibe: `defensa / (defensa + ataque del atacante)`.\nLos estados de daño (quemadura, sangrado, veneno) sufren la mitad de esa reducción, y el **veneno** además ignora los escudos.")),
+                ("🎯 Crítico y esquive", (f"Crítico base **{_pct(cfg['crit_chance_base'])}**; un crítico multiplica el daño por **{cfg['crit_multiplier']:g}** (tope {_pct(cfg['crit_cap'])}).\nEsquive base **{_pct(cfg['dodge_base'])}**: si esquivas, el golpe no hace nada.")),
+                ("🛡️ Defender, energía y habilidad", (f"**Defender** te da un escudo del **{_pct(cfg['defend_shield_ratio'])}** de tu vida máxima, bloquea el **{_pct(cfg['defend_block'])}** del daño de ese turno y te devuelve **{cfg['defend_energy']}** de energía.\nEmpiezas con **{cfg['player_base_energy']}** de energía y recuperas **{cfg['player_energy_regen']}** por turno. La habilidad cuesta energía y tiene enfriamiento.")),
+                ("⏳ Duración y retirada", (f"Un combate dura como mucho **{cfg['max_turns']}** turnos: si se alarga, te retiras agotado.\n**Huir** no da recompensas y conservas las heridas.")),
+                ("🧪 Pociones", (f"En combate gastan el turno y curan **{_pct(cfg['potion_heal_ratio'])}** de tu vida máxima.\nFuera de combate se usan con `/mazmorra pocion`, sin gastar turno.")),
+                ("❤️ Vida entre combates", (f"La vida se guarda entre combates y se regenera **{cfg['hp_regen_pct_per_minute']:g}%/min**, o **{cfg['hp_regen_recovery_pct_per_minute']:g}%/min** mientras te recuperas de una derrota.\nAl morir quedas **en recuperación**: no puedes combatir hasta estar al máximo, y las pociones aceleran la cura.")),
+            ]
+        if section == "ranuras":
+            table = data["tag_rules"]["power_by_frequency"]
+            rows = []
+            for freq, titulo in (("very_frequent", "Muy frecuentes"), ("frequent", "Frecuentes"), ("rare", "Poco frecuentes"), ("once", "Una vez por combate")):
+                entries = [spec for spec in data["trigger_tags"].values() if freq in spec["tags"]]
+                rows.append((f"{titulo} · presupuesto {int(table.get(freq, 1))}", "\n".join(f"**{spec['name']}** — {spec['desc']}" for spec in entries)))
+            rows.append(("📏 Por qué unas cifras son más grandes que otras", "Cuanto más a menudo salta un disparador, **más pequeña** es la cifra máxima que puede llevar su efecto, y al contrario: el mismo efecto lleva números pequeños en *Al atacar* y puede llevar los más grandes en *Al matar* o *Al empezar el combate*.\nUna condición restrictiva (por ejemplo «si tu vida < 30%») sube un escalón ese presupuesto, y algunas parejas imposibles o redundantes no se generan nunca."))
+            return rows
+        if section == "condiciones":
+            groups = (("Sobre ti", ("HP_BELOW", "HP_ABOVE", "ENERGY_BELOW", "ENERGY_ABOVE", "SHIELD_ABOVE", "SHIELD_BELOW", "SELF_HAS_STATUS")), ("Sobre el enemigo", ("FOE_HP_BELOW", "TARGET_HAS_STATUS", "STATUS_STACKS_ABOVE")), ("Sobre la situación", ("IS_CRITICAL", "RANDOM", "TURN_ABOVE", "FLOOR_ABOVE")))
+            return [(titulo, "\n".join(f"**{data['condition_templates'][key]['name']}** — {data['condition_templates'][key]['desc']}" for key in keys if key in data["condition_templates"])) for titulo, keys in groups]
+        if section == "efectos":
+            priority = (("Defensivos y sustento", ("sustain", "heal", "buff", "defense", "mitigation")), ("Ofensivos", ("damage", "offense", "control")), ("Utilidad y economía", ("utility", "energy", "economy", "tempo", "progression")))
+            grouped: dict[str, list[str]] = {titulo: [] for titulo, _ in priority}
+            seen: set[str] = set()
+            for titulo, tags in priority:
+                for key in data["enabled_effects"]:
+                    if key in seen or key not in data["effect_templates"]:
+                        continue
+                    if set(data["effect_templates"][key].get("tags", [])) & set(tags):
+                        seen.add(key)
+                        grouped[titulo].append(key)
+            order = ("Ofensivos", "Defensivos y sustento", "Utilidad y economía")
+            return [(titulo, "\n".join(f"**{data['effect_templates'][key]['name']}** — {data['effect_templates'][key]['desc']}" for key in grouped[titulo])) for titulo in order]
+        if section == "estados":
+            def linea(spec: dict) -> str:
+                extra = []
+                if int(spec.get("max_stacks", 1)) > 1:
+                    extra.append(f"máx {spec['max_stacks']} pilas")
+                if spec.get("turns"):
+                    extra.append(f"{spec['turns']} turno" + ("s" if int(spec["turns"]) != 1 else ""))
+                if spec.get("pierce"):
+                    extra.append("ignora escudos")
+                return f"{spec['emoji']} **{spec['name']}** — {spec['desc']}" + (f" ({', '.join(extra)})" if extra else "")
+            negativos = [spec for spec in data["statuses"].values() if spec.get("kind") in ("dot", "debuff", "control")]
+            positivos = [spec for spec in data["statuses"].values() if spec.get("kind") in ("buff", "shield")]
+            todos = [spec for spec in data["statuses"].values() if spec.get("kind") not in ("dot", "debuff", "control", "buff", "shield")]
+            rows = [("Negativos", "\n".join(linea(spec) for spec in negativos)), ("Positivos", "\n".join(linea(spec) for spec in positivos + todos)), ("Pilas y duración", "Los estados se acumulan en **pilas**: más pilas, más efecto. Cada aplicación refresca la duración y hay un tope de pilas por estado.")]
+            return rows
+        if section == "equipo":
+            labels = {"attack": "ataque", "defense": "defensa", "max_hp": "vida", "max_energy": "energía", "crit": "crítico"}
+            raridades = "\n".join(f"{spec['emoji']} **{spec['name']}** — {spec['sockets']} ranura" + ("s" if int(spec['sockets']) != 1 else "") + f", potencia de efecto ×{spec['power']:g}, estadísticas ×{spec['stat_mult']:g}" for spec in data["rarities"].values())
+            slots = "\n".join(f"{spec['emoji']} **{spec['name']}** — sobre todo {labels[max(spec['stats'], key=spec['stats'].get)]}" for spec in data["gear_slots"].values())
+            return [
+                ("🎲 Rarezas", raridades),
+                ("🎒 Ranuras de equipo", slots),
+                ("📊 Estadísticas", f"**ATQ** ataque · **DEF** defensa · **VID** vida máxima · **ENE** energía máxima · **CRIT** probabilidad de crítico.\nPuedes llevar **{cfg['inventory_cap']}** objetos contando los equipados; lo que no quepa se pierde."),
+                ("🔨 Forja", f"`/mazmorra forja` **rerolea** las ranuras libres de un objeto (cuesta {self.coin} según su piso y rareza), **bloquea** las que te gusten para que no cambien, e **infunde** una ranura con el disparador que elijas (cuesta {data['forge']['infuse_cost']} {self.boss_coin})."),
+                (f"{self.coin_emoji} Vender", "Desde `/mazmorra inventario` puedes equipar, desequipar y vender **solo lo que está en el zurrón**: lo equipado no se vende."),
+            ]
+        if section == "progresion":
+            return [
+                ("🗺️ Pisos", f"Cada piso pide derrotar **{cfg['enemies_per_floor']}** enemigos. Los pisos múltiplos de **{cfg['boss_interval']}** están bloqueados por un jefe (`/mazmorra jefe`); tras ganar hay **{cfg['boss_cooldown_hours']}h** de espera."),
+                ("⭐ Nivel y XP", "La XP de los enemigos sube tu nivel, y el nivel sube ataque, vida, defensa y crítico (cada uno con su tope)."),
+                ("🧬 Mutaciones", "Reescriben reglas del juego: sala de entrenamiento, ranuras cuánticas, automatización, pisos alternativos, desplazamientos... Se compran con Polvo."),
+                ("🎓 Entrenar y practicar", "`/mazmorra entrenar` acumula XP pasiva mientras no juegas.\n`/mazmorra practicar` es un simulacro sin recompensas contra un muñeco que no puede morir."),
+                ("🌀 Anomalías y alteraciones", "`/mazmorra anomalia` abre un piso alternativo con recompensa extra.\n`/mazmorra alteraciones` activa afijos que cambian las reglas del combate a cambio de una desventaja."),
+                ("✨ Prestigio", f"`/mazmorra prestigio` reinicia piso, nivel, {self.coin} y equipo a cambio de **Polvo**: el piso máximo dividido entre 5, y el resultado elevado a {cfg['dust_exponent']:g}.\nEl Polvo compra **Ecos** permanentes en `/mazmorra ecos`: cuando los pisos se vuelven letales, esa es la forma de volver más fuerte."),
+                ("💀 Muerte", f"Perder cuesta un 10% de tus {self.coin} y te deja en recuperación hasta curarte del todo; conservas piso y equipo."),
+            ]
+        if section == "economia":
+            mejoras = "\n".join(f"{spec['emoji']} **{spec['name']}** — {spec['desc']} (desde {fmt_int(spec['cost'])} {self.coin}, ×{spec['growth']:g} por nivel, máx {cfg['upgrade_max_level']})" for spec in data["upgrades"].values())
+            return [
+                (f"{self.coin_emoji} {self.coin}", f"{data['terms']['currency']['desc']} Se gana matando ({fmt_int(cfg['gold_base'])} × {cfg['gold_growth']:g} por piso) y con efectos de {self.coin}."),
+                ("⭐ Mejoras", mejoras),
+                ("🧪 Pociones", f"Cuestan **{fmt_int(cfg['potion_price_base'])} × {cfg['potion_price_growth']:g}** por nivel y curan {_pct(cfg['potion_heal_ratio'])} de tu vida máxima."),
+                (f"{self.boss_coin_emoji} {self.boss_coin}", f"{data['terms']['boss_currency']['desc']} Cada jefe superado da **{cfg['boss_coin_per_tier']}** por su nivel, y se gastan en `/mazmorra trofeos`: insignias, acentos y enclaves."),
+                ("💱 Canjear", f"1 {self.boss_coin_emoji} = **{cfg['conversion_rate']}** Choskris, con un tope diario que crece con cada jefe ({cfg['conversion_cap_base']} × {cfg['conversion_cap_growth']:g}, máx {fmt_int(cfg['conversion_cap_max'])}). *Desactivado mientras el juego está en beta.*"),
+                ("✨ Polvo", "Se gana al renacer (`/mazmorra prestigio`) y se gasta en mutaciones y Ecos."),
+            ]
+        return []
+
+    async def send_glossary(self, interaction: discord.Interaction, section: str = "combate", edit: bool = False) -> None:
+        key = section if section in GLOSSARY_SECTIONS else "combate"
+        emoji, label, blurb = GLOSSARY_SECTIONS[key]
+        embed = discord.Embed(title=f"{emoji} Glosario · {label}", description=blurb, color=discord.Color.dark_teal())
+        for name, value in self.glossary_fields(key):
+            if value:
+                embed.add_field(name=name[:256], value=value[:1024], inline=False)
+        embed.set_footer(text="Usa el menú para cambiar de sección · /mazmorra ayuda para la guía rápida")
+        view = GlossaryView(self, interaction.user.id, key)
+        if edit:
+            await interaction.response.edit_message(embed=embed, view=view)
+        else:
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def accent_color(self, user_id: int) -> discord.Color:
         cosmetics = await self.repo.get_cosmetics(user_id)
@@ -1006,7 +1154,7 @@ class DungeonCog(commands.Cog):
         rewards = state.rewards
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         updates: dict = {"potions": state.potions, "runs": int(user["runs"]) + 1}
-        loot = [f"💰 **+{fmt_int(rewards['gold'])}** oro interno", f"⭐ **+{fmt_int(rewards['xp'])}** XP"]
+        loot = [f"{self.coin_emoji} **+{fmt_int(rewards['gold'])}** {self.coin}", f"⭐ **+{fmt_int(rewards['xp'])}** XP"]
         progress: list[str] = []
 
         level, xp, gained = self.engine.gain_xp(user["level"], user["xp"], rewards["xp"])
@@ -1027,7 +1175,7 @@ class DungeonCog(commands.Cog):
 
         if rewards.get("coins"):
             await self.repo.add_boss_coins(user_id, rewards["coins"])
-            loot.append(f"🪙 **+{fmt_int(rewards['coins'])}** Monedas")
+            loot.append(f"{self.boss_coin_emoji} **+{fmt_int(rewards['coins'])}** {self.boss_coin}")
 
         if rewards.get("dust"):
             await self.repo.add_dust(user_id, rewards["dust"])
@@ -1095,7 +1243,7 @@ class DungeonCog(commands.Cog):
         await self.bot.global_stats.register_dungeon_death(user_id)
         await self.bot.global_stats.register_dungeon_combat(user_id, state.damage_dealt, state.damage_taken)
         await self.repo.add_log(user_id, "death", f"Caíste en el piso {state.floor}.")
-        return (f"Pierdes **{fmt_int(penalty)}** de oro interno, pero conservas tu piso {user['floor']}.\n" f"Vuelve a intentarlo cuando quieras.")
+        return (f"Pierdes **{fmt_int(penalty)}** {self.coin}, pero conservas tu piso {user['floor']}.\n" f"Vuelve a intentarlo cuando quieras.")
 
     async def apply_retreat(self, user_id: int, state: BattleState) -> str:
         user = await self.repo.get_user(user_id)
@@ -1113,7 +1261,7 @@ class DungeonCog(commands.Cog):
             reason = "El combate se alargó demasiado y tuviste que retirarte."
         else:
             reason = "Te retiraste del combate."
-        return (f"{reason} Conservas tu piso y tu equipo, pero no ganas recompensas." + (f" Pierdes **{fmt_int(penalty)}** de oro." if penalty else ""))
+        return (f"{reason} Conservas tu piso y tu equipo, pero no ganas recompensas." + (f" Pierdes **{fmt_int(penalty)}** {self.coin}." if penalty else ""))
 
     async def resolve_finished_fight(self, interaction: discord.Interaction, state: BattleState, accent: discord.Color) -> None:
         user_id = interaction.user.id
@@ -1346,11 +1494,11 @@ class DungeonCog(commands.Cog):
             inline=True,
         )
         embed.add_field(
-            name="🪙 Economía",
-            value=(f"**Oro interno:** {fmt_int(int(user['gold']))}\n"
-                   f"**Monedas de Jefe:** {fmt_int(int(user['boss_coins']))}\n"
+            name="💰 Economía",
+            value=(f"**{self.coin}:** {fmt_int(int(user['gold']))}\n"
+                   f"**{self.boss_coin}:** {fmt_int(int(user['boss_coins']))}\n"
                    f"**Tope diario:** {fmt_int(cap)} Choskris ({int(used)}/{cap} usados)\n"
-                   f"**Cambio:** 1 🪙 = {self.engine.cfg['conversion_rate']} Choskris"),
+                   f"**Cambio:** 1 {self.boss_coin_emoji} = {self.engine.cfg['conversion_rate']} Choskris"),
             inline=False,
         )
 
@@ -1441,11 +1589,11 @@ class DungeonCog(commands.Cog):
         )
         embed.add_field(
             name="💸 Costes",
-            value=(f"🔨 Reforjar ranuras libres: **{fmt_int(reroll_cost)}** oro\n"
-                   f"🪙 Infundir la ranura seleccionada: **{fmt_int(infuse_cost)}** Monedas de Jefe"),
+            value=(f"🔨 Reforjar ranuras libres: **{fmt_int(reroll_cost)}** {self.coin}\n"
+                   f"{self.boss_coin_emoji} Infundir la ranura seleccionada: **{fmt_int(infuse_cost)}** {self.boss_coin}"),
             inline=False,
         )
-        embed.set_footer(text=f"Oro: {fmt_int(int(user['gold']))} · Monedas de Jefe: {fmt_int(int(user['boss_coins']))}")
+        embed.set_footer(text=f"{self.coin}: {fmt_int(int(user['gold']))} · {self.boss_coin}: {fmt_int(int(user['boss_coins']))}")
         view = ForgeView(self, user_id, items, selected["item_uid"], socket_index)
         if edit:
             await interaction.response.edit_message(embed=embed, view=view)
@@ -1464,7 +1612,7 @@ class DungeonCog(commands.Cog):
         cost = self.engine.socket_reroll_cost(item)
         if not await self.repo.spend_gold(user_id, cost):
             await interaction.response.send_message(
-                embed=discord.Embed(description=f"❌ Necesitas **{fmt_int(cost)}** de oro interno.",
+                embed=discord.Embed(description=f"❌ Necesitas **{fmt_int(cost)}** {self.coin}.",
                                     color=discord.Color.red()),
                 ephemeral=True,
             )
@@ -1473,7 +1621,7 @@ class DungeonCog(commands.Cog):
         await self.repo.set_item_sockets(user_id, item_uid, sockets)
         await self.sync_vitals(user_id)
         await self.bot.global_stats.register_dungeon_reroll(user_id, sum(1 for mod in sockets if not mod.get("locked")))
-        await self.send_forge(interaction, edit=True, item_uid=item_uid, socket_index=0, note=f"🔨 Has reforjado las ranuras libres por **{fmt_int(cost)}** oro.")
+        await self.send_forge(interaction, edit=True, item_uid=item_uid, socket_index=0, note=f"🔨 Has reforjado las ranuras libres por **{fmt_int(cost)}** {self.coin}.")
 
     async def forge_toggle_lock(self, interaction: discord.Interaction, item_uid: str, socket_index: int) -> None:
         user_id = interaction.user.id
@@ -1497,7 +1645,7 @@ class DungeonCog(commands.Cog):
         user = await self.repo.get_user(user_id)
         if int(user["boss_coins"]) < cost:
             await interaction.response.send_message(
-                embed=discord.Embed(description=f"❌ Necesitas **{fmt_int(cost)}** Monedas de Jefe.",
+                embed=discord.Embed(description=f"❌ Necesitas **{fmt_int(cost)}** {self.boss_coin}.",
                                     color=discord.Color.red()),
                 ephemeral=True,
             )
@@ -1511,10 +1659,10 @@ class DungeonCog(commands.Cog):
             return
         candidates = self.engine.infuse_candidates(item, random.SystemRandom())
         embed = discord.Embed(
-            title="🪙 Infusión de Enclave",
+            title=f"{self.boss_coin_emoji} Infusión de Enclave",
             color=discord.Color.dark_gold(),
             description=(f"Elige el disparador que ocupará la ranura **{socket_index + 1}** de "
-                         f"**{item['name']}**.\nCoste: **{fmt_int(cost)}** Monedas de Jefe."),
+                         f"**{item['name']}**.\nCoste: **{fmt_int(cost)}** {self.boss_coin}."),
         )
         for index, mod in enumerate(candidates):
             embed.add_field(name=f"Opción {index + 1}", value=self.describe_mod(mod)[:1024], inline=False)
@@ -1525,7 +1673,7 @@ class DungeonCog(commands.Cog):
         cost = self.engine.socket_infuse_cost()
         if not await self.repo.spend_boss_coins(user_id, cost):
             await interaction.response.send_message(
-                embed=discord.Embed(description=f"❌ Necesitas **{fmt_int(cost)}** Monedas de Jefe.",
+                embed=discord.Embed(description=f"❌ Necesitas **{fmt_int(cost)}** {self.boss_coin}.",
                                     color=discord.Color.red()),
                 ephemeral=True,
             )
@@ -1545,9 +1693,9 @@ class DungeonCog(commands.Cog):
         await self.repo.set_item_sockets(user_id, item_uid, sockets)
         await self.sync_vitals(user_id)
         await self.bot.global_stats.register_dungeon_infusion(user_id)
-        await self.send_forge(interaction, edit=True, item_uid=item_uid, socket_index=index, note=f"🪙 Ranura **{index + 1}** infundida: {self.describe_mod(chosen)}")
+        await self.send_forge(interaction, edit=True, item_uid=item_uid, socket_index=index, note=f"{self.boss_coin_emoji} Ranura **{index + 1}** infundida: {self.describe_mod(chosen)}")
 
-    @mazmorra_group.command(name="mejoras", description="Compra pociones y mejoras con oro interno.")
+    @mazmorra_group.command(name="mejoras", description="Compra pociones y mejoras permanentes.")
     async def market(self, interaction: discord.Interaction) -> None:
         user_id = interaction.user.id
         user = await self.repo.get_user(user_id)
@@ -1556,7 +1704,7 @@ class DungeonCog(commands.Cog):
         potion_spec = self.engine.data["market"]["potions"]
         options = [
             discord.SelectOption(
-                label=f"{potion_spec['name']} ({fmt_int(self.engine.potion_price(level))} oro)"[:100],
+                label=f"{potion_spec['name']} ({fmt_int(self.engine.potion_price(level))} {self.coin})"[:100],
                 value="potions",
                 description=potion_spec["desc"][:100],
                 emoji=potion_spec["emoji"],
@@ -1568,13 +1716,13 @@ class DungeonCog(commands.Cog):
             options.append(discord.SelectOption(
                 label=f"{spec['name']} · nivel {current} → {current + 1}"[:100],
                 value=f"upgrade:{key}",
-                description=f"{spec['desc']} Coste: {fmt_int(cost)} oro."[:100],
+                description=f"{spec['desc']} Coste: {fmt_int(cost)} {self.coin}."[:100],
                 emoji=spec["emoji"],
             ))
         embed = discord.Embed(
             title="🏪 Mejoras",
-            description=("Pociones y mejoras permanentes compradas con **oro interno**.\n\n"
-                         f"Oro disponible: **{fmt_int(int(user['gold']))}**\n"
+            description=(f"Pociones y mejoras permanentes compradas con **{self.coin}**.\n\n"
+                         f"{self.coin} disponibles: **{fmt_int(int(user['gold']))}**\n"
                          f"Pociones: **{int(user['potions'])}**"),
             color=discord.Color.gold(),
         )
@@ -1589,14 +1737,14 @@ class DungeonCog(commands.Cog):
             cost = unit * amount
             if not await self.repo.spend_gold(user_id, cost):
                 await interaction.response.send_message(
-                    embed=discord.Embed(description=f"❌ Necesitas **{fmt_int(cost)}** de oro interno.",
+                    embed=discord.Embed(description=f"❌ Necesitas **{fmt_int(cost)}** {self.coin}.",
                                         color=discord.Color.red()),
                     ephemeral=True,
                 )
                 return
             new_potions = int(user["potions"]) + amount
             await self.repo.update_user(user_id, potions=new_potions)
-            message = f"🧪 Has comprado **{amount}** poción(es) por **{fmt_int(cost)}** oro. Ahora tienes **{new_potions}**."
+            message = f"🧪 Has comprado **{amount}** poción(es) por **{fmt_int(cost)}** {self.coin}. Ahora tienes **{new_potions}**."
         else:
             upgrade_key = key.split(":", 1)[1]
             upgrades = _json_dict(user.get("upgrades"))
@@ -1612,7 +1760,7 @@ class DungeonCog(commands.Cog):
             cost = sum(self.engine.upgrade_cost(upgrade_key, current + index) for index in range(amount))
             if not await self.repo.spend_gold(user_id, cost):
                 await interaction.response.send_message(
-                    embed=discord.Embed(description=f"❌ Necesitas **{fmt_int(cost)}** de oro interno.",
+                    embed=discord.Embed(description=f"❌ Necesitas **{fmt_int(cost)}** {self.coin}.",
                                         color=discord.Color.red()),
                     ephemeral=True,
                 )
@@ -1621,10 +1769,10 @@ class DungeonCog(commands.Cog):
             await self.repo.update_user(user_id, upgrades=json.dumps(upgrades))
             await self.sync_vitals(user_id)
             spec = self.engine.data["upgrades"][upgrade_key]
-            message = (f"{spec['emoji']} **{spec['name']}** sube a nivel **{current + amount}** " f"por **{fmt_int(cost)}** oro.")
+            message = (f"{spec['emoji']} **{spec['name']}** sube a nivel **{current + amount}** " f"por **{fmt_int(cost)}** {self.coin}.")
         await interaction.response.edit_message(embed=discord.Embed(description=message, color=discord.Color.green()), view=None)
 
-    @mazmorra_group.command(name="trofeos", description="Gasta Monedas de Jefe en insignias, acentos y enclaves.")
+    @mazmorra_group.command(name="trofeos", description="Gasta lo que sueltan los jefes en insignias, acentos y enclaves.")
     async def shop(self, interaction: discord.Interaction) -> None:
         user_id = interaction.user.id
         user = await self.repo.get_user(user_id)
@@ -1632,19 +1780,19 @@ class DungeonCog(commands.Cog):
         options = []
         for entry_id, spec in self.engine.data["boss_shop"].items():
             owned = entry_id in cosmetics
-            label = f"{spec['name']} · {fmt_int(spec['cost'])} 🪙"
+            label = f"{spec['name']} · {fmt_int(spec['cost'])} {self.boss_coin_emoji}"
             if owned and spec.get("type") != "socket":
                 label = f"{spec['name']} (en propiedad)"
             options.append(discord.SelectOption(
                 label=label[:100],
                 value=entry_id,
                 description=spec["desc"][:100],
-                emoji=spec.get("emoji", "🪙"),
+                emoji=spec.get("emoji", self.boss_coin_emoji),
             ))
         embed = discord.Embed(
             title="👑 Trofeos de Jefe",
-            description=("Insignias, acentos y enclaves comprados con **Monedas de Jefe**.\n"
-                         f"Monedas disponibles: **{fmt_int(int(user['boss_coins']))}** 🪙\n"
+            description=(f"Insignias, acentos y enclaves comprados con **{self.boss_coin}**.\n"
+                         f"{self.boss_coin_emoji} {self.boss_coin} disponibles: **{fmt_int(int(user['boss_coins']))}**\n"
                          "Estas recompensas no afectan a la economía global."),
             color=discord.Color.dark_gold(),
         )
@@ -1674,7 +1822,7 @@ class DungeonCog(commands.Cog):
 
         if not await self.repo.spend_boss_coins(user_id, int(spec["cost"])):
             await interaction.response.send_message(
-                embed=discord.Embed(description=f"❌ Necesitas **{fmt_int(spec['cost'])}** Monedas de Jefe.",
+                embed=discord.Embed(description=f"❌ Necesitas **{fmt_int(spec['cost'])}** {self.boss_coin}.",
                                     color=discord.Color.red()),
                 ephemeral=True,
             )
@@ -1700,7 +1848,7 @@ class DungeonCog(commands.Cog):
             await self.repo.add_cosmetic(user_id, entry_id)
             group = [cid for cid, other in self.engine.data["boss_shop"].items() if other.get("type") == spec["type"]]
             await self.repo.equip_cosmetic(user_id, entry_id, group)
-            message = f"{spec.get('emoji', '🪙')} Has adquirido **{spec['name']}**."
+            message = f"{spec.get('emoji', self.boss_coin_emoji)} Has adquirido **{spec['name']}**."
             if spec["type"] == "accent":
                 message += " Tus embeds de mazmorra ya usan este acento."
 
@@ -1713,8 +1861,8 @@ class DungeonCog(commands.Cog):
         order = {name: index for index, name in enumerate(self.engine.data["rarities"].keys())}
         return min(items, key=lambda item: (len(item["sockets"]), -order.get(item["rarity"], 0)))
 
-    @mazmorra_group.command(name="canjear", description="Canjea Monedas de Jefe por Choskris (tope diario).")
-    @app_commands.describe(cantidad="Cuántas Monedas de Jefe quieres canjear.")
+    @mazmorra_group.command(name="canjear", description="Canjea lo que sueltan los jefes por Choskris (tope diario).")
+    @app_commands.describe(cantidad="Cuánto quieres canjear.")
     async def convert(self, interaction: discord.Interaction, cantidad: app_commands.Range[int, 1, 1_000_000]) -> None:
         await interaction.response.send_message("🏗️ Este comando está desactivado porque el juego está en beta 🏗️", ephemeral=True)
         return
@@ -1730,7 +1878,7 @@ class DungeonCog(commands.Cog):
         max_by_cap = remaining_money // rate
         coins = min(int(cantidad), int(user["boss_coins"]), max_by_cap)
         if coins <= 0:
-            reason = ("No tienes Monedas de Jefe suficientes." if int(user["boss_coins"]) <= 0 else f"Has alcanzado el tope diario ({fmt_int(cap)} Choskris).")
+            reason = (f"No tienes {self.boss_coin} suficientes." if int(user["boss_coins"]) <= 0 else f"Has alcanzado el tope diario ({fmt_int(cap)} Choskris).")
             await interaction.response.send_message(embed=discord.Embed(description=f"⚠️ {reason}", color=discord.Color.orange()), ephemeral=True)
             return
         money = coins * rate
@@ -1742,7 +1890,7 @@ class DungeonCog(commands.Cog):
         await interaction.response.send_message(
             embed=discord.Embed(
                 title="💱 Canje completado",
-                description=(f"Canjeaste **{fmt_int(coins)}** 🪙 por **{fmt_int(money)}** Choskris.\n"
+                description=(f"Canjeaste **{fmt_int(coins)}** {self.boss_coin_emoji} por **{fmt_int(money)}** Choskris.\n"
                              f"Tope diario: **{fmt_int(used + money)}/{fmt_int(cap)}**\n"
                              f"Saldo actual: **{fmt_int(balance)}** Choskris."),
                 color=discord.Color.green(),
@@ -2214,6 +2362,55 @@ class DungeonCog(commands.Cog):
             ephemeral=True,
         )
 
+    @mazmorra_group.command(name="rerolear", description="Fuerza un reroll de las ranuras de TODOS los objetos de TODOS los jugadores (operadores).")
+    @app_commands.describe(bloqueos="Respeta las ranuras que los jugadores tienen bloqueadas.")
+    async def reroll_all(self, interaction: discord.Interaction, bloqueos: bool = False) -> None:
+        if await self.bot.filter_operators(interaction): return
+
+        items = await self.repo.all_items()
+        if not items:
+            await interaction.response.send_message(embed=discord.Embed(description="⚠️ Todavía no hay objetos en la mazmorra.", color=discord.Color.orange()), ephemeral=True)
+            return
+        sockets = sum(len(item.get("sockets") or []) for item in items)
+        owners = len({int(item["user_id"]) for item in items})
+        locked = sum(1 for item in items for mod in (item.get("sockets") or []) if mod.get("locked"))
+        detalle = f"Se respetan las ranuras bloqueadas ({locked})." if bloqueos else f"Se ignoran los bloqueos: también cambian las bloqueadas ({locked})."
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="🎲 Reroll global de ranuras",
+                description=(f"**{len(items)}** objetos de **{owners}** jugadores · **{sockets}** ranuras en total.\n{detalle}\n\nNo se puede deshacer. ¿Seguro?"),
+                color=discord.Color.dark_gold(),
+            ),
+            view=RerollAllView(self, interaction.user.id, not bloqueos),
+            ephemeral=True,
+        )
+
+    async def do_reroll_all(self, interaction: discord.Interaction, force: bool) -> None:
+        rng = random.SystemRandom()
+        updates: list[tuple[str, list[dict]]] = []
+        changed = kept = 0
+        for item in await self.repo.all_items():
+            sockets = list(item.get("sockets") or [])
+            if not sockets:
+                continue
+            fresh = self.engine.reroll_sockets(item, rng, force=force)
+            if fresh == sockets:
+                continue
+            for old, new in zip(sockets, fresh):
+                if old == new:
+                    kept += 1
+                else:
+                    changed += 1
+            updates.append((item["item_uid"], fresh))
+        await self.repo.save_item_sockets(updates)
+        resumen = f"**{len(updates)}** objetos reroleados · **{changed}** ranuras nuevas"
+        if kept:
+            resumen += f" · **{kept}** sin tocar por bloqueo"
+        await interaction.response.edit_message(
+            embed=discord.Embed(title="🎲 Reroll completado", description=resumen + ".", color=discord.Color.green()),
+            view=None,
+        )
+
     @mazmorra_group.command(name="ayuda", description="Cómo funciona la Mazmorra RPG.")
     async def help_command(self, interaction: discord.Interaction) -> None:
         embed = discord.Embed(
@@ -2243,7 +2440,7 @@ class DungeonCog(commands.Cog):
         )
         embed.add_field(
             name="💱 Economía",
-            value=("El oro interno se queda dentro del sistema. Las Monedas de Jefe se pueden canjear por Choskris "
+            value=(f"Los {self.coin} se quedan dentro del sistema. Los {self.boss_coin} se pueden canjear por Choskris "
                    "con `/mazmorra canjear`, sujeto a un tope diario que crece con cada Jefe superado."
                    "\n🏗️ Este comando está desactivado porque el juego está en beta aún 🏗️"),
             inline=False,
@@ -2277,10 +2474,16 @@ class DungeonCog(commands.Cog):
         )
         embed.add_field(
             name="✨ Prestigio",
-            value="`/mazmorra prestigio` reinicia piso, nivel, oro y equipo, pero te da Polvo para mutaciones y Ecos permanentes.",
+            value=f"`/mazmorra prestigio` reinicia piso, nivel, {self.coin} y equipo, pero te da Polvo para mutaciones y Ecos permanentes.",
             inline=False,
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @mazmorra_group.command(name="glosario", description="Chuleta de términos y mecánicas de la mazmorra.")
+    @app_commands.describe(seccion="Sección concreta del glosario.")
+    @app_commands.choices(seccion=[app_commands.Choice(name=f"{emoji} {label}", value=key) for key, (emoji, label, _) in GLOSSARY_SECTIONS.items()])
+    async def glossary(self, interaction: discord.Interaction, seccion: Optional[app_commands.Choice[str]] = None) -> None:
+        await self.send_glossary(interaction, seccion.value if seccion else "combate")
 
     @mazmorra_group.command(name="prestigio", description="Renace: reinicia tu progreso a cambio de Polvo Intergaláctico.")
     async def prestige(self, interaction: discord.Interaction) -> None:
@@ -2302,8 +2505,8 @@ class DungeonCog(commands.Cog):
         embed = discord.Embed(
             title="✨ Renacer (Prestigio)",
             description=(f"Polvo a obtener: **{fmt_int(dust)}** ✨ (piso máximo {int(user['highest_floor'])})\n\n"
-                         "**Se reinicia:** piso actual, piso máximo, nivel, XP, oro interno, pociones, mejoras y equipo.\n"
-                         "**Se conserva:** Polvo, Monedas de Jefe, mutaciones y cosméticos."),
+                         f"**Se reinicia:** piso actual, piso máximo, nivel, XP, {self.coin}, pociones, mejoras y equipo.\n"
+                         f"**Se conserva:** Polvo, {self.boss_coin}, mutaciones y cosméticos."),
             color=discord.Color.dark_purple(),
         )
         await interaction.response.send_message(embed=embed, view=PrestigeConfirmView(self, user_id, dust))
@@ -2386,7 +2589,7 @@ class DungeonCog(commands.Cog):
                 kept += 1
         await self.sync_vitals(user_id)
         automation = await self.repo.get_automation(user_id)
-        report = f"Piso {floor} ×{mut_level}: +{fmt_int(gold)} oro, +{fmt_int(xp)} XP" + (f", {kept} objeto(s)" if kept else "") + (f", {lost} perdido(s) por mochila llena" if lost else "") + (f", nivel {level}" if gained else "")
+        report = f"Piso {floor} ×{mut_level}: +{fmt_int(gold)} {self.coin}, +{fmt_int(xp)} XP" + (f", {kept} objeto(s)" if kept else "") + (f", {lost} perdido(s) por mochila llena" if lost else "") + (f", nivel {level}" if gained else "")
         await self.repo.set_automation(user_id, sims=int(automation["sims"]) + mut_level, last_tick=datetime.datetime.now(datetime.timezone.utc).isoformat(), last_report=report)
         await self.bot.global_stats.register_dungeon_auto_sim(user_id, mut_level)
 

@@ -139,27 +139,32 @@
     "FLOOR_ABOVE"
   ],
 
+  "terms": {
+    "currency": {"name": "Fragmentos", "emoji": "💠", "desc": "Lo que sueltan los enemigos de la mazmorra, y solo sirve dentro: pociones, mejoras y forja."},
+    "boss_currency": {"name": "Núcleos", "emoji": "⚛️", "desc": "El núcleo que se le arranca a un jefe."}
+  },
+
   "trigger_tags": {
-    "ON_BATTLE_START": {"tags": ["once", "at_start", "crit_unrolled", "implies_full_energy", "implies_no_shield", "implies_no_status", "implies_foe_full", "offense"]},
-    "ON_BATTLE_END": {"tags": ["once", "at_end", "implies_fight_over", "offense"]},
-    "ON_FLOOR_CLEAR": {"tags": ["once", "at_end", "implies_foe_dying", "implies_fight_over", "loot"]},
-    "ON_TURN_START": {"tags": ["very_frequent", "anytime", "crit_unrolled", "offense"]},
-    "ON_TURN_END": {"tags": ["very_frequent", "anytime", "utility"]},
-    "ON_ATTACK": {"tags": ["very_frequent", "anytime", "crit_unrolled", "offense"]},
-    "ON_HIT_TAKEN": {"tags": ["very_frequent", "anytime", "implies_hp_missing", "defense"]},
-    "ON_CRIT": {"tags": ["frequent", "anytime", "implies_crit", "offense"]},
-    "ON_DEFEND": {"tags": ["frequent", "anytime", "crit_unrolled", "implies_defend", "defense"]},
-    "ON_HEAL": {"tags": ["frequent", "anytime", "implies_heal", "sustain"]},
-    "ON_ENERGY_GAIN": {"tags": ["frequent", "anytime", "implies_energy_gain", "utility"]},
-    "ON_SKILL_USE": {"tags": ["frequent", "anytime", "crit_unrolled", "implies_skill", "offense"]},
-    "ON_STATUS_APPLIED": {"tags": ["frequent", "anytime", "implies_status_applied", "control"]},
-    "ON_STATUS_TICK": {"tags": ["frequent", "anytime", "implies_foe_status", "control"]},
-    "ON_KILL": {"tags": ["rare", "at_end", "implies_foe_dying", "implies_fight_over", "offense"]},
-    "ON_LOW_HP": {"tags": ["rare", "anytime", "implies_hp_low", "defense"]},
-    "ON_SHIELD_BREAK": {"tags": ["rare", "anytime", "implies_no_shield", "defense"]},
-    "ON_POTION_USE": {"tags": ["rare", "anytime", "crit_unrolled", "implies_heal", "sustain"]},
-    "ON_DODGE": {"tags": ["rare", "anytime", "crit_unrolled", "implies_dodge", "defense"]},
-    "ON_BOSS_PHASE": {"tags": ["rare", "anytime", "offense"]}
+    "ON_BATTLE_START": {"name": "Al empezar el combate", "desc": "Una vez, antes del primer turno.", "tags": ["once", "at_start", "crit_unrolled", "implies_full_energy", "implies_no_shield", "implies_no_status", "implies_foe_full", "offense"]},
+    "ON_BATTLE_END": {"name": "Al acabar el combate", "desc": "Al terminar, sea por victoria, derrota o retirada.", "tags": ["once", "at_end", "implies_fight_over", "offense"]},
+    "ON_FLOOR_CLEAR": {"name": "Al limpiar el piso", "desc": "Al caer el último enemigo del piso.", "tags": ["once", "at_end", "implies_foe_dying", "implies_fight_over", "loot"]},
+    "ON_TURN_START": {"name": "Al inicio del turno", "desc": "Al empezar cada turno tuyo.", "tags": ["very_frequent", "anytime", "crit_unrolled", "offense"]},
+    "ON_TURN_END": {"name": "Al final del turno", "desc": "Al cerrar el turno, después de que actúe el enemigo.", "tags": ["very_frequent", "anytime", "utility"]},
+    "ON_ATTACK": {"name": "Al atacar", "desc": "Cada vez que atacas.", "tags": ["very_frequent", "anytime", "crit_unrolled", "offense"]},
+    "ON_HIT_TAKEN": {"name": "Al recibir un golpe", "desc": "Cada vez que te alcanza un golpe.", "tags": ["very_frequent", "anytime", "implies_hp_missing", "defense"]},
+    "ON_CRIT": {"name": "Al asestar un crítico", "desc": "Cuando uno de tus golpes sale crítico.", "tags": ["frequent", "anytime", "implies_crit", "offense"]},
+    "ON_DEFEND": {"name": "Al defender", "desc": "Cuando usas Defender.", "tags": ["frequent", "anytime", "crit_unrolled", "implies_defend", "defense"]},
+    "ON_HEAL": {"name": "Al curarte", "desc": "Cuando recuperas vida: poción, drenaje o regeneración.", "tags": ["frequent", "anytime", "implies_heal", "sustain"]},
+    "ON_ENERGY_GAIN": {"name": "Al ganar energía", "desc": "Cuando sube tu energía.", "tags": ["frequent", "anytime", "implies_energy_gain", "utility"]},
+    "ON_SKILL_USE": {"name": "Al usar una habilidad", "desc": "Cuando lanzas tu habilidad activa.", "tags": ["frequent", "anytime", "crit_unrolled", "implies_skill", "offense"]},
+    "ON_STATUS_APPLIED": {"name": "Al aplicar un estado", "desc": "Cuando aplicas un estado a alguien.", "tags": ["frequent", "anytime", "implies_status_applied", "control"]},
+    "ON_STATUS_TICK": {"name": "Al activarse un estado", "desc": "Cada vez que un estado hace su efecto por turno.", "tags": ["frequent", "anytime", "implies_foe_status", "control"]},
+    "ON_KILL": {"name": "Al matar", "desc": "Cuando el enemigo cae.", "tags": ["rare", "at_end", "implies_foe_dying", "implies_fight_over", "offense"]},
+    "ON_LOW_HP": {"name": "Con la vida baja", "desc": "Cuando tu vida baja del 30%.", "tags": ["rare", "anytime", "implies_hp_low", "defense"]},
+    "ON_SHIELD_BREAK": {"name": "Al romperse tu escudo", "desc": "Cuando un golpe te deja sin escudo.", "tags": ["rare", "anytime", "implies_no_shield", "defense"]},
+    "ON_POTION_USE": {"name": "Al usar una poción", "desc": "Cuando bebes una poción en combate.", "tags": ["rare", "anytime", "crit_unrolled", "implies_heal", "sustain"]},
+    "ON_DODGE": {"name": "Al esquivar", "desc": "Cuando esquivas un golpe.", "tags": ["rare", "anytime", "crit_unrolled", "implies_dodge", "defense"]},
+    "ON_BOSS_PHASE": {"name": "Al cambiar de fase un jefe", "desc": "Cuando un jefe cruza un umbral de vida y cambia de postura.", "tags": ["rare", "anytime", "offense"]}
   },
 
   "tag_rules": {
@@ -223,20 +228,20 @@
   },
 
   "condition_templates": {
-    "HP_BELOW": {"weight": 12, "tags": ["requires_hp_low"], "target": "self", "pct_min": 25, "pct_max": 75},
-    "HP_ABOVE": {"weight": 8, "tags": ["requires_hp_high"], "target": "self", "pct_min": 30, "pct_max": 85},
-    "FOE_HP_BELOW": {"weight": 8, "tags": ["requires_foe_hp_low"], "target": "foe", "pct_min": 20, "pct_max": 65},
-    "ENERGY_BELOW": {"weight": 4, "tags": ["requires_energy_low"], "target": "self", "pct_min": 20, "pct_max": 60},
-    "ENERGY_ABOVE": {"weight": 4, "tags": ["requires_energy_high"], "target": "self", "pct_min": 40, "pct_max": 80},
-    "SHIELD_ABOVE": {"weight": 3, "tags": ["requires_shield"], "target": "self", "pct_min": 5, "pct_max": 25},
-    "SHIELD_BELOW": {"weight": 3, "tags": ["requires_shield_low"], "target": "self", "pct_min": 5, "pct_max": 25},
-    "IS_CRITICAL": {"weight": 8, "tags": ["requires_crit"]},
-    "TARGET_HAS_STATUS": {"weight": 9, "tags": ["requires_foe_status"], "target": "foe"},
-    "SELF_HAS_STATUS": {"weight": 7, "tags": ["requires_self_status"], "target": "self"},
-    "STATUS_STACKS_ABOVE": {"weight": 5, "tags": ["requires_stacks"], "target": "foe", "value_min": 1, "value_max": 3},
-    "RANDOM": {"weight": 8, "tags": ["random_gate"], "chance_min": 0.20, "chance_max": 0.50},
-    "TURN_ABOVE": {"weight": 3, "tags": ["requires_late_turn"], "value_min": 2, "value_max": 5},
-    "FLOOR_ABOVE": {"weight": 3, "tags": ["requires_depth"], "value_min": 5, "value_max": 25}
+    "HP_BELOW": {"name": "Vida por debajo", "desc": "Tu vida está por debajo del umbral, en % de la máxima.", "weight": 12, "tags": ["requires_hp_low"], "target": "self", "pct_min": 25, "pct_max": 75},
+    "HP_ABOVE": {"name": "Vida por encima", "desc": "Tu vida está por encima del umbral.", "weight": 8, "tags": ["requires_hp_high"], "target": "self", "pct_min": 30, "pct_max": 85},
+    "FOE_HP_BELOW": {"name": "Vida del enemigo por debajo", "desc": "La vida del enemigo está por debajo del umbral.", "weight": 8, "tags": ["requires_foe_hp_low"], "target": "foe", "pct_min": 20, "pct_max": 65},
+    "ENERGY_BELOW": {"name": "Energía por debajo", "desc": "Tu energía está por debajo del umbral.", "weight": 4, "tags": ["requires_energy_low"], "target": "self", "pct_min": 20, "pct_max": 60},
+    "ENERGY_ABOVE": {"name": "Energía por encima", "desc": "Tu energía está por encima del umbral.", "weight": 4, "tags": ["requires_energy_high"], "target": "self", "pct_min": 40, "pct_max": 80},
+    "SHIELD_ABOVE": {"name": "Escudo por encima", "desc": "Tu escudo supera el umbral, en % de tu vida máxima.", "weight": 3, "tags": ["requires_shield"], "target": "self", "pct_min": 5, "pct_max": 25},
+    "SHIELD_BELOW": {"name": "Escudo por debajo", "desc": "Tu escudo está por debajo del umbral.", "weight": 3, "tags": ["requires_shield_low"], "target": "self", "pct_min": 5, "pct_max": 25},
+    "IS_CRITICAL": {"name": "Último golpe crítico", "desc": "El último golpe del combate fue crítico.", "weight": 8, "tags": ["requires_crit"]},
+    "TARGET_HAS_STATUS": {"name": "El enemigo tiene un estado", "desc": "El enemigo sufre ese estado.", "weight": 9, "tags": ["requires_foe_status"], "target": "foe"},
+    "SELF_HAS_STATUS": {"name": "Tú tienes un estado", "desc": "Tú llevas ese estado encima.", "weight": 7, "tags": ["requires_self_status"], "target": "self"},
+    "STATUS_STACKS_ABOVE": {"name": "El enemigo acumula pilas", "desc": "El enemigo lleva al menos esas pilas del estado.", "weight": 5, "tags": ["requires_stacks"], "target": "foe", "value_min": 1, "value_max": 3},
+    "RANDOM": {"name": "Probabilidad", "desc": "Solo se cumple con esa probabilidad cada vez.", "weight": 8, "tags": ["random_gate"], "chance_min": 0.20, "chance_max": 0.50},
+    "TURN_ABOVE": {"name": "A partir de un turno", "desc": "Solo a partir de ese turno del combate.", "weight": 3, "tags": ["requires_late_turn"], "value_min": 2, "value_max": 5},
+    "FLOOR_ABOVE": {"name": "A partir de un piso", "desc": "Solo en pisos más profundos que ese número.", "weight": 3, "tags": ["requires_depth"], "value_min": 5, "value_max": 25}
   },
 
   "enabled_effects": [
@@ -257,21 +262,21 @@
   ],
 
   "effect_templates": {
-    "DEAL_DAMAGE": {"weight": 22, "power": 1, "cost_key": "ratio", "surcharge": [0.30, 0.55], "tags": ["damage", "offense", "needs_active_fight"], "ratio_min": 0.15, "ratio_max": 0.50, "types": ["fisico", "fuego", "hielo", "rayo", "veneno", "arcano"]},
-    "APPLY_STATUS": {"weight": 16, "power": 1, "cost_unit": "status_total", "surcharge": [1.2, 2.4], "tags": ["control", "offense", "needs_active_fight"], "status_tags": ["BURN", "BLEED", "POISON", "STUN", "CHILL", "WEAKEN", "VULNERABLE", "MARK", "CURSE"], "stacks_min": 1, "stacks_max": 2, "turns_min": 2, "turns_max": 3},
-    "BUFF_SELF": {"weight": 10, "power": 1, "cost_key": "turns", "surcharge": [3, 4], "tags": ["buff", "defense", "needs_active_fight"], "status_tags": ["RAGE", "FORTIFY", "REGEN", "HASTE", "THORNS"], "turns": 2},
-    "GAIN_SHIELD": {"weight": 9, "power": 2, "cost_key": "ratio", "surcharge": [0.10, 0.18], "tags": ["defense", "mitigation", "needs_active_fight"], "ratio_min": 0.05, "ratio_max": 0.15},
-    "HEAL_HP": {"weight": 9, "power": 2, "cost_key": "ratio", "surcharge": [0.06, 0.11], "tags": ["sustain", "heal"], "ratio_min": 0.03, "ratio_max": 0.10},
-    "REFUND_ENERGY": {"weight": 6, "power": 1, "cost_key": "value", "surcharge": [8, 12], "tags": ["utility", "energy", "refills_energy", "needs_active_fight"], "value_min": 4, "value_max": 12},
-    "STEAL_ENERGY": {"weight": 3, "power": 1, "cost_key": "value", "surcharge": [7, 10], "tags": ["utility", "energy", "offense"], "value_min": 4, "value_max": 10},
-    "LIFESTEAL": {"weight": 4, "power": 2, "cost_key": "ratio", "surcharge": [0.04, 0.06], "tags": ["sustain", "heal", "damage"], "ratio_min": 0.02, "ratio_max": 0.08},
-    "PURGE_STATUS": {"weight": 3, "power": 1, "tags": ["utility", "control", "needs_active_fight"], "status_tags": ["RAGE", "FORTIFY", "REGEN", "HASTE", "THORNS"]},
-    "CLEANSE": {"weight": 3, "power": 1, "cost_key": "value", "surcharge": [2], "tags": ["utility", "heal", "needs_active_fight"], "value_min": 1, "value_max": 2},
-    "GAIN_GOLD": {"weight": 3, "power": 3, "cost_unit": "kill_gold", "surcharge": [0.15, 0.40], "tags": ["economy", "scales_with_depth"], "value_min": 6, "value_max": 40, "floor_scale": 0.5},
-    "GRANT_XP": {"weight": 3, "power": 3, "cost_unit": "kill_xp", "surcharge": [0.15, 0.40], "tags": ["economy", "progression"], "value_min": 2, "value_max": 8, "floor_scale": 0.5},
-    "EXECUTE": {"weight": 2, "power": 3, "cost_key": "pct", "surcharge": [0.12, 0.16], "tags": ["damage", "offense", "requires_wounded_foe", "needs_active_fight"], "pct_min": 0.08, "pct_max": 0.18},
-    "REFLECT": {"weight": 2, "power": 2, "cost_key": "turns", "surcharge": [3, 4], "tags": ["defense", "mitigation", "needs_active_fight"], "tag": "THORNS", "turns_min": 2, "turns_max": 3},
-    "EXTRA_TURN": {"weight": 2, "power": 3, "cost_key": "chance", "surcharge": [0.06, 0.10], "tags": ["offense", "tempo", "needs_active_fight"], "chance": 0.05}
+    "DEAL_DAMAGE": {"name": "Daño extra", "desc": "Golpea al enemigo con un % de tu ataque.", "weight": 22, "power": 1, "cost_key": "ratio", "surcharge": [0.30, 0.55], "tags": ["damage", "offense", "needs_active_fight"], "ratio_min": 0.15, "ratio_max": 0.50, "types": ["fisico", "fuego", "hielo", "rayo", "veneno", "arcano"]},
+    "APPLY_STATUS": {"name": "Aplicar estado", "desc": "Aplica un estado al enemigo; los negativos son para él.", "weight": 16, "power": 1, "cost_unit": "status_total", "surcharge": [1.2, 2.4], "tags": ["control", "offense", "needs_active_fight"], "status_tags": ["BURN", "BLEED", "POISON", "STUN", "CHILL", "WEAKEN", "VULNERABLE", "MARK", "CURSE"], "stacks_min": 1, "stacks_max": 2, "turns_min": 2, "turns_max": 3},
+    "BUFF_SELF": {"name": "Mejora propia", "desc": "Te aplica un estado positivo temporal.", "weight": 10, "power": 1, "cost_key": "turns", "surcharge": [3, 4], "tags": ["buff", "defense", "needs_active_fight"], "status_tags": ["RAGE", "FORTIFY", "REGEN", "HASTE", "THORNS"], "turns": 2},
+    "GAIN_SHIELD": {"name": "Escudo", "desc": "Escudo temporal que absorbe daño, en % de tu vida máxima.", "weight": 9, "power": 2, "cost_key": "ratio", "surcharge": [0.10, 0.18], "tags": ["defense", "mitigation", "needs_active_fight"], "ratio_min": 0.05, "ratio_max": 0.15},
+    "HEAL_HP": {"name": "Curación", "desc": "Te cura, en % de tu vida máxima.", "weight": 9, "power": 2, "cost_key": "ratio", "surcharge": [0.06, 0.11], "tags": ["sustain", "heal"], "ratio_min": 0.03, "ratio_max": 0.10},
+    "REFUND_ENERGY": {"name": "Recuperar energía", "desc": "Recuperas energía.", "weight": 6, "power": 1, "cost_key": "value", "surcharge": [8, 12], "tags": ["utility", "energy", "refills_energy", "needs_active_fight"], "value_min": 4, "value_max": 12},
+    "STEAL_ENERGY": {"name": "Robar energía", "desc": "Le roba energía al enemigo (desactivado: los enemigos no usan energía).", "weight": 3, "power": 1, "cost_key": "value", "surcharge": [7, 10], "tags": ["utility", "energy", "offense"], "value_min": 4, "value_max": 10},
+    "LIFESTEAL": {"name": "Drenaje", "desc": "Te curas un % del último golpe del combate.", "weight": 4, "power": 2, "cost_key": "ratio", "surcharge": [0.04, 0.06], "tags": ["sustain", "heal", "damage"], "ratio_min": 0.02, "ratio_max": 0.08},
+    "PURGE_STATUS": {"name": "Purga", "desc": "Elimina un buff del enemigo.", "weight": 3, "power": 1, "tags": ["utility", "control", "needs_active_fight"], "status_tags": ["RAGE", "FORTIFY", "REGEN", "HASTE", "THORNS"]},
+    "CLEANSE": {"name": "Limpieza", "desc": "Elimina estados negativos de ti.", "weight": 3, "power": 1, "cost_key": "value", "surcharge": [2], "tags": ["utility", "heal", "needs_active_fight"], "value_min": 1, "value_max": 2},
+    "GAIN_GOLD": {"name": "Fragmentos extra", "desc": "Fragmentos extra; la cifra crece con el piso.", "weight": 3, "power": 3, "cost_unit": "kill_gold", "surcharge": [0.15, 0.40], "tags": ["economy", "scales_with_depth"], "value_min": 6, "value_max": 40, "floor_scale": 0.5},
+    "GRANT_XP": {"name": "XP extra", "desc": "XP extra; la cifra crece con el piso.", "weight": 3, "power": 3, "cost_unit": "kill_xp", "surcharge": [0.15, 0.40], "tags": ["economy", "progression"], "value_min": 2, "value_max": 8, "floor_scale": 0.5},
+    "EXECUTE": {"name": "Remate", "desc": "Si el enemigo está por debajo del umbral de vida, se lleva un golpe muy fuerte.", "weight": 2, "power": 3, "cost_key": "pct", "surcharge": [0.12, 0.16], "tags": ["damage", "offense", "requires_wounded_foe", "needs_active_fight"], "pct_min": 0.08, "pct_max": 0.18},
+    "REFLECT": {"name": "Reflejo", "desc": "Te da Espinas: devuelves parte del daño que recibes.", "weight": 2, "power": 2, "cost_key": "turns", "surcharge": [3, 4], "tags": ["defense", "mitigation", "needs_active_fight"], "tag": "THORNS", "turns_min": 2, "turns_max": 3},
+    "EXTRA_TURN": {"name": "Ataque extra", "desc": "Vuelves a atacar.", "weight": 2, "power": 3, "cost_key": "chance", "surcharge": [0.06, 0.10], "tags": ["offense", "tempo", "needs_active_fight"], "chance": 0.05}
   },
 
   "statuses": {
@@ -939,7 +944,7 @@
 
   "shifts": {
     "fragilidad": {"name": "Monstruos Curtidos", "emoji": "💥", "desc": "Enemigos +30% de daño, +25% de botín.", "enemy_dmg_mult": 1.30, "loot_mult": 1.25},
-    "hambre": {"name": "Hambruna", "emoji": "🕳️", "desc": "No puedes usar pociones y pierdes 25% de vida máxima, +45% de oro.", "no_potions": true, "max_hp_mult": 0.75, "gold_mult": 1.45},
+    "hambre": {"name": "Hambruna", "emoji": "🕳️", "desc": "No puedes usar pociones y pierdes 25% de vida máxima, +45% de Fragmentos.", "no_potions": true, "max_hp_mult": 0.75, "gold_mult": 1.45},
     "caos": {"name": "Plaga Elemental", "emoji": "🌀", "desc": "Un estado aleatorio te golpea al inicio de cada turno, +20% de XP.", "random_status": true, "xp_mult": 1.20},
     "marejada": {"name": "Virus del Frenesí", "emoji": "☣️", "desc": "El enemigo golpea dos veces cada 3 turnos y suelta más objetos.", "double_strike": 3, "loot_chance": 0.15},
     "silencio": {"name": "Adrenalina", "emoji": "💉", "desc": "Las habilidades cuestan el doble, sufres +25% de daño enemigo y ganas +20% de daño.", "skill_cost_mult": 2.0, "enemy_dmg_mult": 1.25, "attack_mult": 1.20}
@@ -997,7 +1002,7 @@
     "might": {"name": "Eco de Poder", "emoji": "⚔️", "desc": "+4% de ataque por nivel, compuesto.", "max_level": 200, "cost_base": 5, "cost_growth": 1.05, "attack_mult": 0.04, "compound": true},
     "vitality": {"name": "Eco de Vida", "emoji": "❤️", "desc": "+4% de vida máxima por nivel, compuesto.", "max_level": 200, "cost_base": 5, "cost_growth": 1.05, "hp_mult": 0.04, "compound": true},
     "precision": {"name": "Eco de Precisión", "emoji": "🎯", "desc": "+0.5% de crítico por nivel.", "max_level": 60, "cost_base": 12, "cost_growth": 1.06, "crit": 0.005},
-    "fortune": {"name": "Eco de Fortuna", "emoji": "💰", "desc": "+4% de oro interno por nivel.", "max_level": 100, "cost_base": 8, "cost_growth": 1.05, "gold_mult": 0.04},
+    "fortune": {"name": "Eco de Fortuna", "emoji": "💠", "desc": "+4% de Fragmentos por nivel.", "max_level": 100, "cost_base": 8, "cost_growth": 1.05, "gold_mult": 0.04},
     "attunement": {"name": "Eco de Sintonía", "emoji": "✨", "desc": "+3% de Polvo obtenido por nivel.", "max_level": 100, "cost_base": 10, "cost_growth": 1.06, "dust_mult": 0.03}
   },
 

@@ -1389,9 +1389,9 @@ class DungeonEngine:
         rarity = self.data["rarities"].get(item.get("rarity", "comun"), {})
         return self.generate_mod(rng, float(rarity.get("power", 1.0)), int(item.get("floor_found", 1)))
 
-    def reroll_sockets(self, item: dict, rng: random.Random) -> list[dict]:
+    def reroll_sockets(self, item: dict, rng: random.Random, force: bool = False) -> list[dict]:
         return [
-            dict(mod) if mod.get("locked") else self.roll_socket_mod(item, rng)
+            dict(mod) if mod.get("locked") and not force else self.roll_socket_mod(item, rng)
             for mod in item.get("sockets", [])
         ]
 

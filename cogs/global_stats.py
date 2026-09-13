@@ -435,9 +435,9 @@ class GlobalStatsCog(commands.Cog):
         embed.add_field(
             name="💰 Botín y Economía",
             value=(
-                f"**Oro interno:** {data.get('dungeon_gold_earned', 0):,}\n"
+                f"**Fragmentos:** {data.get('dungeon_gold_earned', 0):,}\n"
                 f"**Objetos hallados:** {data.get('dungeon_items_found', 0):,}\n"
-                f"**Monedas de Jefe:** {data.get('dungeon_boss_coins_earned', 0):,}\n"
+                f"**Núcleos:** {data.get('dungeon_boss_coins_earned', 0):,}\n"
                 f"**Choskris convertidos:** {data.get('dungeon_money_converted', 0):,}"
             ),
             inline=True,

@@ -169,6 +169,23 @@ class DungeonRepository(BaseRepository):
         await self._db.execute("UPDATE dungeon_inventory SET sockets = ? WHERE user_id = ? AND item_uid = ?", (_dumps(sockets), user_id, item_uid))
         await self._db.commit()
 
+    async def all_items(self) -> list[dict]:
+        async with self._db.execute("SELECT item_uid, user_id, rarity, floor_found, sockets FROM dungeon_inventory") as cursor:
+            rows = await cursor.fetchall()
+        items = []
+        for row in rows:
+            item = dict(row)
+            item["sockets"] = _loads(item.get("sockets"), [])
+            items.append(item)
+        return items
+
+    async def save_item_sockets(self, updates: list[tuple[str, list[dict]]]) -> None:
+        """Reescribe las ranuras de muchos objetos de una vez. `updates` es una lista de (item_uid, sockets)."""
+        if not updates:
+            return
+        await self._db.executemany("UPDATE dungeon_inventory SET sockets = ? WHERE item_uid = ?", [(_dumps(sockets), item_uid) for item_uid, sockets in updates])
+        await self._db.commit()
+
     async def delete_inventory(self, user_id: int) -> None:
         await self._db.execute("DELETE FROM dungeon_inventory WHERE user_id = ?", (user_id,))
         await self._db.commit()
