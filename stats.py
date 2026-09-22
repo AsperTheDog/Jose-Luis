@@ -254,12 +254,6 @@ class StatsTracker:
     async def register_dungeon_anomaly(self, user_id: int) -> None:
         await self.stats.increment(user_id, "dungeon_anomalies_cleared", 1)
 
-    async def register_dungeon_reroll(self, user_id: int, sockets: int = 1) -> None:
-        await self.stats.increment(user_id, "dungeon_rerolls", sockets)
-
-    async def register_dungeon_infusion(self, user_id: int) -> None:
-        await self.stats.increment(user_id, "dungeon_infusions", 1)
-
     async def register_dungeon_retreat(self, user_id: int) -> None:
         await self.stats.increment(user_id, "dungeon_retreats", 1)
 

@@ -10,6 +10,7 @@ DATA_PATH = "dungeon_data.json"
 
 OFFENSIVE_TAGS = {"BURN", "BLEED", "POISON", "STUN", "CHILL", "WEAKEN", "VULNERABLE", "MARK", "CURSE"}
 DEFENSIVE_TAGS = {"RAGE", "FORTIFY", "REGEN", "HASTE", "THORNS"}
+DEFEND_KEY = "defend"
 
 
 def load_data(path: str = DATA_PATH) -> dict:
@@ -89,6 +90,7 @@ class Combatant:
     enrage: float = 0.0
     phase: int = 0
     phase_name: str = ""
+    resistances: dict[str, float] = field(default_factory=dict)
     mods: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -111,6 +113,7 @@ class Combatant:
             "enrage": self.enrage,
             "phase": self.phase,
             "phase_name": self.phase_name,
+            "resistances": self.resistances,
             "mods": self.mods,
         }
 
@@ -135,6 +138,7 @@ class Combatant:
             enrage=float(payload.get("enrage", 0.0)),
             phase=int(payload.get("phase", 0)),
             phase_name=payload.get("phase_name", ""),
+            resistances={str(key): float(value) for key, value in (payload.get("resistances") or {}).items()},
             mods=payload.get("mods", []),
         )
 
@@ -181,7 +185,7 @@ class BattleState:
             "farm": self.farm,
             "turn": self.turn,
             "potions": self.potions,
-            "log": self.log[-60:],
+            "log": self.log[-200:],
             "cooldowns": self.cooldowns,
             "damage_dealt": self.damage_dealt,
             "damage_taken": self.damage_taken,
@@ -288,10 +292,48 @@ class DungeonEngine:
             return 0
         return int((floor / self.cfg["dust_divisor"]) ** self.cfg["dust_exponent"])
 
-    def conversion_cap(self, tier: int) -> int:
+    def conversion_soft_cap(self, tier: int) -> int:
         tier = max(1, int(tier))
-        cap = self.cfg["conversion_cap_base"] * grow(self.cfg["conversion_cap_growth"], tier - 1)
-        return int(min(self.cfg["conversion_cap_max"], cap))
+        cap = self.cfg["conversion_soft_cap_base"] * grow(self.cfg["conversion_soft_cap_growth"], tier - 1)
+        return int(min(self.cfg["conversion_soft_cap_max"], cap))
+
+    def conversion_daily_max(self, tier: int) -> int:
+        decay = self.conversion_decay()
+        return int(self.conversion_soft_cap(tier) / (1.0 - decay))
+
+    def conversion_decay(self) -> float:
+        return min(0.99, max(0.05, float(self.cfg.get("conversion_decay", 0.5))))
+
+    def conversion_value(self, coins: int, used: int, tier: int) -> int:
+        rate = float(self.cfg["conversion_rate"])
+        cap = max(1.0, float(self.conversion_soft_cap(tier)))
+        decay = self.conversion_decay()
+        pending = max(0.0, int(coins) * rate)
+        paid = 0.0
+        position = max(0.0, float(used))
+        while pending > 0:
+            take = min(pending, max(1.0, cap - position % cap))
+            factor = decay ** int(position // cap)
+            paid += take * factor
+            pending -= take
+            position += take
+            if factor <= 1e-6:
+                break
+        return int(paid)
+
+    def conversion_usable_coins(self, coins: int, used: int, tier: int) -> int:
+        coins = max(0, int(coins))
+        paid = self.conversion_value(coins, used, tier)
+        if paid <= 0:
+            return 0
+        low, high = 1, coins
+        while low < high:
+            middle = (low + high) // 2
+            if self.conversion_value(middle, used, tier) >= paid:
+                high = middle
+            else:
+                low = middle + 1
+        return low
 
     def potion_price(self, level: int) -> int:
         return int(self.cfg["potion_price_base"] * grow(self.cfg["potion_price_growth"], max(0, level - 1)))
@@ -327,9 +369,10 @@ class DungeonEngine:
         starters = sorted(self.data["skills"], key=lambda skill: (int(skill.get("level", 1)), skill.get("id", "")))
         return starters[0]["id"] if starters else ""
 
-    def resolve_skill_id(self, skill_id: Optional[str]) -> str:
-        if skill_id and self.get_skill(skill_id):
-            return skill_id
+    def resolve_skill_id(self, skill_id: Optional[str], level: Optional[int] = None) -> str:
+        skill = self.get_skill(skill_id) if skill_id else None
+        if skill and (level is None or skill["id"] in {entry["id"] for entry in self.available_skills(int(level))}):
+            return skill["id"]
         return self.default_skill_id()
 
     def available_skills(self, level: int) -> list[dict]:
@@ -774,6 +817,7 @@ class DungeonEngine:
             crit=0.05,
             dodge=0.02,
             archetype=archetype["id"],
+            resistances={str(key): float(value) for key, value in (archetype.get("resist") or {}).items()},
             mods=list(archetype.get("mods", [])),
         )
         if extra_mods:
@@ -798,6 +842,7 @@ class DungeonEngine:
             archetype=spec["id"],
             phase=0,
             phase_name=spec["phases"][0]["name"],
+            resistances={str(key): float(value) for key, value in (spec.get("resist") or {}).items()},
             mods=list(spec["phases"][0].get("mods", [])),
         )
         return boss
@@ -814,6 +859,12 @@ class DungeonEngine:
         amount = max(1, int(amount))
         if combatant.is_boss:
             amount = min(amount, int(0.5 * rt.events.get("last_damage", 0)) + 1)
+        else:
+            key = "player_shield_cap_pct" if combatant is rt.state.player else "enemy_shield_cap_pct"
+            ceiling = int(combatant.max_hp * float(self.cfg.get(key, 1.0)))
+            amount = min(amount, max(0, ceiling - combatant.shield))
+        if amount <= 0:
+            return 0
         combatant.shield += amount
         return amount
 
@@ -967,7 +1018,8 @@ class DungeonEngine:
             self.apply_status(rt, actor, target, tag, int(effect.get("stacks", 1)), turns)
         elif etype == "GAIN_SHIELD":
             gained = self.grant_shield(rt, target, max(1, int(target.max_hp * float(effect.get("ratio", 0.1)))))
-            rt.log(f"🛡️ **{target.name}** gana **{fmt_int(gained)}** de escudo.")
+            if gained:
+                rt.log(f"🛡️ **{target.name}** gana **{fmt_int(gained)}** de escudo.")
         elif etype == "HEAL_HP":
             heal = max(1, int(target.max_hp * float(effect.get("ratio", 0.1)) * self.heal_multiplier(target)))
             before = target.hp
@@ -1036,10 +1088,10 @@ class DungeonEngine:
 
     def apply_status(self, rt: Runtime, source: Combatant, target: Combatant, tag: str, stacks: int = 1, turns: int = 2, power: Optional[int] = None) -> None:
         spec = self.data["statuses"].get(tag)
-        if not spec or stacks <= 0:
+        if not spec or stacks <= 0 or target.hp <= 0:
             return
         if tag == "SHIELD":
-            target.shield += max(1, (power or source.attack) * stacks)
+            self.grant_shield(rt, target, max(1, (power or source.attack) * stacks))
             return
 
         power = int(power if power is not None else max(1, source.attack))
@@ -1109,6 +1161,13 @@ class DungeonEngine:
             else:
                 amount = int(amount * self.taken_multiplier(target))
 
+            resist = float(target.resistances.get(damage_type, 1.0))
+            if resist != 1.0:
+                amount = max(1, int(amount * resist))
+                resist_tag = " 🪨 *resistente*" if resist < 1.0 else " ✨ *frágil*"
+            else:
+                resist_tag = ""
+
             defense_effective = self.defense_value(target)
             scale = max(1, source.attack)
             reduction = defense_effective / (defense_effective + scale)
@@ -1150,7 +1209,7 @@ class DungeonEngine:
             if guarded:
                 rt.log(f"🥋 **{source.name}** golpea, pero el entrenamiento no permite derribarte: sigues con **1 PV**.")
             else:
-                rt.log(f"{'🔪' if source is rt.state.player else '💥'} **{source.name}** golpea a **{target.name}** por **{fmt_int(dealt)}** ({damage_type}){crit_tag}.")
+                rt.log(f"{'🔪' if source is rt.state.player else '💥'} **{source.name}** golpea a **{target.name}** por **{fmt_int(dealt)}** ({damage_type}){crit_tag}{resist_tag}.")
 
             if dealt > 0:
                 if is_crit:
@@ -1235,7 +1294,8 @@ class DungeonEngine:
 
     def gain_shield(self, rt: Runtime, combatant: Combatant, ratio: float) -> None:
         gained = self.grant_shield(rt, combatant, int(combatant.max_hp * ratio))
-        rt.log(f"🛡️ **{combatant.name}** se blinda con **{fmt_int(gained)}** de escudo.")
+        if gained:
+            rt.log(f"🛡️ **{combatant.name}** se blinda con **{fmt_int(gained)}** de escudo.")
 
     def can_use_skill(self, state: BattleState, shift_effects: dict) -> tuple[bool, str]:
         skill = self.get_skill(state.skill_id) or self.get_skill(self.default_skill_id())
@@ -1247,6 +1307,16 @@ class DungeonEngine:
         if state.player.energy < cost:
             return False, f"Energía insuficiente: **{skill['name']}** cuesta {cost}⚡ (tienes {state.player.energy})."
         return True, ""
+
+    def can_defend(self, state: BattleState) -> tuple[bool, str]:
+        remaining = state.cooldowns.get(DEFEND_KEY, 0)
+        if remaining > 0:
+            return False, f"**Defender** está en enfriamiento ({remaining} turnos)."
+        return True, ""
+
+    def tick_cooldowns(self, state: BattleState) -> None:
+        for key in list(state.cooldowns.keys()):
+            state.cooldowns[key] = max(0, state.cooldowns[key] - 1)
 
     def player_action(self, state: BattleState, action: str, shift_effects: Optional[dict] = None, rng: Optional[random.Random] = None) -> dict:
         if state.stage != "active":
@@ -1266,6 +1336,10 @@ class DungeonEngine:
             usable, reason = self.can_use_skill(state, shift_effects)
             if not usable:
                 return {"ok": False, "reason": reason}
+        if action == "defend":
+            usable, reason = self.can_defend(state)
+            if not usable:
+                return {"ok": False, "reason": reason}
         if action == "potion":
             if state.no_potions:
                 blocker = next((self.data["shifts"][shift_id]["name"] for shift_id in state.shifts if self.data["shifts"].get(shift_id, {}).get("no_potions")), None)
@@ -1276,6 +1350,7 @@ class DungeonEngine:
             if state.player.hp >= state.player.max_hp:
                 return {"ok": False, "reason": "Ya tienes la vida al máximo."}
 
+        self.tick_cooldowns(state)
         state.turn += 1
         rt.log(f"━━━ Turno {state.turn} ━━━")
         self.fire(rt, "ON_TURN_START", state.player.mods, state.player)
@@ -1289,6 +1364,7 @@ class DungeonEngine:
         elif action == "defend":
             self.gain_shield(rt, state.player, self.cfg["defend_shield_ratio"])
             state.player.defending = True
+            state.cooldowns[DEFEND_KEY] = int(self.cfg.get("defend_cooldown", 0))
             if state.player.max_energy > 0:
                 state.player.energy = min(state.player.max_energy, state.player.energy + self.cfg["defend_energy"])
             self.fire(rt, "ON_DEFEND", state.player.mods, state.player)
@@ -1343,8 +1419,8 @@ class DungeonEngine:
         for index in range(hits):
             if state.stage != "active":
                 break
-            if archetype_ai == "defensivo" and rt.rng.random() < 0.35 and index == 0:
-                self.gain_shield(rt, enemy, 0.10)
+            if archetype_ai == "defensivo" and rt.rng.random() < 0.15 and index == 0:
+                self.gain_shield(rt, enemy, 0.04)
             self.fire(rt, "ON_ATTACK", enemy.mods, enemy)
             damage = int(enemy.attack * shift_effects.get("enemy_dmg_mult", 1.0))
             self.deal_damage(rt, enemy, player, damage, "fisico")
@@ -1367,23 +1443,12 @@ class DungeonEngine:
             return
         if state.player.max_energy > 0:
             state.player.energy = min(state.player.max_energy, state.player.energy + self.energy_regen(state.player))
-        for skill_id in list(state.cooldowns.keys()):
-            state.cooldowns[skill_id] = max(0, state.cooldowns[skill_id] - 1)
 
     def auto_sim_rewards(self, floor: int, level: int, ratio: float, rng: random.Random) -> dict:
         gold = int(self.gold_reward(floor) * ratio)
         xp = int(self.xp_reward(floor, level) * ratio)
         item = self.generate_item(rng, floor) if rng.random() < 0.15 * ratio else None
         return {"gold": max(0, gold), "xp": max(0, xp), "item": item}
-
-    def socket_reroll_cost(self, item: dict) -> int:
-        spec = self.data["forge"]
-        rarity_mult = float(spec["reroll_rarity_mult"].get(item.get("rarity", "comun"), 1.0))
-        unlocked = sum(1 for mod in item.get("sockets", []) if not mod.get("locked"))
-        return int(self.gold_reward(int(item.get("floor_found", 1))) * float(spec["reroll_base_floors"]) * rarity_mult * max(1, unlocked))
-
-    def socket_infuse_cost(self) -> int:
-        return int(self.data["forge"]["infuse_cost"])
 
     def roll_socket_mod(self, item: dict, rng: random.Random) -> dict:
         rarity = self.data["rarities"].get(item.get("rarity", "comun"), {})
@@ -1394,10 +1459,6 @@ class DungeonEngine:
             dict(mod) if mod.get("locked") and not force else self.roll_socket_mod(item, rng)
             for mod in item.get("sockets", [])
         ]
-
-    def infuse_candidates(self, item: dict, rng: random.Random, count: Optional[int] = None) -> list[dict]:
-        count = int(count or self.data["forge"]["infuse_choices"])
-        return [self.roll_socket_mod(item, rng) for _ in range(max(1, count))]
 
     def _make_state(self, user: dict, items: list[dict], mutations: dict, floor: int, enemy: Combatant, seed: int, shifts: list[str], skill_id: str, potions: int, echoes: Optional[dict] = None, **flags) -> BattleState:
         shift_effects = self.shift_effects(shifts)
@@ -1411,7 +1472,7 @@ class DungeonEngine:
             potions=int(potions),
             seed=int(seed),
             shifts=list(shifts),
-            skill_id=self.resolve_skill_id(skill_id),
+            skill_id=self.resolve_skill_id(skill_id, int(user.get("level", 1))),
             no_potions=bool(shift_effects.get("no_potions")),
             mutations=mutations,
             echoes=echoes or {},

@@ -454,10 +454,8 @@ class GlobalStatsCog(commands.Cog):
             inline=True,
         )
         embed.add_field(
-            name="🔨 Forja y retiradas",
+            name="🏃 Retiradas",
             value=(
-                f"**Ranuras reforjadas:** {data.get('dungeon_rerolls', 0):,}\n"
-                f"**Infusiones:** {data.get('dungeon_infusions', 0):,}\n"
                 f"**Retiradas:** {data.get('dungeon_retreats', 0):,}\n"
                 f"**Simulaciones:** {data.get('dungeon_auto_sims', 0):,}"
             ),

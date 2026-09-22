@@ -32,7 +32,7 @@ class GlobalStatsRepository(BaseRepository):
         "dungeon_mutations", "dungeon_boss_coins_earned", "dungeon_coins_converted",
         "dungeon_money_converted", "dungeon_deaths", "dungeon_damage_dealt",
         "dungeon_damage_taken", "dungeon_training_sessions", "dungeon_passive_xp", "dungeon_auto_sims",
-        "dungeon_anomalies_cleared", "dungeon_rerolls", "dungeon_infusions",
+        "dungeon_anomalies_cleared",
         "dungeon_retreats", "dungeon_echoes",
     )
 

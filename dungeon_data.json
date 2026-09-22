@@ -18,12 +18,15 @@
     "defend_shield_ratio": 0.30,
     "defend_block": 0.5,
     "defend_energy": 15,
+    "defend_cooldown": 2,
+    "player_shield_cap_pct": 0.50,
+    "enemy_shield_cap_pct": 0.05,
     "crit_chance_base": 0.08,
     "crit_multiplier": 1.75,
     "crit_cap": 0.75,
     "dodge_base": 0.03,
     "max_turns": 60,
-    "flee_gold_penalty_pct": 0.0,
+    "flee_hp_penalty_pct": 0.25,
     "potion_heal_ratio": 0.4,
     "hp_regen_pct_per_minute": 2.5,
     "hp_regen_recovery_pct_per_minute": 4.0,
@@ -63,9 +66,11 @@
     "dust_divisor": 5,
     "dust_exponent": 2.5,
     "conversion_rate": 10,
-    "conversion_cap_base": 100,
-    "conversion_cap_growth": 1.6,
-    "conversion_cap_max": 10000,
+    "conversion_enabled": true,
+    "conversion_soft_cap_base": 100,
+    "conversion_soft_cap_growth": 1.6,
+    "conversion_soft_cap_max": 10000,
+    "conversion_decay": 0.5,
     "anomaly_cooldown_minutes": 60,
     "attack_upgrade_per_level": 2,
     "defense_upgrade_per_level": 1,
@@ -140,7 +145,7 @@
   ],
 
   "terms": {
-    "currency": {"name": "Fragmentos", "emoji": "💠", "desc": "Lo que sueltan los enemigos de la mazmorra, y solo sirve dentro: pociones, mejoras y forja."},
+    "currency": {"name": "Fragmentos", "emoji": "💠", "desc": "Lo que sueltan los enemigos de la mazmorra, y solo sirve dentro: pociones, mejoras y entrenamiento."},
     "boss_currency": {"name": "Núcleos", "emoji": "⚛️", "desc": "El núcleo que se le arranca a un jefe."}
   },
 
@@ -281,7 +286,7 @@
 
   "statuses": {
     "BURN": {"name": "Quemadura", "emoji": "🔥", "kind": "dot", "damage_type": "fuego", "dot_ratio": 0.22, "turns": 3, "max_stacks": 5, "desc": "Sufre daño de fuego en cada turno."},
-    "BLEED": {"name": "Hemorragia", "emoji": "🩸", "kind": "dot", "damage_type": "fisico", "dot_ratio": 0.20, "low_hp_bonus": 1.4, "turns": 4, "max_stacks": 4, "desc": "Sangra; se agrava cuando la vida es baja."},
+    "BLEED": {"name": "Hemorragia", "emoji": "🩸", "kind": "dot", "damage_type": "fisico", "dot_ratio": 0.18, "low_hp_bonus": 1.30, "turns": 4, "max_stacks": 3, "desc": "Sangra; se agrava cuando la vida es baja."},
     "POISON": {"name": "Veneno", "emoji": "☠️", "kind": "dot", "damage_type": "veneno", "dot_ratio": 0.16, "pierce": true, "turns": 5, "max_stacks": 6, "desc": "Corroe ignorando los escudos."},
     "SHIELD": {"name": "Escudo", "emoji": "🛡️", "kind": "shield", "desc": "Absorbe el daño entrante."},
     "STUN": {"name": "Aturdimiento", "emoji": "💫", "kind": "control", "skip": true, "cost_weight": 3.0, "turns": 1, "max_stacks": 1, "desc": "Pierde el siguiente turno."},
@@ -581,15 +586,16 @@
       "id": "golem",
       "name": "Gólem de Piedra",
       "emoji": "🗿",
-      "hp": 1.60,
+      "hp": 1.15,
       "dmg": 0.95,
-      "def": 1.40,
+      "def": 1.00,
       "ai": "defensivo",
+      "resist": {"fisico": 0.65},
       "floor_min": 10,
       "floor_max": 35,
       "weight": 8,
       "mods": [
-        {"on": "ON_TURN_START", "if": {"type": "SHIELD_BELOW", "pct": 10, "target": "self"}, "then": {"type": "GAIN_SHIELD", "ratio": 0.18, "target": "self"}}
+        {"on": "ON_HIT_TAKEN", "if": {"type": "RANDOM", "chance": 0.25}, "then": {"type": "GAIN_SHIELD", "ratio": 0.03, "target": "self"}}
       ]
     },
     {
@@ -989,13 +995,6 @@
     "alternative_floors": {"name": "Pisos Anómalos", "emoji": "🚪", "max_level": 3, "cost_base": 18, "cost_growth": 2.0,
      "desc": "Desbloquea anomalías dimensionales. Cada nivel mejora sus recompensas de polvo y botín.",
      "reward_per_level": 0.35}
-  },
-
-  "forge": {
-    "reroll_base_floors": 1.5,
-    "reroll_rarity_mult": {"comun": 1.0, "raro": 1.1, "epico": 1.2, "legendario": 1.3, "mitico": 1.4},
-    "infuse_cost": 30,
-    "infuse_choices": 3
   },
 
   "echoes": {

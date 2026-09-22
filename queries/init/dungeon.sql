@@ -23,7 +23,6 @@ CREATE TABLE IF NOT EXISTS dungeon_users
     last_boss_floor INTEGER   NOT NULL DEFAULT 0,
     upgrades        TEXT      NOT NULL DEFAULT '{}',
     shifts          TEXT      NOT NULL DEFAULT '[]',
-    alt_floor       TEXT,
     last_alt_at     TIMESTAMP,
     conversion_date TEXT,
     conversion_used INTEGER   NOT NULL DEFAULT 0,
@@ -93,6 +92,16 @@ CREATE TABLE IF NOT EXISTS dungeon_log
 
 CREATE INDEX IF NOT EXISTS idx_dungeon_log_user
     ON dungeon_log (user_id, id DESC);
+
+CREATE TABLE IF NOT EXISTS dungeon_last_battle
+(
+    user_id    INTEGER   PRIMARY KEY,
+    stage      TEXT      NOT NULL,
+    floor      INTEGER   NOT NULL,
+    enemy      TEXT      NOT NULL,
+    log        TEXT      NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
 CREATE TABLE IF NOT EXISTS dungeon_automation
 (

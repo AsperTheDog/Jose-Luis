@@ -7,7 +7,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from dungeon_engine import BattleState, DungeonEngine, fmt_int, progress_bar
+from dungeon_engine import DEFEND_KEY, BattleState, DungeonEngine, fmt_int, progress_bar
 from main import JoseLuisBot
 
 RARITY_VALUE = {"comun": 1, "raro": 2, "epico": 4, "legendario": 8, "mitico": 16}
@@ -64,7 +64,7 @@ GLOSSARY_SECTIONS = {
     "condiciones": ("🔎", "Condiciones", "Los «si…» que puede llevar una ranura."),
     "efectos": ("✨", "Efectos", "Qué hace cada ranura."),
     "estados": ("🩸", "Estados", "Venenos, debufos y bufos: pilas, duración y qué ignoran."),
-    "equipo": ("🎒", "Equipo", "Rarezas, ranuras de equipo, forja y venta."),
+    "equipo": ("🎒", "Equipo", "Rarezas, ranuras de equipo y venta."),
     "progresion": ("🗺️", "Progresión", "Pisos, jefes, mutaciones, anomalías y prestigio."),
     "economia": ("💰", "Economía", "Fragmentos, mejoras, trofeos y Choskris."),
 }
@@ -105,17 +105,40 @@ class DungeonGroup(app_commands.Group):
 
 
 class CombatView(discord.ui.View):
-    def __init__(self, cog: "DungeonCog", user_id: int, potions: int, no_potions: bool = False, skill_name: str = "Habilidad", ended: bool = False):
+    def __init__(
+        self,
+        cog: "DungeonCog",
+        user_id: int,
+        potions: int,
+        no_potions: bool = False,
+        skill_name: str = "Habilidad",
+        ended: bool = False,
+        skill_id: str = "",
+        cooldowns: Optional[dict] = None,
+        log: Optional[list[str]] = None,
+    ):
         super().__init__(timeout=300)
         self.cog = cog
         self.user_id = user_id
         self.message: Optional[discord.Message] = None
+        self.log = list(log) if log is not None else None
+        cooldowns = cooldowns or {}
+        defend_left = int(cooldowns.get(DEFEND_KEY, 0))
+        skill_left = int(cooldowns.get(skill_id, 0))
 
         self._add("Atacar", "⚔️", discord.ButtonStyle.danger, "attack", ended, row=0)
-        self._add("Defender", "🛡️", discord.ButtonStyle.primary, "defend", ended, row=0)
-        self._add(skill_name[:60], "✨", discord.ButtonStyle.success, "skill", ended, row=0)
+        self._add(f"Defender{self._cooldown_suffix(defend_left)}", "🛡️", discord.ButtonStyle.primary, "defend", ended or defend_left > 0, row=0)
+        self._add(f"{skill_name[:56]}{self._cooldown_suffix(skill_left)}", "✨", discord.ButtonStyle.success, "skill", ended or skill_left > 0, row=0)
         self._add(f"Poción ({potions})", "🧪", discord.ButtonStyle.secondary, "potion", ended or no_potions or potions <= 0, row=0)
         self._add("Huir", "🏃", discord.ButtonStyle.secondary, "flee", ended, row=1)
+
+        log_button = discord.ui.Button(label="Bitácora", emoji="📜", style=discord.ButtonStyle.secondary, row=1)
+        log_button.callback = self._open_log
+        self.add_item(log_button)
+
+    @staticmethod
+    def _cooldown_suffix(turns: int) -> str:
+        return f" ({turns}t)" if turns > 0 else ""
 
     def _add(self, label: str, emoji: str, style: discord.ButtonStyle, action: str, disabled: bool, row: int = 0) -> None:
         button = discord.ui.Button(label=label, emoji=emoji, style=style, disabled=disabled, row=row)
@@ -131,6 +154,85 @@ class CombatView(discord.ui.View):
 
         button.callback = callback
         self.add_item(button)
+
+    async def _open_log(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(
+                embed=discord.Embed(description="❌ Estos botones no son para ti.", color=discord.Color.red()),
+                ephemeral=True,
+            )
+            return
+        entries = self.log
+        if entries is None:
+            battle = await self.cog.repo.get_battle_log(self.user_id)
+            entries = (battle or {}).get("log") or []
+        view = BattleLogView(self.cog, self.user_id, entries, interaction.message, self)
+        await interaction.response.edit_message(embed=view.page_embed(), view=view)
+
+    async def on_timeout(self) -> None:
+        for child in self.children:
+            child.disabled = True
+        if self.message:
+            try:
+                await self.message.edit(view=self)
+            except discord.HTTPException:
+                pass
+
+
+class BattleLogView(discord.ui.View):
+    PAGE_SIZE = 10
+
+    def __init__(self, cog: "DungeonCog", user_id: int, entries: list[str], message: Optional[discord.Message], back_view: CombatView, page: int = 0):
+        super().__init__(timeout=600)
+        self.cog = cog
+        self.user_id = user_id
+        self.entries = list(entries)
+        self.message = message
+        self.back_view = back_view
+        self.back_embed = message.embeds[0] if message and message.embeds else None
+        self.pages = max(1, -(-len(self.entries) // self.PAGE_SIZE))
+        self.page = max(0, min(page, self.pages - 1))
+
+        previous = discord.ui.Button(label="Anterior", emoji="◀️", style=discord.ButtonStyle.secondary, disabled=self.page <= 0, row=0)
+        previous.callback = lambda interaction: self._move(interaction, -1)
+        following = discord.ui.Button(label="Siguiente", emoji="▶️", style=discord.ButtonStyle.secondary, disabled=self.page >= self.pages - 1, row=0)
+        following.callback = lambda interaction: self._move(interaction, 1)
+        back = discord.ui.Button(label="Volver al combate", emoji="↩️", style=discord.ButtonStyle.primary, row=1)
+        back.callback = self._back
+        self.add_item(previous)
+        self.add_item(following)
+        self.add_item(back)
+
+    def page_embed(self) -> discord.Embed:
+        start = self.page * self.PAGE_SIZE
+        chunk = self.entries[start:start + self.PAGE_SIZE]
+        embed = discord.Embed(
+            title="📜 Bitácora del combate",
+            description="\n".join(line[:200] for line in chunk)[:4000] or "*La mazmorra guarda silencio...*",
+            color=DEFAULT_ACCENT,
+        )
+        embed.set_footer(text=f"Página {self.page + 1}/{self.pages} · {len(self.entries)} líneas")
+        return embed
+
+    async def _move(self, interaction: discord.Interaction, delta: int) -> None:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(
+                embed=discord.Embed(description="❌ Estos botones no son para ti.", color=discord.Color.red()),
+                ephemeral=True,
+            )
+            return
+        view = BattleLogView(self.cog, self.user_id, self.entries, interaction.message, self.back_view, page=self.page + delta)
+        view.back_embed = self.back_embed
+        await interaction.response.edit_message(embed=view.page_embed(), view=view)
+
+    async def _back(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(
+                embed=discord.Embed(description="❌ Estos botones no son para ti.", color=discord.Color.red()),
+                ephemeral=True,
+            )
+            return
+        await interaction.response.edit_message(embed=self.back_embed, view=self.back_view)
 
     async def on_timeout(self) -> None:
         for child in self.children:
@@ -440,116 +542,6 @@ class AutomationView(discord.ui.View):
         await self.cog.toggle_automation(interaction)
 
 
-class ForgeView(discord.ui.View):
-    def __init__(self, cog: "DungeonCog", user_id: int, items: list[dict], item_uid: Optional[str], socket_index: int):
-        super().__init__(timeout=240)
-        self.cog = cog
-        self.user_id = user_id
-        self.item_uid = item_uid
-        self.socket_index = socket_index
-
-        options = [
-            discord.SelectOption(
-                label=f"{item['name']} ({cog.slot_name(item['slot'])})"[:100],
-                value=item["item_uid"],
-                description=f"{item['rarity']} · {len(item['sockets'])} ranuras · piso {item['floor_found']}"[:100],
-                emoji=cog.rarity_emoji(item["rarity"]),
-                default=item["item_uid"] == item_uid,
-            )
-            for item in items[:25]
-        ]
-        item_select = discord.ui.Select(placeholder="Elige un objeto para forjar...", options=options, row=0)
-        item_select.callback = self._pick_item
-        self.add_item(item_select)
-
-        selected = next((item for item in items if item["item_uid"] == item_uid), None)
-        if selected and selected["sockets"]:
-            socket_options = [
-                discord.SelectOption(
-                    label=f"Ranura {index + 1}{' 🔒' if mod.get('locked') else ''}"[:100],
-                    value=str(index),
-                    description=cog.describe_mod(mod)[:100],
-                    default=index == socket_index,
-                )
-                for index, mod in enumerate(selected["sockets"][:25])
-            ]
-            socket_select = discord.ui.Select(placeholder="Elige una ranura...", options=socket_options, row=1)
-            socket_select.callback = self._pick_socket
-            self.add_item(socket_select)
-
-        has_sockets = bool(selected and selected["sockets"])
-        for label, emoji, style, handler, row, enabled in (
-            (f"Reforjar ({cog.coin})", "🔨", discord.ButtonStyle.primary, self._reroll, 2, has_sockets),
-            ("Bloquear", "🔒", discord.ButtonStyle.secondary, self._toggle_lock, 2, has_sockets),
-            (f"Infundir ({cog.boss_coin})", cog.boss_coin_emoji, discord.ButtonStyle.success, self._infuse, 2, has_sockets),
-        ):
-            button = discord.ui.Button(label=label, emoji=emoji, style=style, disabled=not enabled, row=row)
-            button.callback = handler
-            self.add_item(button)
-
-        close = discord.ui.Button(label="Cerrar", style=discord.ButtonStyle.secondary, row=3)
-        close.callback = self._close
-        self.add_item(close)
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message(embed=discord.Embed(description="❌ Esta forja no es para ti.", color=discord.Color.red()), ephemeral=True)
-            return False
-        return True
-
-    async def _pick_item(self, interaction: discord.Interaction) -> None:
-        await self.cog.send_forge(interaction, edit=True, item_uid=interaction.data["values"][0], socket_index=0)
-
-    async def _pick_socket(self, interaction: discord.Interaction) -> None:
-        await self.cog.send_forge(interaction, edit=True, item_uid=self.item_uid, socket_index=int(interaction.data["values"][0]))
-
-    async def _reroll(self, interaction: discord.Interaction) -> None:
-        await self.cog.forge_reroll(interaction, self.item_uid)
-
-    async def _toggle_lock(self, interaction: discord.Interaction) -> None:
-        await self.cog.forge_toggle_lock(interaction, self.item_uid, self.socket_index)
-
-    async def _infuse(self, interaction: discord.Interaction) -> None:
-        await self.cog.forge_offer_infusion(interaction, self.item_uid, self.socket_index)
-
-    async def _close(self, interaction: discord.Interaction) -> None:
-        await interaction.response.edit_message(view=None)
-
-
-class InfuseView(discord.ui.View):
-    def __init__(self, cog: "DungeonCog", user_id: int, item_uid: str, socket_index: int, candidates: list[dict]):
-        super().__init__(timeout=120)
-        self.cog = cog
-        self.user_id = user_id
-        self.item_uid = item_uid
-        self.socket_index = socket_index
-        self.candidates = candidates
-        options = [
-            discord.SelectOption(label=f"Opción {index + 1}"[:100], value=str(index),
-                                 description=cog.describe_mod(mod)[:100])
-            for index, mod in enumerate(candidates)
-        ]
-        select = discord.ui.Select(placeholder="Elige el disparador a infundir...", options=options)
-        select.callback = self._pick
-        self.add_item(select)
-        cancel = discord.ui.Button(label="Cancelar", style=discord.ButtonStyle.secondary, row=1)
-        cancel.callback = self._cancel
-        self.add_item(cancel)
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message(embed=discord.Embed(description="❌ Esta forja no es para ti.", color=discord.Color.red()), ephemeral=True)
-            return False
-        return True
-
-    async def _pick(self, interaction: discord.Interaction) -> None:
-        chosen = self.candidates[int(interaction.data["values"][0])]
-        await self.cog.forge_apply_infusion(interaction, self.item_uid, self.socket_index, chosen)
-
-    async def _cancel(self, interaction: discord.Interaction) -> None:
-        await self.cog.send_forge(interaction, edit=True, item_uid=self.item_uid, socket_index=self.socket_index)
-
-
 class EchoView(discord.ui.View):
     def __init__(self, cog: "DungeonCog", user_id: int, options: list[discord.SelectOption]):
         super().__init__(timeout=180)
@@ -846,23 +838,25 @@ class DungeonCog(commands.Cog):
         if section == "combate":
             return [
                 ("⚔️ Cómo se resuelve un golpe", (f"Cada turno eliges **Atacar**, **Defender**, tu **Habilidad**, **Poción** o **Huir**.\nEl daño se reduce por la defensa de quien lo recibe: `defensa / (defensa + ataque del atacante)`.\nLos estados de daño (quemadura, sangrado, veneno) sufren la mitad de esa reducción, y el **veneno** además ignora los escudos.")),
+                ("🧱 Tipos de daño y resistencias", "Cada golpe lleva un tipo: **físico**, **fuego**, **hielo**, **rayo**, **veneno** o **arcano**. Algunos enemigos son **resistentes** a un tipo (por ejemplo el Gólem de Piedra, que encaja muy mal el daño físico) y el registro de combate lo marca. Cambiar de habilidad o de elementos es la forma de saltarse esa coraza."),
                 ("🎯 Crítico y esquive", (f"Crítico base **{_pct(cfg['crit_chance_base'])}**; un crítico multiplica el daño por **{cfg['crit_multiplier']:g}** (tope {_pct(cfg['crit_cap'])}).\nEsquive base **{_pct(cfg['dodge_base'])}**: si esquivas, el golpe no hace nada.")),
-                ("🛡️ Defender, energía y habilidad", (f"**Defender** te da un escudo del **{_pct(cfg['defend_shield_ratio'])}** de tu vida máxima, bloquea el **{_pct(cfg['defend_block'])}** del daño de ese turno y te devuelve **{cfg['defend_energy']}** de energía.\nEmpiezas con **{cfg['player_base_energy']}** de energía y recuperas **{cfg['player_energy_regen']}** por turno. La habilidad cuesta energía y tiene enfriamiento.")),
-                ("⏳ Duración y retirada", (f"Un combate dura como mucho **{cfg['max_turns']}** turnos: si se alarga, te retiras agotado.\n**Huir** no da recompensas y conservas las heridas.")),
+                ("🛡️ Defender, energía y habilidad", (f"**Defender** te da un escudo del **{_pct(cfg['defend_shield_ratio'])}** de tu vida máxima, bloquea el **{_pct(cfg['defend_block'])}** del daño de ese turno y te devuelve **{cfg['defend_energy']}** de energía.\nTanto **Defender** (`{cfg['defend_cooldown']}` turnos) como tu **habilidad** tienen enfriamiento: verás los turnos que faltan en los propios botones.\nLos escudos no pasan del **{_pct(cfg['player_shield_cap_pct'])}** de tu vida máxima.\nEmpiezas con **{cfg['player_base_energy']}** de energía y recuperas **{cfg['player_energy_regen']}** por turno.")),
+                ("⏳ Duración y retirada", (f"Un combate dura como mucho **{cfg['max_turns']}** turnos: si se alarga, te retiras agotado.\n**Huir** no da recompensas: pierdes el **{_pct(cfg['flee_hp_penalty_pct'])}** de tu vida máxima (nunca te deja por debajo de 1 PV) y conservas el resto de las heridas.")),
                 ("🧪 Pociones", (f"En combate gastan el turno y curan **{_pct(cfg['potion_heal_ratio'])}** de tu vida máxima.\nFuera de combate se usan con `/mazmorra pocion`, sin gastar turno.")),
                 ("❤️ Vida entre combates", (f"La vida se guarda entre combates y se regenera **{cfg['hp_regen_pct_per_minute']:g}%/min**, o **{cfg['hp_regen_recovery_pct_per_minute']:g}%/min** mientras te recuperas de una derrota.\nAl morir quedas **en recuperación**: no puedes combatir hasta estar al máximo, y las pociones aceleran la cura.")),
+                ("📜 Bitácora", "El botón **Bitácora** de la pelea abre el registro completo del combate, con páginas, y sigue disponible cuando el combate ya ha terminado."),
             ]
         if section == "ranuras":
             table = data["tag_rules"]["power_by_frequency"]
             rows = []
             for freq, titulo in (("very_frequent", "Muy frecuentes"), ("frequent", "Frecuentes"), ("rare", "Poco frecuentes"), ("once", "Una vez por combate")):
                 entries = [spec for spec in data["trigger_tags"].values() if freq in spec["tags"]]
-                rows.append((f"{titulo} · presupuesto {int(table.get(freq, 1))}", "\n".join(f"**{spec['name']}** — {spec['desc']}" for spec in entries)))
+                rows.append((f"{titulo} · presupuesto {int(table.get(freq, 1))}", "\n".join(f"**{spec['name']}** - {spec['desc']}" for spec in entries)))
             rows.append(("📏 Por qué unas cifras son más grandes que otras", "Cuanto más a menudo salta un disparador, **más pequeña** es la cifra máxima que puede llevar su efecto, y al contrario: el mismo efecto lleva números pequeños en *Al atacar* y puede llevar los más grandes en *Al matar* o *Al empezar el combate*.\nUna condición restrictiva (por ejemplo «si tu vida < 30%») sube un escalón ese presupuesto, y algunas parejas imposibles o redundantes no se generan nunca."))
             return rows
         if section == "condiciones":
             groups = (("Sobre ti", ("HP_BELOW", "HP_ABOVE", "ENERGY_BELOW", "ENERGY_ABOVE", "SHIELD_ABOVE", "SHIELD_BELOW", "SELF_HAS_STATUS")), ("Sobre el enemigo", ("FOE_HP_BELOW", "TARGET_HAS_STATUS", "STATUS_STACKS_ABOVE")), ("Sobre la situación", ("IS_CRITICAL", "RANDOM", "TURN_ABOVE", "FLOOR_ABOVE")))
-            return [(titulo, "\n".join(f"**{data['condition_templates'][key]['name']}** — {data['condition_templates'][key]['desc']}" for key in keys if key in data["condition_templates"])) for titulo, keys in groups]
+            return [(titulo, "\n".join(f"**{data['condition_templates'][key]['name']}** - {data['condition_templates'][key]['desc']}" for key in keys if key in data["condition_templates"])) for titulo, keys in groups]
         if section == "efectos":
             priority = (("Defensivos y sustento", ("sustain", "heal", "buff", "defense", "mitigation")), ("Ofensivos", ("damage", "offense", "control")), ("Utilidad y economía", ("utility", "energy", "economy", "tempo", "progression")))
             grouped: dict[str, list[str]] = {titulo: [] for titulo, _ in priority}
@@ -875,7 +869,7 @@ class DungeonCog(commands.Cog):
                         seen.add(key)
                         grouped[titulo].append(key)
             order = ("Ofensivos", "Defensivos y sustento", "Utilidad y economía")
-            return [(titulo, "\n".join(f"**{data['effect_templates'][key]['name']}** — {data['effect_templates'][key]['desc']}" for key in grouped[titulo])) for titulo in order]
+            return [(titulo, "\n".join(f"**{data['effect_templates'][key]['name']}** - {data['effect_templates'][key]['desc']}" for key in grouped[titulo])) for titulo in order]
         if section == "estados":
             def linea(spec: dict) -> str:
                 extra = []
@@ -885,7 +879,7 @@ class DungeonCog(commands.Cog):
                     extra.append(f"{spec['turns']} turno" + ("s" if int(spec["turns"]) != 1 else ""))
                 if spec.get("pierce"):
                     extra.append("ignora escudos")
-                return f"{spec['emoji']} **{spec['name']}** — {spec['desc']}" + (f" ({', '.join(extra)})" if extra else "")
+                return f"{spec['emoji']} **{spec['name']}** - {spec['desc']}" + (f" ({', '.join(extra)})" if extra else "")
             negativos = [spec for spec in data["statuses"].values() if spec.get("kind") in ("dot", "debuff", "control")]
             positivos = [spec for spec in data["statuses"].values() if spec.get("kind") in ("buff", "shield")]
             todos = [spec for spec in data["statuses"].values() if spec.get("kind") not in ("dot", "debuff", "control", "buff", "shield")]
@@ -893,13 +887,12 @@ class DungeonCog(commands.Cog):
             return rows
         if section == "equipo":
             labels = {"attack": "ataque", "defense": "defensa", "max_hp": "vida", "max_energy": "energía", "crit": "crítico"}
-            raridades = "\n".join(f"{spec['emoji']} **{spec['name']}** — {spec['sockets']} ranura" + ("s" if int(spec['sockets']) != 1 else "") + f", potencia de efecto ×{spec['power']:g}, estadísticas ×{spec['stat_mult']:g}" for spec in data["rarities"].values())
-            slots = "\n".join(f"{spec['emoji']} **{spec['name']}** — sobre todo {labels[max(spec['stats'], key=spec['stats'].get)]}" for spec in data["gear_slots"].values())
+            raridades = "\n".join(f"{spec['emoji']} **{spec['name']}** - {spec['sockets']} ranura" + ("s" if int(spec['sockets']) != 1 else "") + f", potencia de efecto ×{spec['power']:g}, estadísticas ×{spec['stat_mult']:g}" for spec in data["rarities"].values())
+            slots = "\n".join(f"{spec['emoji']} **{spec['name']}** - sobre todo {labels[max(spec['stats'], key=spec['stats'].get)]}" for spec in data["gear_slots"].values())
             return [
                 ("🎲 Rarezas", raridades),
                 ("🎒 Ranuras de equipo", slots),
                 ("📊 Estadísticas", f"**ATQ** ataque · **DEF** defensa · **VID** vida máxima · **ENE** energía máxima · **CRIT** probabilidad de crítico.\nPuedes llevar **{cfg['inventory_cap']}** objetos contando los equipados; lo que no quepa se pierde."),
-                ("🔨 Forja", f"`/mazmorra forja` **rerolea** las ranuras libres de un objeto (cuesta {self.coin} según su piso y rareza), **bloquea** las que te gusten para que no cambien, e **infunde** una ranura con el disparador que elijas (cuesta {data['forge']['infuse_cost']} {self.boss_coin})."),
                 (f"{self.coin_emoji} Vender", "Desde `/mazmorra inventario` puedes equipar, desequipar y vender **solo lo que está en el zurrón**: lo equipado no se vende."),
             ]
         if section == "progresion":
@@ -913,13 +906,13 @@ class DungeonCog(commands.Cog):
                 ("💀 Muerte", f"Perder cuesta un 10% de tus {self.coin} y te deja en recuperación hasta curarte del todo; conservas piso y equipo."),
             ]
         if section == "economia":
-            mejoras = "\n".join(f"{spec['emoji']} **{spec['name']}** — {spec['desc']} (desde {fmt_int(spec['cost'])} {self.coin}, ×{spec['growth']:g} por nivel, máx {cfg['upgrade_max_level']})" for spec in data["upgrades"].values())
+            mejoras = "\n".join(f"{spec['emoji']} **{spec['name']}** - {spec['desc']} (desde {fmt_int(spec['cost'])} {self.coin}, ×{spec['growth']:g} por nivel, máx {cfg['upgrade_max_level']})" for spec in data["upgrades"].values())
             return [
                 (f"{self.coin_emoji} {self.coin}", f"{data['terms']['currency']['desc']} Se gana matando ({fmt_int(cfg['gold_base'])} × {cfg['gold_growth']:g} por piso) y con efectos de {self.coin}."),
                 ("⭐ Mejoras", mejoras),
                 ("🧪 Pociones", f"Cuestan **{fmt_int(cfg['potion_price_base'])} × {cfg['potion_price_growth']:g}** por nivel y curan {_pct(cfg['potion_heal_ratio'])} de tu vida máxima."),
                 (f"{self.boss_coin_emoji} {self.boss_coin}", f"{data['terms']['boss_currency']['desc']} Cada jefe superado da **{cfg['boss_coin_per_tier']}** por su nivel, y se gastan en `/mazmorra trofeos`: insignias, acentos y enclaves."),
-                ("💱 Canjear", f"1 {self.boss_coin_emoji} = **{cfg['conversion_rate']}** Choskris, con un tope diario que crece con cada jefe ({cfg['conversion_cap_base']} × {cfg['conversion_cap_growth']:g}, máx {fmt_int(cfg['conversion_cap_max'])}). *Desactivado mientras el juego está en beta.*"),
+                ("💱 Canjear", f"1 {self.boss_coin_emoji} = **{cfg['conversion_rate']}** Choskris. Cada día cambias **{fmt_int(cfg['conversion_soft_cap_base'])}** Choskris a ritmo completo (ese tramo crece ×{cfg['conversion_soft_cap_growth']:g} por jefe superado, hasta {fmt_int(cfg['conversion_soft_cap_max'])}), y a partir de ahí cada tramo va a **{_pct(cfg['conversion_decay'])}** del anterior: el día se acerca a un techo en vez de cortarse." + ("" if cfg.get("conversion_enabled", True) else " *Ahora mismo está en mantenimiento.*")),
                 ("✨ Polvo", "Se gana al renacer (`/mazmorra prestigio`) y se gasta en mutaciones y Ecos."),
             ]
         return []
@@ -1053,7 +1046,7 @@ class DungeonCog(commands.Cog):
             return None
         return state
 
-    def render_combat(self, state: BattleState, accent: discord.Color, ended: bool = False, progress: Optional[tuple[int, int]] = None, summary_fields: Optional[list[tuple[str, str]]] = None) -> discord.Embed:
+    def render_combat(self, state: BattleState, accent: discord.Color, ended: bool = False, progress: Optional[tuple[int, int]] = None, summary_fields: Optional[list[tuple[str, str]]] = None, progress_notes: Optional[list[str]] = None) -> discord.Embed:
         enemy = state.enemy
         player = state.player
         if state.is_boss:
@@ -1076,6 +1069,8 @@ class DungeonCog(commands.Cog):
             if summary_value:
                 embed.add_field(name=summary_name, value=summary_value[:1024], inline=False)
 
+        embed.add_field(name="🗺️ Contexto", value=self.context_str(state, progress, ended, progress_notes)[:1024], inline=False)
+
         enemy_value = f"❤️ `[{progress_bar(enemy.hp, enemy.max_hp)}]` **{fmt_int(enemy.hp)}/{fmt_int(enemy.max_hp)}**"
         if enemy.shield:
             enemy_value += f"\n🛡️ Escudo: **{fmt_int(enemy.shield)}**"
@@ -1092,22 +1087,75 @@ class DungeonCog(commands.Cog):
             player_value += f"\n🛡️ Escudo: **{fmt_int(player.shield)}**"
         if player.statuses:
             player_value += f"\n\n{self.statuses_str(player)}"
+        cooldowns = "" if ended else self.cooldowns_str(state)
+        if cooldowns:
+            player_value += f"\n\n{cooldowns}"
         embed.add_field(name="🧙 Tú", value=player_value[:1024], inline=False)
 
-        if not ended:
-            recent = [line[:140] for line in state.log[-7:]]
-            log_text = "\n".join(recent) if recent else "*La mazmorra guarda silencio...*"
-            embed.add_field(name="📜 Bitácora", value=log_text[:1024], inline=False)
+        recent = [line[:140] for line in state.log[-7:]]
+        log_text = "\n".join(recent) if recent else "*La mazmorra guarda silencio...*"
+        embed.add_field(name="📜 Bitácora", value=log_text[:1024], inline=False)
 
         skill = self.skills_of(state)
-        location = f"Simulacro piso {state.floor}" if state.training else f"Piso {state.floor}"
-        footer = f"Turno {state.turn} · 🧪 {state.potions} · 🎯 {skill.get('name', '?')} · {location}"
-        if progress and not ended and not (state.farm or state.is_boss or state.is_anomaly or state.training):
-            footer += f" · 👹 {progress[0]}/{progress[1]}"
-        if state.shifts:
-            footer += f" · 🌌 {len(state.shifts)} afijo(s)"
-        embed.set_footer(text=footer[:2048])
+        embed.set_footer(text=f"Turno {state.turn} · 🧪 {state.potions} · 🎯 {skill.get('name', '?')} · Pulsa 📜 para el registro completo"[:2048])
         return embed
+
+    def context_str(self, state: BattleState, progress: Optional[tuple[int, int]] = None, ended: bool = False, notes: Optional[list[str]] = None) -> str:
+        mode = "Exploración"
+        if state.is_boss:
+            mode = "Jefe"
+        elif state.is_anomaly:
+            mode = "Anomalía"
+        elif state.training:
+            mode = "Simulacro"
+        elif state.farm:
+            mode = "Repetición"
+        lines = [f"🗺️ **Piso {state.floor}** · {mode}"]
+        if state.training:
+            lines[0] += " · sin recompensas"
+        elif state.farm:
+            lines[0] += " · no cuenta para el progreso"
+        elif not ended and not (state.is_boss or state.is_anomaly) and progress:
+            lines.append(f"👹 Enemigos del piso: **{progress[0]}/{progress[1]}**")
+        for shift_id in state.shifts:
+            spec = self.engine.data["shifts"].get(shift_id)
+            if not spec:
+                continue
+            detail = f"{spec.get('emoji', '')} **{spec.get('name', shift_id)}**"
+            if spec.get("desc"):
+                detail += f": {spec['desc']}"
+            lines.append(detail)
+        lines.extend(note for note in (notes or []) if note)
+        return "\n".join(lines)
+
+    def cooldowns_str(self, state: BattleState) -> str:
+        parts = []
+        defend_left = int(state.cooldowns.get(DEFEND_KEY, 0))
+        if defend_left:
+            parts.append(f"🛡️ Defender ({defend_left}t)")
+        skill = self.skills_of(state)
+        skill_left = int(state.cooldowns.get(state.skill_id, 0))
+        if skill_left:
+            parts.append(f"{skill.get('emoji', '✨')} {skill.get('name', 'Habilidad')} ({skill_left}t)")
+        return ("⏳ En enfriamiento: " + " · ".join(parts)) if parts else ""
+
+    def combat_view(self, user_id: int, state: BattleState, ended: bool = False, message: Optional[discord.Message] = None) -> CombatView:
+        if ended:
+            view = CombatView(self, user_id, 0, ended=True)
+        else:
+            skill = self.skills_of(state)
+            view = CombatView(
+                self,
+                user_id,
+                state.potions,
+                state.no_potions,
+                skill.get("name", "Habilidad"),
+                skill_id=state.skill_id,
+                cooldowns=state.cooldowns,
+                log=state.log,
+            )
+        view.message = message
+        return view
 
     async def handle_action(self, interaction: discord.Interaction, view: CombatView, action: str) -> None:
         user_id = interaction.user.id
@@ -1127,29 +1175,40 @@ class DungeonCog(commands.Cog):
             return
 
         accent = await self.accent_color(user_id)
+        current_message = getattr(interaction, "message", None)
         if state.stage == "active":
             await self.repo.save_fight(user_id, state.to_dict())
-            skill = self.skills_of(state)
-            new_view = CombatView(self, user_id, state.potions, state.no_potions, skill.get("name", "Habilidad"))
-            new_view.message = getattr(interaction, "message", None)
+            new_view = self.combat_view(user_id, state, message=current_message)
             await interaction.response.edit_message(embed=self.render_combat(state, accent, progress=await self.floor_progress(user_id)), view=new_view)
         elif state.stage == "victory":
             sections = await self.apply_victory(user_id, state)
-            embed = self.render_combat(state, accent, ended=True, progress=await self.floor_progress(user_id), summary_fields=[("🎁 Botín", "\n".join(sections["loot"])), ("🗺️ Progreso", "\n".join(sections["progress"]))])
-            await interaction.response.edit_message(embed=embed, view=CombatView(self, user_id, 0, ended=True))
+            embed = self.render_combat(state, accent, ended=True, progress=await self.floor_progress(user_id), summary_fields=[("🎁 Botín", "\n".join(sections["loot"]))], progress_notes=sections["progress"])
+            await interaction.response.edit_message(embed=embed, view=self.combat_view(user_id, state, ended=True, message=current_message))
         elif state.stage in ("fled", "timeout"):
             note = await self.apply_retreat(user_id, state)
             embed = self.render_combat(state, accent, ended=True, progress=await self.floor_progress(user_id), summary_fields=[("🏃 Retirada", note)])
-            await interaction.response.edit_message(embed=embed, view=CombatView(self, user_id, 0, ended=True))
+            await interaction.response.edit_message(embed=embed, view=self.combat_view(user_id, state, ended=True, message=current_message))
         else:
             note = await self.apply_defeat(user_id, state)
             embed = self.render_combat(state, accent, ended=True, progress=await self.floor_progress(user_id), summary_fields=[("💀 Derrota", note)])
-            await interaction.response.edit_message(embed=embed, view=CombatView(self, user_id, 0, ended=True))
+            await interaction.response.edit_message(embed=embed, view=self.combat_view(user_id, state, ended=True, message=current_message))
+
+    async def remember_battle(self, user_id: int, state: BattleState) -> None:
+        await self.repo.save_battle_log(
+            user_id,
+            {
+                "stage": state.stage,
+                "floor": state.floor,
+                "enemy": f"{state.enemy.emoji} {state.enemy.name}".strip(),
+                "log": state.log,
+            },
+        )
 
     async def apply_victory(self, user_id: int, state: BattleState) -> dict[str, list[str]]:
+        await self.remember_battle(user_id, state)
         if state.training:
             await self.repo.clear_fight(user_id)
-            return {"loot": [], "progress": ["🎯 El simulacro no concede recompensas."]}
+            return {"loot": [], "progress": []}
         user = await self.repo.get_user(user_id)
         rewards = state.rewards
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -1184,9 +1243,7 @@ class DungeonCog(commands.Cog):
         if rewards.get("gold"):
             await self.repo.add_gold(user_id, rewards["gold"])
 
-        if state.training:
-            updates["training_used"] = int(user["training_used"]) + 1
-        elif state.is_boss:
+        if state.is_boss:
             tier = self.engine.boss_tier_for_floor(state.floor)
             highest = max(int(user["highest_floor"]), state.floor)
             updates.update(floor=state.floor + 1, highest_floor=highest, boss_tier=tier, last_boss_at=now, last_boss_floor=state.floor)
@@ -1196,7 +1253,6 @@ class DungeonCog(commands.Cog):
             await self.repo.add_log(user_id, "boss", f"Derrotaste al jefe del piso {state.floor}.")
         elif state.is_anomaly:
             updates["last_alt_at"] = now
-            updates["alt_floor"] = None
             await self.bot.global_stats.register_dungeon_anomaly(user_id)
             await self.repo.add_log(user_id, "anomaly", f"Cerraste la anomalía {state.anomaly_id}.")
         elif state.farm:
@@ -1234,6 +1290,7 @@ class DungeonCog(commands.Cog):
         return {"loot": loot, "progress": progress}
 
     async def apply_defeat(self, user_id: int, state: BattleState) -> str:
+        await self.remember_battle(user_id, state)
         user = await self.repo.get_user(user_id)
         penalty = int(int(user["gold"]) * 0.10)
         await self.repo.spend_gold(user_id, penalty)
@@ -1246,34 +1303,52 @@ class DungeonCog(commands.Cog):
         return (f"Pierdes **{fmt_int(penalty)}** {self.coin}, pero conservas tu piso {user['floor']}.\n" f"Vuelve a intentarlo cuando quieras.")
 
     async def apply_retreat(self, user_id: int, state: BattleState) -> str:
-        user = await self.repo.get_user(user_id)
-        penalty = int(int(user["gold"]) * float(self.engine.cfg["flee_gold_penalty_pct"]))
-        if penalty:
-            await self.repo.spend_gold(user_id, penalty)
+        await self.remember_battle(user_id, state)
         await self.repo.update_user(user_id, potions=state.potions)
         await self.repo.clear_fight(user_id)
         if state.training:
             await self.sync_vitals(user_id)
+            wound = ""
         else:
-            await self.sync_vitals(user_id, hp=state.player.hp)
+            wound = self.flee_wound(state)
+            await self.sync_vitals(user_id, hp=max(1, state.player.hp - self.flee_wound_value(state)))
         await self.bot.global_stats.register_dungeon_retreat(user_id)
         if state.stage == "timeout":
             reason = "El combate se alargó demasiado y tuviste que retirarte."
         else:
             reason = "Te retiraste del combate."
-        return (f"{reason} Conservas tu piso y tu equipo, pero no ganas recompensas." + (f" Pierdes **{fmt_int(penalty)}** {self.coin}." if penalty else ""))
+        return (f"{reason} Conservas tu piso y tu equipo, pero no ganas recompensas." + (f"\n{wound}" if wound else ""))
+
+    def flee_wound_value(self, state: BattleState) -> int:
+        if state.stage != "fled":
+            return 0
+        return int(state.player.max_hp * float(self.engine.cfg.get("flee_hp_penalty_pct", 0.0)))
+
+    def flee_wound(self, state: BattleState) -> str:
+        loss = self.flee_wound_value(state)
+        if loss <= 0:
+            return ""
+        remaining = max(1, state.player.hp - loss)
+        return f"🩸 Huir desangra: pierdes **{fmt_int(loss)}** PV y te quedas con **{fmt_int(remaining)}/{fmt_int(state.player.max_hp)}**."
 
     async def resolve_finished_fight(self, interaction: discord.Interaction, state: BattleState, accent: discord.Color) -> None:
         user_id = interaction.user.id
+        notes: list[str] = []
         if state.stage == "victory":
             sections = await self.apply_victory(user_id, state)
-            fields = [("🎁 Botín", "\n".join(sections["loot"])), ("🗺️ Progreso", "\n".join(sections["progress"]))]
+            fields = [("🎁 Botín", "\n".join(sections["loot"]))]
+            notes = sections["progress"]
         elif state.stage == "defeat":
             fields = [("💀 Derrota", await self.apply_defeat(user_id, state))]
         else:
             fields = [("🏃 Retirada", await self.apply_retreat(user_id, state))]
-        embed = self.render_combat(state, accent, ended=True, progress=await self.floor_progress(user_id), summary_fields=fields)
-        await interaction.response.send_message(embed=embed, view=CombatView(self, user_id, 0, ended=True))
+        embed = self.render_combat(state, accent, ended=True, progress=await self.floor_progress(user_id), summary_fields=fields, progress_notes=notes)
+        view = self.combat_view(user_id, state, ended=True)
+        await interaction.response.send_message(embed=embed, view=view)
+        try:
+            view.message = await interaction.original_response()
+        except discord.HTTPException:
+            pass
 
     async def start_fight_message(self, interaction: discord.Interaction, state: BattleState) -> None:
         user_id = interaction.user.id
@@ -1282,9 +1357,8 @@ class DungeonCog(commands.Cog):
             await self.resolve_finished_fight(interaction, state, accent)
             return
         await self.repo.save_fight(user_id, state.to_dict())
-        skill = self.skills_of(state)
-        view = CombatView(self, user_id, state.potions, state.no_potions, skill.get("name", "Habilidad"))
-        await interaction.response.send_message(embed=self.render_combat(state, accent), view=view)
+        view = self.combat_view(user_id, state)
+        await interaction.response.send_message(embed=self.render_combat(state, accent, progress=await self.floor_progress(user_id)), view=view)
         try:
             view.message = await interaction.original_response()
         except discord.HTTPException:
@@ -1297,8 +1371,7 @@ class DungeonCog(commands.Cog):
         state = await self.active_fight(user_id)
         if state is not None:
             accent = await self.accent_color(user_id)
-            skill = self.skills_of(state)
-            view = CombatView(self, user_id, state.potions, state.no_potions, skill.get("name", "Habilidad"))
+            view = self.combat_view(user_id, state)
             await interaction.response.send_message(embed=self.render_combat(state, accent, progress=await self.floor_progress(user_id)), view=view)
             view.message = await interaction.original_response()
             return
@@ -1463,7 +1536,8 @@ class DungeonCog(commands.Cog):
         level = int(user["level"])
         xp_needed = self.engine.level_xp_needed(level)
         tier = int(user["boss_tier"])
-        cap = self.engine.conversion_cap(tier)
+        cap = self.engine.conversion_soft_cap(tier)
+        techo = self.engine.conversion_daily_max(tier)
         today = datetime.date.today().isoformat()
         used = int(user["conversion_used"]) if user.get("conversion_date") == today else 0
 
@@ -1490,15 +1564,17 @@ class DungeonCog(commands.Cog):
         embed.add_field(
             name="🗺️ Progreso",
             value=(f"**Piso actual:** {int(user['floor'])} ({int(user['floor_kills'])}/{max(1, int(self.engine.cfg['enemies_per_floor']))} enemigos)\n**Piso máximo:** {int(user['highest_floor'])}\n"
-                   f"**Avance automático:** {'sí' if bool(user['auto_advance']) else 'no'}\n**Jefes superados:** {tier}\n**Polvo:** {fmt_int(int(user['dust']))}"),
+                   f"**Combates ganados:** {fmt_int(int(user['runs']))}\n**Avance automático:** {'sí' if bool(user['auto_advance']) else 'no'}\n**Jefes superados:** {tier}\n**Polvo:** {fmt_int(int(user['dust']))}"),
             inline=True,
         )
+        ritmo = f"**Ritmo completo hoy:** {fmt_int(used)}/{fmt_int(cap)} Choskris" if used < cap else f"**Ritmo completo hoy:** agotado ({fmt_int(cap)} Choskris)"
         embed.add_field(
             name="💰 Economía",
             value=(f"**{self.coin}:** {fmt_int(int(user['gold']))}\n"
                    f"**{self.boss_coin}:** {fmt_int(int(user['boss_coins']))}\n"
-                   f"**Tope diario:** {fmt_int(cap)} Choskris ({int(used)}/{cap} usados)\n"
-                   f"**Cambio:** 1 {self.boss_coin_emoji} = {self.engine.cfg['conversion_rate']} Choskris"),
+                   f"**Cambio:** 1 {self.boss_coin_emoji} = {self.engine.cfg['conversion_rate']} Choskris\n"
+                   f"{ritmo}\n"
+                   f"**Techo del día:** ~{fmt_int(techo)} Choskris"),
             inline=False,
         )
 
@@ -1514,7 +1590,23 @@ class DungeonCog(commands.Cog):
         if badges:
             embed.add_field(name="🏅 Insignias", value=" ".join(b["emoji"] for b in badges), inline=False)
 
+        history = await self.history_field(user_id)
+        if history:
+            embed.add_field(name="📖 Últimos acontecimientos", value=history, inline=False)
+
         await interaction.response.send_message(embed=embed)
+
+    HISTORY_EMOJI = {"floor": "🚪", "boss": "👑", "anomaly": "🌀", "death": "💀", "prestige": "✨"}
+
+    async def history_field(self, user_id: int, limit: int = 8) -> str:
+        entries = await self.repo.recent_log(user_id, limit)
+        lines = []
+        for entry in entries:
+            emoji = self.HISTORY_EMOJI.get(str(entry.get("kind")), "•")
+            stamp = parse_dt(entry.get("created_at"))
+            when = f" · {discord.utils.format_dt(stamp, 'R')}" if stamp else ""
+            lines.append(f"{emoji} {str(entry.get('message', ''))[:80]}{when}")
+        return "\n".join(lines)[:1024]
 
     async def send_inventory(self, interaction: discord.Interaction, edit: bool = False, note: str = "") -> None:
         user_id = interaction.user.id
@@ -1536,8 +1628,7 @@ class DungeonCog(commands.Cog):
         embed.add_field(
             name="Mochila",
             value=(f"**{len(items)}/{max(1, int(self.engine.cfg.get('inventory_cap', 15)))}** objetos en total ({len(equipped)} equipados).\n"
-                   f"**Solo se venden objetos desequipados**: usa el menú de abajo para desequipar lo que quieras soltar.\n"
-                   f"Usa `/mazmorra forja` para reforjar o infundir ranuras."),
+                   f"**Solo se venden objetos desequipados**: usa el menú de abajo para desequipar lo que quieras soltar."),
             inline=False,
         )
         view = InventoryView(self, user_id, items)
@@ -1549,151 +1640,6 @@ class DungeonCog(commands.Cog):
     @mazmorra_group.command(name="inventario", description="Gestiona tu equipo.")
     async def inventory(self, interaction: discord.Interaction) -> None:
         await self.send_inventory(interaction)
-
-    @mazmorra_group.command(name="forja", description="Refuerza, bloquea e infunde las ranuras de tu equipo.")
-    async def forge(self, interaction: discord.Interaction) -> None:
-        items = await self.repo.get_inventory(interaction.user.id)
-        if not items:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="🎒 No tienes objetos que forjar.", color=discord.Color.orange()),
-                ephemeral=True,
-            )
-            return
-        first = next((item for item in items if item.get("is_equipped")), items[0])
-        await self.send_forge(interaction, item_uid=first["item_uid"], socket_index=0)
-
-    async def send_forge(self, interaction: discord.Interaction, edit: bool = False, item_uid: Optional[str] = None, socket_index: int = 0, note: str = "") -> None:
-        user_id = interaction.user.id
-        items = await self.repo.get_inventory(user_id)
-        if not items:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="🎒 No tienes objetos que forjar.", color=discord.Color.orange()),
-                ephemeral=True,
-            )
-            return
-        selected = next((item for item in items if item["item_uid"] == item_uid), None) or items[0]
-        user = await self.repo.get_user(user_id)
-        reroll_cost = self.engine.socket_reroll_cost(selected)
-        infuse_cost = self.engine.socket_infuse_cost()
-
-        embed = discord.Embed(
-            title="🔨 Forja de Enclaves",
-            color=await self.accent_color(user_id),
-            description=note or ("Reforja todas las ranuras **libres** a la vez, bloquea las que te gusten, "
-                                 "o **infunde** una ranura con el disparador que elijas."),
-        )
-        embed.add_field(
-            name=f"{self.rarity_emoji(selected['rarity'])} {selected['name']}",
-            value=self.describe_item(selected)[:1024],
-            inline=False,
-        )
-        embed.add_field(
-            name="💸 Costes",
-            value=(f"🔨 Reforjar ranuras libres: **{fmt_int(reroll_cost)}** {self.coin}\n"
-                   f"{self.boss_coin_emoji} Infundir la ranura seleccionada: **{fmt_int(infuse_cost)}** {self.boss_coin}"),
-            inline=False,
-        )
-        embed.set_footer(text=f"{self.coin}: {fmt_int(int(user['gold']))} · {self.boss_coin}: {fmt_int(int(user['boss_coins']))}")
-        view = ForgeView(self, user_id, items, selected["item_uid"], socket_index)
-        if edit:
-            await interaction.response.edit_message(embed=embed, view=view)
-        else:
-            await interaction.response.send_message(embed=embed, view=view)
-
-    async def forge_reroll(self, interaction: discord.Interaction, item_uid: str) -> None:
-        user_id = interaction.user.id
-        item = await self.repo.get_item(user_id, item_uid)
-        if not item or not item["sockets"]:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="⚠️ Ese objeto no tiene ranuras.", color=discord.Color.orange()),
-                ephemeral=True,
-            )
-            return
-        cost = self.engine.socket_reroll_cost(item)
-        if not await self.repo.spend_gold(user_id, cost):
-            await interaction.response.send_message(
-                embed=discord.Embed(description=f"❌ Necesitas **{fmt_int(cost)}** {self.coin}.",
-                                    color=discord.Color.red()),
-                ephemeral=True,
-            )
-            return
-        sockets = self.engine.reroll_sockets(item, random.SystemRandom())
-        await self.repo.set_item_sockets(user_id, item_uid, sockets)
-        await self.sync_vitals(user_id)
-        await self.bot.global_stats.register_dungeon_reroll(user_id, sum(1 for mod in sockets if not mod.get("locked")))
-        await self.send_forge(interaction, edit=True, item_uid=item_uid, socket_index=0, note=f"🔨 Has reforjado las ranuras libres por **{fmt_int(cost)}** {self.coin}.")
-
-    async def forge_toggle_lock(self, interaction: discord.Interaction, item_uid: str, socket_index: int) -> None:
-        user_id = interaction.user.id
-        item = await self.repo.get_item(user_id, item_uid)
-        if not item or not item["sockets"]:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="⚠️ Ese objeto no tiene ranuras.", color=discord.Color.orange()),
-                ephemeral=True,
-            )
-            return
-        sockets = [dict(mod) for mod in item["sockets"]]
-        index = min(max(0, socket_index), len(sockets) - 1)
-        sockets[index]["locked"] = not sockets[index].get("locked")
-        await self.repo.set_item_sockets(user_id, item_uid, sockets)
-        state = "bloqueada 🔒" if sockets[index]["locked"] else "desbloqueada 🔓"
-        await self.send_forge(interaction, edit=True, item_uid=item_uid, socket_index=index, note=f"Ranura **{index + 1}** {state}.")
-
-    async def forge_offer_infusion(self, interaction: discord.Interaction, item_uid: str, socket_index: int) -> None:
-        user_id = interaction.user.id
-        cost = self.engine.socket_infuse_cost()
-        user = await self.repo.get_user(user_id)
-        if int(user["boss_coins"]) < cost:
-            await interaction.response.send_message(
-                embed=discord.Embed(description=f"❌ Necesitas **{fmt_int(cost)}** {self.boss_coin}.",
-                                    color=discord.Color.red()),
-                ephemeral=True,
-            )
-            return
-        item = await self.repo.get_item(user_id, item_uid)
-        if not item or not item["sockets"]:
-            await interaction.response.send_message(
-                embed=discord.Embed(description="⚠️ Ese objeto no tiene ranuras.", color=discord.Color.orange()),
-                ephemeral=True,
-            )
-            return
-        candidates = self.engine.infuse_candidates(item, random.SystemRandom())
-        embed = discord.Embed(
-            title=f"{self.boss_coin_emoji} Infusión de Enclave",
-            color=discord.Color.dark_gold(),
-            description=(f"Elige el disparador que ocupará la ranura **{socket_index + 1}** de "
-                         f"**{item['name']}**.\nCoste: **{fmt_int(cost)}** {self.boss_coin}."),
-        )
-        for index, mod in enumerate(candidates):
-            embed.add_field(name=f"Opción {index + 1}", value=self.describe_mod(mod)[:1024], inline=False)
-        await interaction.response.edit_message(embed=embed, view=InfuseView(self, user_id, item_uid, socket_index, candidates))
-
-    async def forge_apply_infusion(self, interaction: discord.Interaction, item_uid: str, socket_index: int, chosen: dict) -> None:
-        user_id = interaction.user.id
-        cost = self.engine.socket_infuse_cost()
-        if not await self.repo.spend_boss_coins(user_id, cost):
-            await interaction.response.send_message(
-                embed=discord.Embed(description=f"❌ Necesitas **{fmt_int(cost)}** {self.boss_coin}.",
-                                    color=discord.Color.red()),
-                ephemeral=True,
-            )
-            return
-        item = await self.repo.get_item(user_id, item_uid)
-        if not item or not item["sockets"]:
-            await self.repo.add_boss_coins(user_id, cost)
-            await interaction.response.send_message(
-                embed=discord.Embed(description="⚠️ El objeto desapareció; se te ha reembolsado.",
-                                    color=discord.Color.red()),
-                ephemeral=True,
-            )
-            return
-        sockets = [dict(mod) for mod in item["sockets"]]
-        index = min(max(0, socket_index), len(sockets) - 1)
-        sockets[index] = dict(chosen)
-        await self.repo.set_item_sockets(user_id, item_uid, sockets)
-        await self.sync_vitals(user_id)
-        await self.bot.global_stats.register_dungeon_infusion(user_id)
-        await self.send_forge(interaction, edit=True, item_uid=item_uid, socket_index=index, note=f"{self.boss_coin_emoji} Ranura **{index + 1}** infundida: {self.describe_mod(chosen)}")
 
     @mazmorra_group.command(name="mejoras", description="Compra pociones y mejoras permanentes.")
     async def market(self, interaction: discord.Interaction) -> None:
@@ -1864,34 +1810,42 @@ class DungeonCog(commands.Cog):
     @mazmorra_group.command(name="canjear", description="Canjea lo que sueltan los jefes por Choskris (tope diario).")
     @app_commands.describe(cantidad="Cuánto quieres canjear.")
     async def convert(self, interaction: discord.Interaction, cantidad: app_commands.Range[int, 1, 1_000_000]) -> None:
-        await interaction.response.send_message("🏗️ Este comando está desactivado porque el juego está en beta 🏗️", ephemeral=True)
-        return
+        if not bool(self.engine.cfg.get("conversion_enabled", True)):
+            await interaction.response.send_message("🔧 Este comando está en mantenimiento 🔧", ephemeral=True)
+            return
 
         user_id = interaction.user.id
         user = await self.repo.get_user(user_id)
         tier = int(user["boss_tier"])
-        cap = self.engine.conversion_cap(tier)
+        cap = self.engine.conversion_soft_cap(tier)
         rate = int(self.engine.cfg["conversion_rate"])
         today = datetime.date.today().isoformat()
         used = int(user["conversion_used"]) if user.get("conversion_date") == today else 0
-        remaining_money = max(0, cap - used)
-        max_by_cap = remaining_money // rate
-        coins = min(int(cantidad), int(user["boss_coins"]), max_by_cap)
+        coins = min(int(cantidad), int(user["boss_coins"]))
         if coins <= 0:
-            reason = (f"No tienes {self.boss_coin} suficientes." if int(user["boss_coins"]) <= 0 else f"Has alcanzado el tope diario ({fmt_int(cap)} Choskris).")
-            await interaction.response.send_message(embed=discord.Embed(description=f"⚠️ {reason}", color=discord.Color.orange()), ephemeral=True)
+            await interaction.response.send_message(embed=discord.Embed(description=f"⚠️ No tienes {self.boss_coin} suficientes.", color=discord.Color.orange()), ephemeral=True)
             return
-        money = coins * rate
-        await self.repo.spend_boss_coins(user_id, coins)
-        await self.repo.update_user(user_id, conversion_date=today, conversion_used=used + money)
+        money = self.engine.conversion_value(coins, used, tier)
+        if money <= 0:
+            await interaction.response.send_message(embed=discord.Embed(description="⚠️ Ya has exprimido el cambio de hoy: mañana vuelve a empezar a ritmo completo.", color=discord.Color.orange()), ephemeral=True)
+            return
+        usable = self.engine.conversion_usable_coins(coins, used, tier)
+        sobra = coins - usable
+        coins = usable
+        if not await self.repo.spend_boss_coins(user_id, coins):
+            await interaction.response.send_message(embed=discord.Embed(description=f"⚠️ No tienes {self.boss_coin} suficientes.", color=discord.Color.orange()), ephemeral=True)
+            return
+        spent_value = used + coins * rate
+        await self.repo.update_user(user_id, conversion_date=today, conversion_used=spent_value)
         await self.bot.db.economy.update_balance(user_id, money)
         await self.bot.global_stats.register_dungeon_conversion(user_id, coins, money)
         balance = await self.bot.db.economy.get_balance(user_id)
+        detalle = f"\nHoy llevas **{fmt_int(spent_value)}** de {fmt_int(cap)} a ritmo completo." if spent_value <= cap else f"\nYa pasaste el tramo completo ({fmt_int(cap)}): el resto ha ido bajando de ritmo."
+        aviso = f"\n⚠️ Más allá de ahí el cambio ya no paga nada, así que te has quedado con **{fmt_int(sobra)}** {self.boss_coin_emoji} intactos." if sobra else ""
         await interaction.response.send_message(
             embed=discord.Embed(
                 title="💱 Canje completado",
-                description=(f"Canjeaste **{fmt_int(coins)}** {self.boss_coin_emoji} por **{fmt_int(money)}** Choskris.\n"
-                             f"Tope diario: **{fmt_int(used + money)}/{fmt_int(cap)}**\n"
+                description=(f"Canjeaste **{fmt_int(coins)}** {self.boss_coin_emoji} por **{fmt_int(money)}** Choskris.{detalle}{aviso}\n"
                              f"Saldo actual: **{fmt_int(balance)}** Choskris."),
                 color=discord.Color.green(),
             )
@@ -2046,7 +2000,7 @@ class DungeonCog(commands.Cog):
             return
         options = []
         for skill in skills:
-            mark = "✅ " if skill["id"] == self.engine.resolve_skill_id(user.get("active_skill")) else ""
+            mark = "✅ " if skill["id"] == self.engine.resolve_skill_id(user.get("active_skill"), int(user["level"])) else ""
             options.append(discord.SelectOption(
                 label=f"{mark}{skill['name']}"[:100],
                 value=skill["id"],
@@ -2291,12 +2245,14 @@ class DungeonCog(commands.Cog):
         automation = await self.repo.get_automation(user_id)
         spec = self.engine.data["mutations"]["gambit_automator"]
         ratio = float(spec["reward_ratio_base"]) + float(spec["reward_ratio_per_level"]) * (mut_level - 1)
+        last_tick = parse_dt(automation.get("last_tick"))
         embed = discord.Embed(
             title=f"{self.engine.data['mutations']['gambit_automator']['emoji']} {self.mutation_name('gambit_automator')}",
             description=(f"Estado: **{'activo' if automation['enabled'] else 'inactivo'}**\n"
                          f"Pisos simulados por ciclo de 10 min: **{mut_level}**\n"
                          f"Ratio de recompensa: **{ratio * 100:.0f}%**\n"
-                         f"Simulaciones totales: **{fmt_int(int(automation['sims']))}**"),
+                         f"Simulaciones totales: **{fmt_int(int(automation['sims']))}**\n"
+                         f"Última simulación: {discord.utils.format_dt(last_tick, 'R') if last_tick else '*todavía ninguna*'}"),
             color=discord.Color.dark_teal(),
         )
         if automation.get("last_report"):
@@ -2419,12 +2375,6 @@ class DungeonCog(commands.Cog):
             color=discord.Color.dark_teal(),
         )
         embed.add_field(
-            name="🏗️ Alerta: Juego en beta abierta 🏗️",
-            value=(f"Este juego está en beta, es posible que el progreso se reinicie para todos en algún momento, y no se puede usar para ganar choskris aún. "
-                   "Por favor jugad al juego igualmente para que lo vea en acción y salga de beta lo antes posible"),
-            inline=False,
-        )
-        embed.add_field(
             name="⚔️ Bucle principal",
             value=(f"`/mazmorra explorar` - pelea; cada piso requiere derrotar {max(1, int(self.engine.cfg['enemies_per_floor']))} enemigos para despejarlo.\n"
                    "`/mazmorra jefe` - desafía al Jefe que bloquea cada 10 pisos (6h de espera tras ganar).\n"
@@ -2441,15 +2391,12 @@ class DungeonCog(commands.Cog):
         embed.add_field(
             name="💱 Economía",
             value=(f"Los {self.coin} se quedan dentro del sistema. Los {self.boss_coin} se pueden canjear por Choskris "
-                   "con `/mazmorra canjear`, sujeto a un tope diario que crece con cada Jefe superado."
-                   "\n🏗️ Este comando está desactivado porque el juego está en beta aún 🏗️"),
+                   "con `/mazmorra canjear`: cada día hay un tramo a ritmo completo y, pasado ese tramo, el cambio va bajando de ritmo en vez de cortarse."),
             inline=False,
         )
         embed.add_field(
-            name="🔨 Forja y Ecos",
-            value=("`/mazmorra forja` - reforja las ranuras de un objeto, **bloquea** las que te gusten e "
-                   "**infunde** una ranura con el trigger que elijas (usa monedas de Jefe).\n"
-                   "`/mazmorra ecos` - mejoras permanentes compradas con Polvo."),
+            name="✨ Ecos",
+            value="`/mazmorra ecos` - mejoras permanentes compradas con Polvo.",
             inline=False,
         )
         embed.add_field(
@@ -2469,7 +2416,7 @@ class DungeonCog(commands.Cog):
         embed.add_field(
             name="🏃 Supervivencia",
             value=("Durante el combate puedes **Huir** en cualquier momento: conservas piso y equipo, "
-                   "pero no ganas recompensas y te llevas las heridas contigo. Ningún combate puede eternizarse."),
+                   f"pero no ganas recompensas y pierdes el **{_pct(self.engine.cfg['flee_hp_penalty_pct'])}** de tu vida máxima. Ningún combate puede eternizarse."),
             inline=False,
         )
         embed.add_field(
@@ -2526,7 +2473,6 @@ class DungeonCog(commands.Cog):
             potions=int(self.engine.cfg["potion_start"]),
             upgrades="{}",
             shifts="[]",
-            alt_floor=None,
         )
         await self.sync_vitals(user_id, full=True)
         await self.bot.global_stats.register_dungeon_prestige(user_id, dust)

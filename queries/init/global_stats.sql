@@ -126,8 +126,6 @@ CREATE TABLE IF NOT EXISTS user_global_stats
     dungeon_passive_xp        BIGINT DEFAULT 0,
     dungeon_auto_sims         BIGINT DEFAULT 0,
     dungeon_anomalies_cleared BIGINT DEFAULT 0,
-    dungeon_rerolls           BIGINT DEFAULT 0,
-    dungeon_infusions         BIGINT DEFAULT 0,
     dungeon_retreats          BIGINT DEFAULT 0,
     dungeon_echoes            BIGINT DEFAULT 0
 );

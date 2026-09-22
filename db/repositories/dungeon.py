@@ -24,7 +24,6 @@ USER_FIELDS = {
     "last_boss_floor",
     "upgrades",
     "shifts",
-    "alt_floor",
     "last_alt_at",
     "conversion_date",
     "conversion_used",
@@ -180,7 +179,6 @@ class DungeonRepository(BaseRepository):
         return items
 
     async def save_item_sockets(self, updates: list[tuple[str, list[dict]]]) -> None:
-        """Reescribe las ranuras de muchos objetos de una vez. `updates` es una lista de (item_uid, sockets)."""
         if not updates:
             return
         await self._db.executemany("UPDATE dungeon_inventory SET sockets = ? WHERE item_uid = ?", [(_dumps(sockets), item_uid) for item_uid, sockets in updates])
@@ -189,9 +187,6 @@ class DungeonRepository(BaseRepository):
     async def delete_inventory(self, user_id: int) -> None:
         await self._db.execute("DELETE FROM dungeon_inventory WHERE user_id = ?", (user_id,))
         await self._db.commit()
-
-    async def equipped_items(self, user_id: int) -> list[dict]:
-        return [item for item in await self.get_inventory(user_id) if item.get("is_equipped")]
 
     async def get_mutations(self, user_id: int) -> dict[str, int]:
         async with self._db.execute("SELECT mutation_id, level FROM dungeon_mutations WHERE user_id = ?", (user_id,)) as cursor:
@@ -225,6 +220,24 @@ class DungeonRepository(BaseRepository):
     async def clear_fight(self, user_id: int) -> None:
         await self._db.execute("DELETE FROM dungeon_active_fight WHERE user_id = ?", (user_id,))
         await self._db.commit()
+
+    async def save_battle_log(self, user_id: int, state: dict) -> None:
+        await self._db.execute(
+            "INSERT INTO dungeon_last_battle (user_id, stage, floor, enemy, log, created_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP) "
+            "ON CONFLICT(user_id) DO UPDATE SET stage = excluded.stage, floor = excluded.floor, "
+            "enemy = excluded.enemy, log = excluded.log, created_at = CURRENT_TIMESTAMP",
+            (user_id, str(state.get("stage", "")), int(state.get("floor", 1)), str(state.get("enemy", "")), _dumps(list(state.get("log", [])))),
+        )
+        await self._db.commit()
+
+    async def get_battle_log(self, user_id: int) -> Optional[dict]:
+        async with self._db.execute("SELECT stage, floor, enemy, log, created_at FROM dungeon_last_battle WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+        if not row:
+            return None
+        battle = dict(row)
+        battle["log"] = _loads(battle.get("log"), [])
+        return battle
 
     async def get_cosmetics(self, user_id: int) -> dict[str, int]:
         async with self._db.execute("SELECT cosmetic_id, equipped FROM dungeon_cosmetics WHERE user_id = ?", (user_id,)) as cursor:
