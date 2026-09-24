@@ -1246,7 +1246,7 @@ class DungeonCog(commands.Cog):
         if state.is_boss:
             tier = self.engine.boss_tier_for_floor(state.floor)
             highest = max(int(user["highest_floor"]), state.floor)
-            updates.update(floor=state.floor + 1, highest_floor=highest, boss_tier=tier, last_boss_at=now, last_boss_floor=state.floor)
+            updates.update(floor=state.floor + 1, floor_kills=0, highest_floor=highest, boss_tier=tier, last_boss_at=now, last_boss_floor=state.floor)
             await self.bot.global_stats.register_dungeon_depth(user_id, highest)
             await self.bot.global_stats.register_dungeon_floor_cleared(user_id)
             await self.bot.global_stats.register_dungeon_boss(user_id, tier, rewards["coins"])
