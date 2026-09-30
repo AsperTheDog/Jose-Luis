@@ -6,6 +6,7 @@ from db.repositories.gacha import GachaRepository
 from db.repositories.global_stats import GlobalStatsRepository
 from db.repositories.guild import GuildRepository
 from db.repositories.hacking import HackingRepository
+from db.repositories.merge import MergeRepository
 from db.repositories.mining import MiningRepository
 from db.repositories.phrases import PhraseRepository
 from db.repositories.quarantine import QuarantineRepository
@@ -22,6 +23,7 @@ __all__ = [
     "GlobalStatsRepository",
     "GuildRepository",
     "HackingRepository",
+    "MergeRepository",
     "MiningRepository",
     "PhraseRepository",
     "QuarantineRepository",

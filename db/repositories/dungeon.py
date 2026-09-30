@@ -32,6 +32,7 @@ USER_FIELDS = {
     "recovering",
     "hp_at",
     "runs",
+    "prestige_anchor",
 }
 
 

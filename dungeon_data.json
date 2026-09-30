@@ -1,7 +1,7 @@
 {
   "config": {
     "boss_interval": 10,
-    "enemies_per_floor": 10,
+    "enemies_per_floor": 5,
     "enemy_hp_base": 60,
     "enemy_hp_growth": 1.18,
     "enemy_dmg_base": 3,
@@ -46,10 +46,20 @@
     "level_xp_exponent": 1.5,
     "gold_base": 15,
     "gold_growth": 1.20,
-    "drop_chance_base": 0.50,
-    "drop_chance_per_floor": 0.008,
-    "drop_chance_max": 0.90,
+    "drop_chance_base": 0.35,
+    "drop_chance_per_floor": 0.005,
+    "drop_chance_max": 0.70,
+    "auto_sim_drop_chance": 0.15,
     "inventory_cap": 15,
+    "power_skip": {
+      "enabled": true,
+      "max_turns": 2,
+      "min_hp_ratio": 0.90,
+      "attempts": 3,
+      "reward_ratio": 0.75,
+      "max_enemies": 20
+    },
+    "prestige_catchup_xp_bonus": 2.0,
     "gear_attack_base": 2.2,
     "gear_attack_growth": 1.18,
     "gear_defense_base": 2,

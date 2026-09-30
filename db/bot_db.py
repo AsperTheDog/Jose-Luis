@@ -10,6 +10,7 @@ from db.repositories import (
     GlobalStatsRepository,
     GuildRepository,
     HackingRepository,
+    MergeRepository,
     MiningRepository,
     PhraseRepository,
     QuarantineRepository,
@@ -37,6 +38,7 @@ class BotDatabase:
         self.twitch = TwitchRepository(self.db)
         self.activity = ActivityRepository(self.db)
         self.quarantine = QuarantineRepository(self.db)
+        self.merger = MergeRepository(self.db)
 
     async def start(self) -> None:
         await self.db.connect()

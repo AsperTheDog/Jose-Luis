@@ -7,7 +7,117 @@ import discord
 from discord import app_commands, permissions
 from discord.ext import commands
 
+from db.repositories.merge import MergeReport
 from main import JoseLuisBot
+
+MERGE_GROUPS = (
+    ("Economía", ("economy_", "horse_bets", "hacking_daily")),
+    ("Gacha", ("gacha_",)),
+    ("Minería", ("mining_",)),
+    ("Mazmorra", ("dungeon_",)),
+    ("Waifu", ("waifu_",)),
+    ("Estadísticas", ("user_stats", "user_global_stats")),
+    ("Recordatorios y moderación", ("reminders", "reminder_subscribers", "quarantine")),
+)
+
+HIGHLIGHT_LABELS = {
+    "balance": "Choskris",
+    "interest": "Intereses sin reclamar",
+    "gacha_dust": "Polvo de gacha",
+    "dungeon_gold": "Oro de mazmorra",
+    "dungeon_dust": "Polvo de mazmorra",
+    "boss_coins": "Monedas de jefe",
+    "waifu_value": "Valor de waifu",
+}
+
+
+def merge_group_label(table: str) -> str:
+    for label, prefixes in MERGE_GROUPS:
+        if table.startswith(prefixes):
+            return label
+    return "Otros"
+
+
+def merge_summary(counts: dict[str, int]) -> str:
+    groups: dict[str, int] = {}
+    for table, count in counts.items():
+        label = merge_group_label(table)
+        groups[label] = groups.get(label, 0) + count
+    return "\n".join(f"**{label}:** {count} fila(s)" for label, count in groups.items())
+
+
+def merge_embed(report: MergeReport, principal: discord.User, secundaria: discord.User) -> discord.Embed:
+    embed = discord.Embed(
+        title="🧬 Cuentas fusionadas",
+        description=f"Todos los datos de {secundaria.mention} se han traspasado a {principal.mention} y la cuenta secundaria se ha borrado.",
+        color=discord.Color.dark_green(),
+    )
+    if report.highlights:
+        embed.add_field(
+            name="Saldos absorbidos",
+            value="\n".join(f"**{HIGHLIGHT_LABELS.get(key, key)}:** {value:,}" for key, value in report.highlights.items()),
+            inline=False,
+        )
+    embed.add_field(name="Filas absorbidas", value=merge_summary(report.absorbed), inline=False)
+    if report.notes:
+        embed.add_field(name="Avisos", value="\n".join(f"• {note}" for note in report.notes), inline=False)
+    embed.add_field(
+        name="Permisos",
+        value="Los permisos de operador y la lista blanca de canales son por servidor: no se han tocado. Revísalos a mano si la cuenta secundaria tenía alguno.",
+        inline=False,
+    )
+    embed.set_footer(text="Acción irreversible")
+    return embed
+
+
+class MergeAccountsView(discord.ui.View):
+    def __init__(self, bot: JoseLuisBot, author_id: int, principal: discord.User, secundaria: discord.User):
+        super().__init__(timeout=120)
+        self.bot = bot
+        self.author_id = author_id
+        self.principal = principal
+        self.secundaria = secundaria
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message(
+                embed=discord.Embed(description="❌ Solo quien ejecutó el comando puede confirmar esto.", color=discord.Color.red()),
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="Fusionar y borrar", style=discord.ButtonStyle.danger, emoji="🧬")
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(
+            embed=discord.Embed(description="⏳ Fusionando cuentas...", color=discord.Color.orange()),
+            view=self,
+        )
+        try:
+            report = await self.bot.db.merger.merge(self.principal.id, self.secundaria.id)
+        except Exception as error:
+            await interaction.edit_original_response(
+                embed=discord.Embed(
+                    title="❌ La fusión ha fallado",
+                    description=f"```{error}```\nNo se ha modificado ninguna de las dos cuentas.",
+                    color=discord.Color.red(),
+                ),
+                view=None,
+            )
+            raise
+        self.bot.dispatch("account_merged", report.primary_id, report.secondary_id)
+        await interaction.edit_original_response(embed=merge_embed(report, self.principal, self.secundaria), view=None)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(
+            embed=discord.Embed(description="❌ Fusión cancelada. No se ha modificado ninguna cuenta.", color=discord.Color.greyple()),
+            view=self,
+        )
 
 
 class ModerationCog(commands.Cog):
@@ -253,6 +363,41 @@ class ModerationCog(commands.Cog):
             await interaction.response.send_message(msg, ephemeral=True)
         else:
             await interaction.response.send_message(f" El usuario {usuario.mention} **no está** en cuarentena.", ephemeral=True)
+
+    @moderation_group.command(name="fusionarcuentas", description="Absorbe todos los datos de una cuenta en otra y borra la cuenta secundaria (operadores)")
+    @app_commands.describe(principal="Cuenta que se conserva y recibe todos los datos", secundaria="Cuenta que se absorbe y se elimina")
+    async def fusionar_cuentas(self, interaction: discord.Interaction, principal: discord.User, secundaria: discord.User):
+        if await self.bot.filter_operators(interaction): return
+
+        if principal.id == secundaria.id:
+            await interaction.response.send_message(
+                embed=discord.Embed(description="❌ La cuenta principal y la cuenta secundaria son la misma.", color=discord.Color.red()),
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        absorbed = await self.bot.db.merger.preview(secundaria.id)
+
+        if not absorbed:
+            await interaction.followup.send(
+                embed=discord.Embed(description=f"❌ {secundaria.mention} no tiene ningún dato registrado: no hay nada que fusionar.", color=discord.Color.red()),
+                ephemeral=True,
+            )
+            return
+
+        embed = discord.Embed(
+            title="🧬 Fusionar cuentas",
+            description=(
+                f"Se traspasarán **{sum(absorbed.values())} filas** de {secundaria.mention} a {principal.mention} "
+                "y después se borrará **todo** lo de la cuenta secundaria.\n\n"
+                "**Es irreversible:** el progreso de la cuenta secundaria no se puede recuperar. "
+                "Su cuenta de Discord no se toca, solo sus datos en el bot."
+            ),
+            color=discord.Color.dark_red(),
+        )
+        embed.add_field(name="Datos detectados en la secundaria", value=merge_summary(absorbed), inline=False)
+        await interaction.followup.send(embed=embed, view=MergeAccountsView(self.bot, interaction.user.id, principal, secundaria), ephemeral=True)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):

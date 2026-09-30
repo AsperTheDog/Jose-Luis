@@ -898,11 +898,12 @@ class DungeonCog(commands.Cog):
         if section == "progresion":
             return [
                 ("🗺️ Pisos", f"Cada piso pide derrotar **{cfg['enemies_per_floor']}** enemigos. Los pisos múltiplos de **{cfg['boss_interval']}** están bloqueados por un jefe (`/mazmorra jefe`); tras ganar hay **{cfg['boss_cooldown_hours']}h** de espera."),
+                ("⚡ Descenso Exprés", "Cuando tu poder aplasta al del piso, `/mazmorra explorar` resuelve los combates al instante y encadena pisos hasta que la cosa se ponga seria; las recompensas de esos combates se pagan al **" f"{_pct(cfg.get('power_skip', {}).get('reward_ratio', 1.0))}**. Lo mismo vale para un jefe que ya no puede hacerte sombra. Si quieres pelear de verdad, repite el piso con `/mazmorra explorar piso:N`."),
                 ("⭐ Nivel y XP", "La XP de los enemigos sube tu nivel, y el nivel sube ataque, vida, defensa y crítico (cada uno con su tope)."),
                 ("🧬 Mutaciones", "Reescriben reglas del juego: sala de entrenamiento, ranuras cuánticas, automatización, pisos alternativos, desplazamientos... Se compran con Polvo."),
                 ("🎓 Entrenar y practicar", "`/mazmorra entrenar` acumula XP pasiva mientras no juegas.\n`/mazmorra practicar` es un simulacro sin recompensas contra un muñeco que no puede morir."),
                 ("🌀 Anomalías y alteraciones", "`/mazmorra anomalia` abre un piso alternativo con recompensa extra.\n`/mazmorra alteraciones` activa afijos que cambian las reglas del combate a cambio de una desventaja."),
-                ("✨ Prestigio", f"`/mazmorra prestigio` reinicia piso, nivel, {self.coin} y equipo a cambio de **Polvo**: el piso máximo dividido entre 5, y el resultado elevado a {cfg['dust_exponent']:g}.\nEl Polvo compra **Ecos** permanentes en `/mazmorra ecos`: cuando los pisos se vuelven letales, esa es la forma de volver más fuerte."),
+                ("✨ Prestigio", f"`/mazmorra prestigio` reinicia piso, nivel, {self.coin} y equipo a cambio de **Polvo**: el piso máximo dividido entre 5, y el resultado elevado a {cfg['dust_exponent']:g}.\nAl renacer, mientras reconquistas los pisos que ya conocías, tu XP recibe un **impulso** (hasta ×{1 + float(cfg.get('prestige_catchup_xp_bonus', 0.0)):g} y también ignoras la penalización por ir sobrenivel) que va bajando hasta desaparecer en tu antigua marca.\nEl Polvo compra **Ecos** permanentes en `/mazmorra ecos`: cuando los pisos se vuelven letales, esa es la forma de volver más fuerte."),
                 ("💀 Muerte", f"Perder cuesta un 10% de tus {self.coin} y te deja en recuperación hasta curarte del todo; conservas piso y equipo."),
             ]
         if section == "economia":
@@ -1011,6 +1012,29 @@ class DungeonCog(commands.Cog):
         await self.repo.update_user(user_id, **updates)
         user.update(updates)
         return user
+
+    async def repair_after_merge(self, user_id: int) -> None:
+        user = await self.repo.get_user(user_id)
+        mutations = await self.repo.get_mutations(user_id)
+        shifts = _json_list(user.get("shifts"))
+        cap = self.engine.mutation_level(mutations, "dimensional_shifts")
+        level, xp, _ = self.engine.gain_xp(int(user["level"]), int(user["xp"]), 0)
+        updates: dict[str, int | str] = {}
+        if level != int(user["level"]) or xp != int(user["xp"]):
+            updates["level"] = level
+            updates["xp"] = xp
+        if len(shifts) > cap:
+            updates["shifts"] = json.dumps(shifts[:max(0, cap)])
+        if updates:
+            await self.repo.update_user(user_id, **updates)
+        await self.sync_vitals(user_id)
+
+    @commands.Cog.listener()
+    async def on_account_merged(self, user_id: int, _secondary_id: int) -> None:
+        try:
+            await self.repair_after_merge(user_id)
+        except Exception as error:
+            print(f"[dungeon] Could not normalize merged account {user_id}: {error}")
 
     def recovery_note(self, user: dict) -> Optional[str]:
         if not int(user.get("recovering") or 0):
@@ -1364,6 +1388,58 @@ class DungeonCog(commands.Cog):
         except discord.HTTPException:
             pass
 
+    async def crushed_run(self, interaction: discord.Interaction, user: dict, items: list[dict], mutations: dict, echoes: dict) -> bool:
+        spec = self.engine.power_skip_spec()
+        needed = max(1, int(self.engine.cfg["enemies_per_floor"]))
+        floor = int(user["floor"])
+        if self.engine.is_gate_floor(floor) or int(user["floor_kills"]) >= needed:
+            return False
+        if not self.engine.is_crushing(user, items, mutations, floor, echoes=echoes):
+            return False
+
+        user_id = interaction.user.id
+        limit = max(1, int(spec.get("max_enemies", 20)))
+        ratio = float(spec.get("reward_ratio", 1.0))
+        shifts = _json_list(user.get("shifts"))
+        skill = user.get("active_skill") or self.engine.default_skill_id()
+        start_floor, start_level = floor, int(user["level"])
+        rng = random.SystemRandom()
+        crushed = gold = xp = 0
+        found: list[str] = []
+
+        await interaction.response.defer()
+        while crushed < limit:
+            user = await self.repo.get_user(user_id)
+            floor = int(user["floor"])
+            if self.engine.is_gate_floor(floor) or int(user["floor_kills"]) >= needed:
+                break
+            if not self.engine.is_crushing(user, items, mutations, floor, echoes=echoes):
+                break
+            state = self.engine.start_floor(user, items, mutations, floor, shifts, skill, int(user["potions"]), echoes=echoes)
+            self.engine.prepare_auto_victory(state, ratio, rng)
+            sections = await self.apply_victory(user_id, state)
+            gold += int(state.rewards.get("gold", 0))
+            xp += int(state.rewards.get("xp", 0))
+            found.extend(line for line in sections["loot"] if line.startswith("🎁") or "se ha perdido" in line)
+            crushed += 1
+
+        after = await self.repo.get_user(user_id)
+        lines = [
+            f"Aplastaste **{crushed}** enemigos sin despeinarte: **{_pct(ratio)}** de recompensas.",
+            f"🗺️ Piso **{start_floor}** → **{int(after['floor'])}** · 👹 Enemigos del piso: **{int(after['floor_kills'])}/{needed}**",
+            f"{self.coin_emoji} **+{fmt_int(gold)}** {self.coin} · ⭐ **+{fmt_int(xp)}** XP" + (f" · ⬆️ Nivel **{int(after['level'])}**" if int(after["level"]) > start_level else ""),
+        ]
+        if found:
+            lines.append("\n".join(found[:10]))
+        if self.engine.is_gate_floor(int(after["floor"])):
+            lines.append("👑 Un Jefe bloquea el piso: resuélvelo con `/mazmorra jefe`.")
+        elif int(after["floor_kills"]) >= needed:
+            lines.append("🚪 Piso despejado: baja con `/mazmorra avanzar` o activa el avance automático.")
+        else:
+            lines.append("⚔️ El siguiente enemigo ya requiere que pelees: usa `/mazmorra explorar`.")
+        await interaction.followup.send(embed=discord.Embed(title="⚡ Descenso Exprés", description="\n".join(lines), color=discord.Color.teal()))
+        return True
+
     @mazmorra_group.command(name="explorar", description="Desciende por los pisos de la mazmorra.")
     @app_commands.describe(piso="Repite un piso ya superado para farmear equipo (opcional).")
     async def explore(self, interaction: discord.Interaction, piso: Optional[int] = None) -> None:
@@ -1406,6 +1482,9 @@ class DungeonCog(commands.Cog):
                 )
                 return
             farm = False
+
+        if not farm and await self.crushed_run(interaction, user, items, mutations, echoes):
+            return
 
         state = self.engine.start_floor(user, items, mutations, floor, shifts, user.get("active_skill") or self.engine.default_skill_id(), int(user["potions"]), farm=farm, echoes=echoes)
         await self.start_fight_message(interaction, state)
@@ -1523,6 +1602,21 @@ class DungeonCog(commands.Cog):
         echoes = await self.repo.get_echoes(user_id)
         tier = self.engine.boss_tier_for_floor(floor)
         state = self.engine.start_boss(user, items, mutations, tier, _json_list(user.get("shifts")), user.get("active_skill") or self.engine.default_skill_id(), int(user["potions"]), echoes=echoes)
+        if self.engine.is_crushing(user, items, mutations, floor, echoes=echoes, tier=tier):
+            await interaction.response.defer()
+            ratio = float(self.engine.power_skip_spec().get("reward_ratio", 1.0))
+            self.engine.prepare_auto_victory(state, ratio, random.SystemRandom())
+            sections = await self.apply_victory(user_id, state)
+            embed = self.render_combat(
+                state,
+                await self.accent_color(user_id),
+                ended=True,
+                progress=await self.floor_progress(user_id),
+                summary_fields=[("⚡ Arrollado", "\n".join(sections["loot"]))],
+                progress_notes=sections["progress"] + [f"*Recompensas al {_pct(ratio)} por resolverlo al instante.*"],
+            )
+            await interaction.followup.send(embed=embed)
+            return
         await self.start_fight_message(interaction, state)
 
     @mazmorra_group.command(name="perfil", description="Consulta tu progreso en la mazmorra.")
@@ -1561,12 +1655,15 @@ class DungeonCog(commands.Cog):
         recovery = self.recovery_note(user)
         if recovery:
             embed.add_field(name="💀 Recuperación", value=recovery, inline=False)
-        embed.add_field(
-            name="🗺️ Progreso",
-            value=(f"**Piso actual:** {int(user['floor'])} ({int(user['floor_kills'])}/{max(1, int(self.engine.cfg['enemies_per_floor']))} enemigos)\n**Piso máximo:** {int(user['highest_floor'])}\n"
-                   f"**Combates ganados:** {fmt_int(int(user['runs']))}\n**Avance automático:** {'sí' if bool(user['auto_advance']) else 'no'}\n**Jefes superados:** {tier}\n**Polvo:** {fmt_int(int(user['dust']))}"),
-            inline=True,
-        )
+        anchor = int(user.get("prestige_anchor") or 0)
+        catchup = self.engine.catchup_multiplier(int(user["floor"]), anchor)
+        progress_lines = [
+            f"**Piso actual:** {int(user['floor'])} ({int(user['floor_kills'])}/{max(1, int(self.engine.cfg['enemies_per_floor']))} enemigos)\n**Piso máximo:** {int(user['highest_floor'])}\n"
+            f"**Combates ganados:** {fmt_int(int(user['runs']))}\n**Avance automático:** {'sí' if bool(user['auto_advance']) else 'no'}\n**Jefes superados:** {tier}\n**Polvo:** {fmt_int(int(user['dust']))}"
+        ]
+        if catchup > 1.0:
+            progress_lines.append(f"**Impulso de renacimiento:** ×{catchup:.2f} XP hasta el piso **{anchor}**")
+        embed.add_field(name="🗺️ Progreso", value="\n".join(progress_lines), inline=True)
         ritmo = f"**Ritmo completo hoy:** {fmt_int(used)}/{fmt_int(cap)} Choskris" if used < cap else f"**Ritmo completo hoy:** agotado ({fmt_int(cap)} Choskris)"
         embed.add_field(
             name="💰 Economía",
@@ -2377,6 +2474,7 @@ class DungeonCog(commands.Cog):
         embed.add_field(
             name="⚔️ Bucle principal",
             value=(f"`/mazmorra explorar` - pelea; cada piso requiere derrotar {max(1, int(self.engine.cfg['enemies_per_floor']))} enemigos para despejarlo.\n"
+                   f"Si tu poder aplasta al del piso, el combate se resuelve al instante (**⚡ Descenso Exprés**) y encadenas pisos hasta que la cosa se ponga seria; ahí el botín se paga al {_pct(self.engine.power_skip_spec().get('reward_ratio', 1.0))}.\n"
                    "`/mazmorra jefe` - desafía al Jefe que bloquea cada 10 pisos (6h de espera tras ganar).\n"
                    "`/mazmorra avanzar` y `/mazmorra ajustes` - controlan el avance automático de piso.\n"
                    "`/mazmorra entrenar`, `/mazmorra practicar` y `/mazmorra anomalia` - requieren mutaciones."),
@@ -2421,7 +2519,7 @@ class DungeonCog(commands.Cog):
         )
         embed.add_field(
             name="✨ Prestigio",
-            value=f"`/mazmorra prestigio` reinicia piso, nivel, {self.coin} y equipo, pero te da Polvo para mutaciones y Ecos permanentes.",
+            value=f"`/mazmorra prestigio` reinicia piso, nivel, {self.coin} y equipo, pero te da Polvo para mutaciones y Ecos permanentes. Mientras reconquistas los pisos que ya conocías recibes un impulso de XP que va bajando hasta desaparecer en tu antigua marca.",
             inline=False,
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -2453,13 +2551,17 @@ class DungeonCog(commands.Cog):
             title="✨ Renacer (Prestigio)",
             description=(f"Polvo a obtener: **{fmt_int(dust)}** ✨ (piso máximo {int(user['highest_floor'])})\n\n"
                          f"**Se reinicia:** piso actual, piso máximo, nivel, XP, {self.coin}, pociones, mejoras y equipo.\n"
-                         f"**Se conserva:** Polvo, {self.boss_coin}, mutaciones y cosméticos."),
+                         f"**Se conserva:** Polvo, {self.boss_coin}, mutaciones y cosméticos.\n\n"
+                         f"Al renacer ganarás un **impulso de XP** mientras reconquistes los pisos que ya conocías: "
+                         f"**×{self.engine.catchup_multiplier(1, int(user['highest_floor'])):.2f}** al principio, y va bajando hasta desaparecer en el piso **{int(user['highest_floor'])}**."),
             color=discord.Color.dark_purple(),
         )
         await interaction.response.send_message(embed=embed, view=PrestigeConfirmView(self, user_id, dust))
 
     async def do_prestige(self, interaction: discord.Interaction, dust: int) -> None:
         user_id = interaction.user.id
+        user = await self.repo.get_user(user_id)
+        anchor = max(int(user["highest_floor"]), int(user.get("prestige_anchor") or 0))
         await self.repo.clear_fight(user_id)
         await self.repo.delete_inventory(user_id)
         await self.repo.add_dust(user_id, dust)
@@ -2473,6 +2575,7 @@ class DungeonCog(commands.Cog):
             potions=int(self.engine.cfg["potion_start"]),
             upgrades="{}",
             shifts="[]",
+            prestige_anchor=anchor,
         )
         await self.sync_vitals(user_id, full=True)
         await self.bot.global_stats.register_dungeon_prestige(user_id, dust)
@@ -2480,7 +2583,8 @@ class DungeonCog(commands.Cog):
         await interaction.response.edit_message(
             embed=discord.Embed(
                 title="✨ Has renacido",
-                description=f"El vacío te devuelve **{fmt_int(dust)}** ✨ de Polvo Intergaláctico.\nLa mazmorra vuelve a empezar.",
+                description=(f"El vacío te devuelve **{fmt_int(dust)}** ✨ de Polvo Intergaláctico.\nLa mazmorra vuelve a empezar.\n"
+                             f"Mientras reconquistes los pisos **1-{anchor}** tu XP irá hasta **×{self.engine.catchup_multiplier(1, anchor):.2f}** para devolverte a donde estabas."),
                 color=discord.Color.dark_purple(),
             ),
             view=None,
@@ -2518,7 +2622,7 @@ class DungeonCog(commands.Cog):
         gold = xp = 0
         items = []
         for _ in range(mut_level):
-            reward = self.engine.auto_sim_rewards(floor, int(user["level"]), ratio, rng)
+            reward = self.engine.auto_sim_rewards(floor, int(user["level"]), ratio, rng, anchor=int(user.get("prestige_anchor") or 0))
             gold += int(reward["gold"] * self.engine.echo_multiplier(echoes, "gold_mult"))
             xp += reward["xp"]
             if reward["item"]:

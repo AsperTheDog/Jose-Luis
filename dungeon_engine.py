@@ -161,6 +161,7 @@ class BattleState:
     cooldowns: dict[str, int] = field(default_factory=dict)
     damage_dealt: int = 0
     damage_taken: int = 0
+    last_damage: int = 0
     bonus_gold: int = 0
     bonus_xp: int = 0
     rewards: dict = field(default_factory=dict)
@@ -170,6 +171,7 @@ class BattleState:
     no_potions: bool = False
     mutations: dict = field(default_factory=dict)
     echoes: dict = field(default_factory=dict)
+    prestige_anchor: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -189,6 +191,7 @@ class BattleState:
             "cooldowns": self.cooldowns,
             "damage_dealt": self.damage_dealt,
             "damage_taken": self.damage_taken,
+            "last_damage": self.last_damage,
             "bonus_gold": self.bonus_gold,
             "bonus_xp": self.bonus_xp,
             "rewards": self.rewards,
@@ -198,6 +201,7 @@ class BattleState:
             "no_potions": self.no_potions,
             "mutations": self.mutations,
             "echoes": self.echoes,
+            "prestige_anchor": self.prestige_anchor,
         }
 
     @classmethod
@@ -219,6 +223,7 @@ class BattleState:
             cooldowns=dict(payload.get("cooldowns", {})),
             damage_dealt=int(payload.get("damage_dealt", 0)),
             damage_taken=int(payload.get("damage_taken", 0)),
+            last_damage=int(payload.get("last_damage", 0)),
             bonus_gold=int(payload.get("bonus_gold", 0)),
             bonus_xp=int(payload.get("bonus_xp", 0)),
             rewards=dict(payload.get("rewards", {})),
@@ -228,6 +233,7 @@ class BattleState:
             no_potions=bool(payload.get("no_potions", False)),
             mutations=dict(payload.get("mutations", {})),
             echoes=dict(payload.get("echoes", {})),
+            prestige_anchor=int(payload.get("prestige_anchor", 0)),
         )
 
 
@@ -280,9 +286,16 @@ class DungeonEngine:
             return 1.0
         return max(0.05, 1.0 - 0.20 * delta)
 
-    def xp_reward(self, floor: int, level: int) -> int:
+    def catchup_multiplier(self, floor: int, anchor: int) -> float:
+        if anchor <= 0 or floor >= anchor:
+            return 1.0
+        taper = 1.0 - max(0, floor) / float(anchor)
+        return 1.0 + float(self.cfg.get("prestige_catchup_xp_bonus", 0.0)) * taper
+
+    def xp_reward(self, floor: int, level: int, anchor: int = 0) -> int:
         base = self.cfg["xp_base"] * grow(self.cfg["xp_growth"], floor)
-        return max(1, int(base * self.xp_multiplier(level, floor)))
+        penalized = min(level, floor) if 0 < floor < anchor else level
+        return max(1, int(base * self.xp_multiplier(penalized, floor) * self.catchup_multiplier(floor, anchor)))
 
     def gold_reward(self, floor: int) -> int:
         return max(1, int(self.cfg["gold_base"] * grow(self.cfg["gold_growth"], floor)))
@@ -1041,7 +1054,7 @@ class DungeonEngine:
                 if stolen:
                     rt.log(f"🔋 **{actor.name}** drena **{stolen}** de energía a **{target.name}**.")
         elif etype == "LIFESTEAL":
-            damage = int(rt.events.get("last_damage", 0))
+            damage = int(rt.events.get("last_damage") or state.last_damage)
             heal = int(damage * float(effect.get("ratio", 0.1)) * self.heal_multiplier(actor))
             if heal > 0:
                 before = actor.hp
@@ -1204,6 +1217,8 @@ class DungeonEngine:
                 rt.state.damage_taken += dealt
 
             rt.events["last_damage"] = dealt
+            if dealt > 0:
+                rt.state.last_damage = dealt
             rt.events["is_crit"] = is_crit
             crit_tag = " ¡CRÍTICO!" if is_crit else ""
             if guarded:
@@ -1249,7 +1264,7 @@ class DungeonEngine:
             rt.log("💀 Has caído en combate.")
             self.fire(rt, "ON_BATTLE_END", state.player.mods, state.player)
 
-    def finalize(self, rt: Runtime) -> None:
+    def finalize(self, rt: Runtime, ratio: float = 1.0) -> None:
         state = rt.state
         if state.rewards:
             return
@@ -1258,8 +1273,8 @@ class DungeonEngine:
         level = state.player_level
         shifts = self.shift_effects(state.shifts)
         self.fire(rt, "ON_FLOOR_CLEAR", state.player.mods, state.player)
-        gold = int(self.gold_reward(floor) * shifts.get("gold_mult", 1.0) * self.echo_multiplier(state.echoes, "gold_mult"))
-        xp = int(self.xp_reward(floor, level) * shifts.get("xp_mult", 1.0))
+        gold = int(self.gold_reward(floor) * shifts.get("gold_mult", 1.0) * self.echo_multiplier(state.echoes, "gold_mult") * ratio)
+        xp = int(self.xp_reward(floor, level, state.prestige_anchor) * shifts.get("xp_mult", 1.0) * ratio)
         item = None
         coins = 0
         dust = 0
@@ -1276,7 +1291,7 @@ class DungeonEngine:
             dust = int(spec.get("dust_reward", 0) * level_bonus * self.echo_multiplier(state.echoes, "dust_mult"))
             item = self.generate_item(rng, floor, sockets_bonus=int(spec.get("loot_bonus", 0) * level_bonus))
         else:
-            drop_chance = min(self.cfg["drop_chance_max"], self.cfg["drop_chance_base"] + floor * self.cfg["drop_chance_per_floor"])
+            drop_chance = min(self.cfg["drop_chance_max"], self.cfg["drop_chance_base"] + floor * self.cfg["drop_chance_per_floor"]) * ratio
             drop_chance *= shifts.get("loot_mult", 1.0)
             drop_chance += shifts.get("loot_chance", 0.0)
             if rng.random() < drop_chance:
@@ -1444,11 +1459,52 @@ class DungeonEngine:
         if state.player.max_energy > 0:
             state.player.energy = min(state.player.max_energy, state.player.energy + self.energy_regen(state.player))
 
-    def auto_sim_rewards(self, floor: int, level: int, ratio: float, rng: random.Random) -> dict:
+    def auto_sim_rewards(self, floor: int, level: int, ratio: float, rng: random.Random, anchor: int = 0) -> dict:
         gold = int(self.gold_reward(floor) * ratio)
-        xp = int(self.xp_reward(floor, level) * ratio)
-        item = self.generate_item(rng, floor) if rng.random() < 0.15 * ratio else None
+        xp = int(self.xp_reward(floor, level, anchor) * ratio)
+        chance = float(self.cfg.get("auto_sim_drop_chance", 0.15)) * ratio
+        item = self.generate_item(rng, floor) if rng.random() < chance else None
         return {"gold": max(0, gold), "xp": max(0, xp), "item": item}
+
+    def power_skip_spec(self) -> dict:
+        return self.cfg.get("power_skip", {})
+
+    def simulate_battle(self, user: dict, items: list[dict], mutations: dict, floor: int, echoes: Optional[dict] = None, tier: Optional[int] = None) -> dict:
+        spec = self.power_skip_spec()
+        limit = max(1, int(spec.get("max_turns", 8)))
+        attempts = max(1, int(spec.get("attempts", 3)))
+        skill = self.resolve_skill_id(user.get("active_skill"), int(user.get("level", 1)))
+        worst = {"win": True, "turns": 0, "hp_ratio": 1.0}
+        for index in range(attempts):
+            seed = (int(user.get("user_id", 0)) * 1000003 + int(floor) * 7919 + index * 2654435761) & 0xFFFFFFFF
+            rng = random.Random(seed)
+            if tier is None:
+                state = self.start_floor(user, items, mutations, floor, None, skill, 0, seed=seed, echoes=echoes)
+            else:
+                state = self.start_boss(user, items, mutations, tier, None, skill, 0, seed=seed, echoes=echoes)
+            state.player.hp = state.player.max_hp
+            while state.stage == "active" and state.turn < limit:
+                self.player_action(state, "attack", None, rng)
+            worst["win"] = worst["win"] and state.stage == "victory"
+            worst["turns"] = max(worst["turns"], state.turn)
+            worst["hp_ratio"] = min(worst["hp_ratio"], state.player.hp / max(1, state.player.max_hp))
+        return worst
+
+    def is_crushing(self, user: dict, items: list[dict], mutations: dict, floor: int, echoes: Optional[dict] = None, tier: Optional[int] = None) -> bool:
+        spec = self.power_skip_spec()
+        if not spec.get("enabled", False):
+            return False
+        if tier is None and self.is_gate_floor(floor):
+            return False
+        outcome = self.simulate_battle(user, items, mutations, floor, echoes=echoes, tier=tier)
+        return bool(outcome["win"] and outcome["hp_ratio"] >= float(spec.get("min_hp_ratio", 0.8)))
+
+    def prepare_auto_victory(self, state: BattleState, ratio: float, rng: random.Random) -> BattleState:
+        rt = Runtime(self, state, rng)
+        state.stage = "victory"
+        rt.log("⚡ El enemigo cae antes de que puedas desenvainar.")
+        self.finalize(rt, ratio)
+        return state
 
     def roll_socket_mod(self, item: dict, rng: random.Random) -> dict:
         rarity = self.data["rarities"].get(item.get("rarity", "comun"), {})
@@ -1476,6 +1532,7 @@ class DungeonEngine:
             no_potions=bool(shift_effects.get("no_potions")),
             mutations=mutations,
             echoes=echoes or {},
+            prestige_anchor=int(user.get("prestige_anchor", 0) or 0),
             **flags,
         )
         rt = Runtime(self, state, random.Random(seed))

@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS dungeon_users
     training_enabled INTEGER   NOT NULL DEFAULT 0,
     training_since   TIMESTAMP,
     runs            INTEGER   NOT NULL DEFAULT 0,
+    prestige_anchor INTEGER   NOT NULL DEFAULT 0,
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
