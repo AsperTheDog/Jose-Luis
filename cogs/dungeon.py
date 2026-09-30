@@ -913,7 +913,7 @@ class DungeonCog(commands.Cog):
                 ("⭐ Mejoras", mejoras),
                 ("🧪 Pociones", f"Cuestan **{fmt_int(cfg['potion_price_base'])} × {cfg['potion_price_growth']:g}** por nivel y curan {_pct(cfg['potion_heal_ratio'])} de tu vida máxima."),
                 (f"{self.boss_coin_emoji} {self.boss_coin}", f"{data['terms']['boss_currency']['desc']} Cada jefe superado da **{cfg['boss_coin_per_tier']}** por su nivel, y se gastan en `/mazmorra trofeos`: insignias, acentos y enclaves."),
-                ("💱 Canjear", f"1 {self.boss_coin_emoji} = **{cfg['conversion_rate']}** Choskris. Cada día cambias **{fmt_int(cfg['conversion_soft_cap_base'])}** Choskris a ritmo completo (ese tramo crece ×{cfg['conversion_soft_cap_growth']:g} por jefe superado, hasta {fmt_int(cfg['conversion_soft_cap_max'])}), y a partir de ahí cada tramo va a **{_pct(cfg['conversion_decay'])}** del anterior: el día se acerca a un techo en vez de cortarse." + ("" if cfg.get("conversion_enabled", True) else " *Ahora mismo está en mantenimiento.*")),
+                ("💱 Canjear", f"1 {self.boss_coin_emoji} = **{cfg['conversion_rate']}** Choskris. Cada día tienes un **tope de {fmt_int(cfg['conversion_daily_base'])} Choskris**, que crece ×{cfg['conversion_daily_growth']:g} por cada jefe superado hasta un máximo de {fmt_int(cfg['conversion_daily_max'])}: `/mazmorra canjear` convierte todo lo que quepa y el resto de {self.boss_coin} se queda para `/mazmorra trofeos`.\n```\ntier:  " + "  ".join(f"{t}:{fmt_int(self.engine.conversion_allowance(t))}" for t in (1, 2, 3, 4, 5, 6)) + "\n```" + ("" if cfg.get("conversion_enabled", True) else " *Ahora mismo está en mantenimiento.*")),
                 ("✨ Polvo", "Se gana al renacer (`/mazmorra prestigio`) y se gasta en mutaciones y Ecos."),
             ]
         return []
@@ -1630,8 +1630,7 @@ class DungeonCog(commands.Cog):
         level = int(user["level"])
         xp_needed = self.engine.level_xp_needed(level)
         tier = int(user["boss_tier"])
-        cap = self.engine.conversion_soft_cap(tier)
-        techo = self.engine.conversion_daily_max(tier)
+        allowance = self.engine.conversion_allowance(tier)
         today = datetime.date.today().isoformat()
         used = int(user["conversion_used"]) if user.get("conversion_date") == today else 0
 
@@ -1664,14 +1663,15 @@ class DungeonCog(commands.Cog):
         if catchup > 1.0:
             progress_lines.append(f"**Impulso de renacimiento:** ×{catchup:.2f} XP hasta el piso **{anchor}**")
         embed.add_field(name="🗺️ Progreso", value="\n".join(progress_lines), inline=True)
-        ritmo = f"**Ritmo completo hoy:** {fmt_int(used)}/{fmt_int(cap)} Choskris" if used < cap else f"**Ritmo completo hoy:** agotado ({fmt_int(cap)} Choskris)"
+        ritmo = (f"**Tope de hoy:** {fmt_int(used)}/{fmt_int(allowance)} Choskris · quedan **{fmt_int(max(0, allowance - used))}**"
+                 if used < allowance else f"**Tope de hoy:** agotado ({fmt_int(allowance)} Choskris) · se reinicia a medianoche")
         embed.add_field(
             name="💰 Economía",
             value=(f"**{self.coin}:** {fmt_int(int(user['gold']))}\n"
                    f"**{self.boss_coin}:** {fmt_int(int(user['boss_coins']))}\n"
                    f"**Cambio:** 1 {self.boss_coin_emoji} = {self.engine.cfg['conversion_rate']} Choskris\n"
                    f"{ritmo}\n"
-                   f"**Techo del día:** ~{fmt_int(techo)} Choskris"),
+                   f"**Tope por jefe superado:** ×{self.engine.cfg['conversion_daily_growth']:g} (máx {fmt_int(self.engine.cfg['conversion_daily_max'])} Choskris/día)"),
             inline=False,
         )
 
@@ -1905,8 +1905,8 @@ class DungeonCog(commands.Cog):
         return min(items, key=lambda item: (len(item["sockets"]), -order.get(item["rarity"], 0)))
 
     @mazmorra_group.command(name="canjear", description="Canjea lo que sueltan los jefes por Choskris (tope diario).")
-    @app_commands.describe(cantidad="Cuánto quieres canjear.")
-    async def convert(self, interaction: discord.Interaction, cantidad: app_commands.Range[int, 1, 1_000_000]) -> None:
+    @app_commands.describe(cantidad="Cuántos Núcleos canjear (por defecto, todo lo que quepa en el tope de hoy).")
+    async def convert(self, interaction: discord.Interaction, cantidad: Optional[int] = None) -> None:
         if not bool(self.engine.cfg.get("conversion_enabled", True)):
             await interaction.response.send_message("🔧 Este comando está en mantenimiento 🔧", ephemeral=True)
             return
@@ -1914,35 +1914,47 @@ class DungeonCog(commands.Cog):
         user_id = interaction.user.id
         user = await self.repo.get_user(user_id)
         tier = int(user["boss_tier"])
-        cap = self.engine.conversion_soft_cap(tier)
         rate = int(self.engine.cfg["conversion_rate"])
+        allowance = self.engine.conversion_allowance(tier)
         today = datetime.date.today().isoformat()
         used = int(user["conversion_used"]) if user.get("conversion_date") == today else 0
-        coins = min(int(cantidad), int(user["boss_coins"]))
+        disponible = max(0, allowance - used)
+        if disponible < rate:
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    description=(f"⚠️ Ya has canjeado los **{fmt_int(allowance)}** Choskris de hoy.\n"
+                                 "Mañana vuelve a empezar de cero; tus " f"{self.boss_coin_emoji} no se gastan ni caducan."),
+                    color=discord.Color.orange(),
+                ),
+                ephemeral=True,
+            )
+            return
+        coins = int(user["boss_coins"])
         if coins <= 0:
             await interaction.response.send_message(embed=discord.Embed(description=f"⚠️ No tienes {self.boss_coin} suficientes.", color=discord.Color.orange()), ephemeral=True)
             return
-        money = self.engine.conversion_value(coins, used, tier)
-        if money <= 0:
-            await interaction.response.send_message(embed=discord.Embed(description="⚠️ Ya has exprimido el cambio de hoy: mañana vuelve a empezar a ritmo completo.", color=discord.Color.orange()), ephemeral=True)
+        pedido = coins if cantidad is None else min(int(cantidad), coins)
+        taken, money = self.engine.conversion_quote(pedido, used, tier)
+        if taken <= 0:
+            await interaction.response.send_message(embed=discord.Embed(description="⚠️ Con esa cantidad no hay nada que canjear.", color=discord.Color.orange()), ephemeral=True)
             return
-        usable = self.engine.conversion_usable_coins(coins, used, tier)
-        sobra = coins - usable
-        coins = usable
-        if not await self.repo.spend_boss_coins(user_id, coins):
+        sobra = coins - taken
+        if not await self.repo.spend_boss_coins(user_id, taken):
             await interaction.response.send_message(embed=discord.Embed(description=f"⚠️ No tienes {self.boss_coin} suficientes.", color=discord.Color.orange()), ephemeral=True)
             return
-        spent_value = used + coins * rate
-        await self.repo.update_user(user_id, conversion_date=today, conversion_used=spent_value)
+        await self.repo.update_user(user_id, conversion_date=today, conversion_used=used + money)
         await self.bot.db.economy.update_balance(user_id, money)
-        await self.bot.global_stats.register_dungeon_conversion(user_id, coins, money)
+        await self.bot.global_stats.register_dungeon_conversion(user_id, taken, money)
         balance = await self.bot.db.economy.get_balance(user_id)
-        detalle = f"\nHoy llevas **{fmt_int(spent_value)}** de {fmt_int(cap)} a ritmo completo." if spent_value <= cap else f"\nYa pasaste el tramo completo ({fmt_int(cap)}): el resto ha ido bajando de ritmo."
-        aviso = f"\n⚠️ Más allá de ahí el cambio ya no paga nada, así que te has quedado con **{fmt_int(sobra)}** {self.boss_coin_emoji} intactos." if sobra else ""
+        restante = allowance - (used + money)
+        detalle = f"Te quedan **{fmt_int(restante)}** Choskris de tope hoy." if restante >= rate else "Has agotado el tope de hoy."
+        aviso = (f" Han quedado **{fmt_int(sobra)}** {self.boss_coin_emoji} fuera: no cabían en el tope de hoy."
+                 f" Guárdalos para `/mazmorra trofeos` o vuelve mañana.") if sobra else ""
         await interaction.response.send_message(
             embed=discord.Embed(
                 title="💱 Canje completado",
-                description=(f"Canjeaste **{fmt_int(coins)}** {self.boss_coin_emoji} por **{fmt_int(money)}** Choskris.{detalle}{aviso}\n"
+                description=(f"Canjeaste **{fmt_int(taken)}** {self.boss_coin_emoji} por **{fmt_int(money)}** Choskris.\n"
+                             f"{detalle}{aviso}\n"
                              f"Saldo actual: **{fmt_int(balance)}** Choskris."),
                 color=discord.Color.green(),
             )
@@ -2475,7 +2487,7 @@ class DungeonCog(commands.Cog):
             name="⚔️ Bucle principal",
             value=(f"`/mazmorra explorar` - pelea; cada piso requiere derrotar {max(1, int(self.engine.cfg['enemies_per_floor']))} enemigos para despejarlo.\n"
                    f"Si tu poder aplasta al del piso, el combate se resuelve al instante (**⚡ Descenso Exprés**) y encadenas pisos hasta que la cosa se ponga seria; ahí el botín se paga al {_pct(self.engine.power_skip_spec().get('reward_ratio', 1.0))}.\n"
-                   "`/mazmorra jefe` - desafía al Jefe que bloquea cada 10 pisos (6h de espera tras ganar).\n"
+                   f"`/mazmorra jefe` - desafía al Jefe que bloquea cada {self.engine.cfg['boss_interval']} pisos ({self.engine.cfg['boss_cooldown_hours']}h de espera tras ganar).\n"
                    "`/mazmorra avanzar` y `/mazmorra ajustes` - controlan el avance automático de piso.\n"
                    "`/mazmorra entrenar`, `/mazmorra practicar` y `/mazmorra anomalia` - requieren mutaciones."),
             inline=False,
@@ -2488,8 +2500,11 @@ class DungeonCog(commands.Cog):
         )
         embed.add_field(
             name="💱 Economía",
-            value=(f"Los {self.coin} se quedan dentro del sistema. Los {self.boss_coin} se pueden canjear por Choskris "
-                   "con `/mazmorra canjear`: cada día hay un tramo a ritmo completo y, pasado ese tramo, el cambio va bajando de ritmo en vez de cortarse."),
+            value=(f"Los {self.coin} se quedan dentro del sistema. Los {self.boss_coin} se canjean por Choskris "
+                   f"con `/mazmorra canjear`: cada día hay un **tope de cambio** que empieza en "
+                   f"{fmt_int(self.engine.cfg['conversion_daily_base'])} Choskris y crece ×{self.engine.cfg['conversion_daily_growth']:g} "
+                   f"por jefe superado (máx {fmt_int(self.engine.cfg['conversion_daily_max'])}/día), así que el canje no se descontrola. "
+                   f"Lo que no quepa en el tope se queda en {self.boss_coin} para `/mazmorra trofeos`."),
             inline=False,
         )
         embed.add_field(

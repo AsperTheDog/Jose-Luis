@@ -305,48 +305,17 @@ class DungeonEngine:
             return 0
         return int((floor / self.cfg["dust_divisor"]) ** self.cfg["dust_exponent"])
 
-    def conversion_soft_cap(self, tier: int) -> int:
-        tier = max(1, int(tier))
-        cap = self.cfg["conversion_soft_cap_base"] * grow(self.cfg["conversion_soft_cap_growth"], tier - 1)
-        return int(min(self.cfg["conversion_soft_cap_max"], cap))
+    def conversion_allowance(self, tier: int) -> int:
+        base = float(self.cfg.get("conversion_daily_base", 0.0))
+        growth = float(self.cfg.get("conversion_daily_growth", 1.0))
+        ceiling = float(self.cfg.get("conversion_daily_max", base))
+        return max(0, int(min(ceiling, base * grow(growth, max(0, int(tier) - 1), 1e12))))
 
-    def conversion_daily_max(self, tier: int) -> int:
-        decay = self.conversion_decay()
-        return int(self.conversion_soft_cap(tier) / (1.0 - decay))
-
-    def conversion_decay(self) -> float:
-        return min(0.99, max(0.05, float(self.cfg.get("conversion_decay", 0.5))))
-
-    def conversion_value(self, coins: int, used: int, tier: int) -> int:
-        rate = float(self.cfg["conversion_rate"])
-        cap = max(1.0, float(self.conversion_soft_cap(tier)))
-        decay = self.conversion_decay()
-        pending = max(0.0, int(coins) * rate)
-        paid = 0.0
-        position = max(0.0, float(used))
-        while pending > 0:
-            take = min(pending, max(1.0, cap - position % cap))
-            factor = decay ** int(position // cap)
-            paid += take * factor
-            pending -= take
-            position += take
-            if factor <= 1e-6:
-                break
-        return int(paid)
-
-    def conversion_usable_coins(self, coins: int, used: int, tier: int) -> int:
-        coins = max(0, int(coins))
-        paid = self.conversion_value(coins, used, tier)
-        if paid <= 0:
-            return 0
-        low, high = 1, coins
-        while low < high:
-            middle = (low + high) // 2
-            if self.conversion_value(middle, used, tier) >= paid:
-                high = middle
-            else:
-                low = middle + 1
-        return low
+    def conversion_quote(self, coins: int, used: int, tier: int) -> tuple[int, int]:
+        rate = max(1, int(self.cfg.get("conversion_rate", 1)))
+        room = max(0, self.conversion_allowance(tier) - max(0, int(used)))
+        taken = min(max(0, int(coins)), room // rate)
+        return taken, taken * rate
 
     def potion_price(self, level: int) -> int:
         return int(self.cfg["potion_price_base"] * grow(self.cfg["potion_price_growth"], max(0, level - 1)))
