@@ -169,12 +169,50 @@ class StreamerNotifierCog(commands.Cog):
                     print(f"Suscrito exitosamente al broadcaster ID {broadcaster_id}")
                     return
 
+                if resp.status == 409:
+                    return
+
                 body = await resp.text()
                 if resp.status == 401 and attempt == 0:
                     await self._get_user_access_token()
                     continue
 
                 raise TwitchAPIError(f"suscribirse al broadcaster ID {broadcaster_id}", resp.status, body)
+
+    async def _unsubscribe_from_streamer(self, broadcaster_id: str) -> None:
+        if not self.access_token:
+            await self._get_user_access_token()
+
+        url = "https://api.twitch.tv/helix/eventsub/subscriptions"
+        action = f"cancelar la suscripción del broadcaster ID {broadcaster_id}"
+
+        for attempt in range(2):
+            headers = {
+                "Client-ID": self.client_id,
+                "Authorization": f"Bearer {self.access_token}",
+            }
+            params = {"type": "stream.online", "user_id": str(broadcaster_id)}
+            async with self.session.get(url, headers=headers, params=params) as resp:
+                if resp.status == 401 and attempt == 0:
+                    await self._get_user_access_token()
+                    continue
+
+                if resp.status != 200:
+                    raise TwitchAPIError(action, resp.status, await resp.text())
+
+                data = await resp.json()
+            break
+
+        subscription_ids = [
+            subscription["id"]
+            for subscription in data.get("data", [])
+            if subscription.get("condition", {}).get("broadcaster_user_id") == str(broadcaster_id)
+        ]
+
+        for subscription_id in subscription_ids:
+            async with self.session.delete(url, headers=headers, params={"id": subscription_id}) as resp:
+                if resp.status not in (204, 404):
+                    raise TwitchAPIError(action, resp.status, await resp.text())
 
     async def sync_all_subscriptions(self, session_id: str) -> None:
         self.active_session_id = session_id
@@ -328,7 +366,7 @@ class StreamerNotifierCog(commands.Cog):
             if kick_user:
                 msg += f" (Enlace de Kick: https://kick.com/{kick_user})"
         else:
-            msg = f"⚠️ Guardado **{twitch_user}**, pero falló la suscripción EventSub (HTTP {subscription_error.status}). El error se ha enviado al canal de depuración."
+            msg = f"⚠️ Guardado **{twitch_user}**, pero falló la suscripción EventSub (HTTP {subscription_error.status})."
 
         await interaction.followup.send(msg, ephemeral=True)
 
@@ -339,12 +377,36 @@ class StreamerNotifierCog(commands.Cog):
 
         twitch_user = twitch.strip().lower()
 
+        await interaction.response.defer(ephemeral=True)
+
         deleted = await self.bot.db.twitch.remove_tracked_streamer(interaction.guild_id, twitch_user)
 
         if not deleted:
-            await interaction.response.send_message(f"**{twitch_user}** no estaba en la lista", ephemeral=True)
+            await interaction.followup.send(f"**{twitch_user}** no estaba en la lista", ephemeral=True)
+            return
+
+        unsubscribe_error: Optional[TwitchAPIError] = None
+        if twitch_user not in await self.bot.db.twitch.get_tracked_streamers():
+            try:
+                broadcaster_id = await self._get_broadcaster_id(twitch_user)
+                if broadcaster_id:
+                    await self._unsubscribe_from_streamer(broadcaster_id)
+            except TwitchAPIError as error:
+                unsubscribe_error = error
+                await self.bot.report_exception(
+                    error,
+                    source="slash",
+                    command_name="streams quitar",
+                    guild=interaction.guild,
+                    user=interaction.user,
+                    channel=interaction.channel,
+                    arguments=describe_arguments(interaction),
+                )
+
+        if unsubscribe_error is None:
+            await interaction.followup.send(f"Notificaciones desactivadas para **{twitch_user}**.", ephemeral=True)
         else:
-            await interaction.response.send_message(f"Notificaciones desactivadas para **{twitch_user}**.", ephemeral=True)
+            await interaction.followup.send(f"⚠️ Eliminado **{twitch_user}**, pero falló la cancelación de la suscripción EventSub (HTTP {unsubscribe_error.status}). El error se ha enviado al canal de depuración.", ephemeral=True)
 
     @streamer_group.command(name="lista", description="Muestra los streamers configurados")
     async def list_streamers(self, interaction: discord.Interaction):
