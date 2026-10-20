@@ -10,22 +10,37 @@ from main import JoseLuisBot
 
 
 class EraseConfirmModal(discord.ui.Modal):
-    def __init__(self, bot: JoseLuisBot, target: discord.User):
+    def __init__(self, bot: JoseLuisBot, target_id: int):
         super().__init__(title="Confirmar borrado")
         self.bot = bot
-        self.target = target
+        self.target_id = target_id
         self.user_id_input = discord.ui.TextInput(
-            label=f"Escribe el ID {target.id} para confirmar",
-            placeholder=str(target.id),
+            label=f"Escribe el ID {target_id} para confirmar",
+            placeholder=str(target_id),
             min_length=1,
             max_length=32,
         )
         self.add_item(self.user_id_input)
+        self.balance_input = discord.ui.TextInput(
+            label="¿Cuántos choskris tiene? (100 si no tiene perfil)",
+            placeholder="Mira su saldo con /choskris",
+            min_length=1,
+            max_length=32,
+        )
+        self.add_item(self.balance_input)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        if self.user_id_input.value.strip() != str(self.target.id):
+        if self.user_id_input.value.strip() != str(self.target_id):
             await interaction.response.send_message(
                 embed=discord.Embed(description="❌ El ID no coincide. No se ha borrado nada.", color=discord.Color.red()),
+                ephemeral=True,
+            )
+            return
+        balance = await self.bot.db.economy.peek_balance(self.target_id)
+        typed_balance = "".join(character for character in self.balance_input.value if character.isdigit())
+        if typed_balance != str(balance):
+            await interaction.response.send_message(
+                embed=discord.Embed(description="❌ La cantidad de choskris no coincide. No se ha borrado nada.", color=discord.Color.red()),
                 ephemeral=True,
             )
             return
@@ -33,12 +48,12 @@ class EraseConfirmModal(discord.ui.Modal):
             embed=discord.Embed(description="⏳ Borrando datos...", color=discord.Color.orange()),
             view=None,
         )
-        counts = await self.bot.db.merger.erase(self.target.id)
-        self.bot.scientific_users.discard(self.target.id)
+        counts = await self.bot.db.merger.erase(self.target_id)
+        self.bot.scientific_users.discard(self.target_id)
         await interaction.edit_original_response(
             embed=discord.Embed(
                 title="🗑️ Datos borrados",
-                description=f"Se han borrado **{sum(counts.values())} filas** de {self.target.mention}.",
+                description=f"Se han borrado **{sum(counts.values())} filas** de <@{self.target_id}>.",
                 color=discord.Color.dark_green(),
             ),
             view=None,
@@ -46,11 +61,11 @@ class EraseConfirmModal(discord.ui.Modal):
 
 
 class EraseUserView(discord.ui.View):
-    def __init__(self, bot: JoseLuisBot, author_id: int, target: discord.User):
+    def __init__(self, bot: JoseLuisBot, author_id: int, target_id: int):
         super().__init__(timeout=120)
         self.bot = bot
         self.author_id = author_id
-        self.target = target
+        self.target_id = target_id
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
@@ -63,7 +78,7 @@ class EraseUserView(discord.ui.View):
 
     @discord.ui.button(label="Borrar todo", style=discord.ButtonStyle.danger, emoji="🗑️")
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(EraseConfirmModal(self.bot, self.target))
+        await interaction.response.send_modal(EraseConfirmModal(self.bot, self.target_id))
 
     @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -238,16 +253,25 @@ class UtilityCog(commands.Cog):
 
     @utility_group.command(name="borrardatos", description="Borra todos tus datos en el bot (el dueño puede borrar los de cualquiera)")
     @app_commands.describe(usuario="Usuario cuyos datos se van a borrar (EH TU, QUITA DE AQUI SI NO ERES ASPER)")
-    async def erase_user_data(self, interaction: discord.Interaction, usuario: Optional[discord.User] = None):
-        usuario = usuario or interaction.user
-        if usuario.id != interaction.user.id and await self.bot.filter_owner(interaction): return
+    async def erase_user_data(self, interaction: discord.Interaction, usuario: Optional[str] = None):
+        if usuario is None or not usuario.strip():
+            target_id = interaction.user.id
+        elif usuario.strip().isdecimal() and 0 < int(usuario.strip()) < 2**64:
+            target_id = int(usuario.strip())
+        else:
+            await interaction.response.send_message(
+                embed=discord.Embed(description="❌ El ID no es válido: debe ser un número.", color=discord.Color.red()),
+                ephemeral=True,
+            )
+            return
+        if target_id != interaction.user.id and await self.bot.filter_owner(interaction): return
 
         await interaction.response.defer(ephemeral=True)
-        counts = await self.bot.db.merger.preview(usuario.id)
+        counts = await self.bot.db.merger.preview(target_id)
 
         if not counts:
             await interaction.followup.send(
-                embed=discord.Embed(description=f"❌ {usuario.mention} no tiene ningún dato registrado.", color=discord.Color.red()),
+                embed=discord.Embed(description=f"❌ <@{target_id}> no tiene ningún dato registrado.", color=discord.Color.red()),
                 ephemeral=True,
             )
             return
@@ -255,14 +279,14 @@ class UtilityCog(commands.Cog):
         embed = discord.Embed(
             title="🗑️ Borrar datos de usuario",
             description=(
-                f"Se borrarán **{sum(counts.values())} filas** de {usuario.mention}.\n\n"
+                f"Se borrarán **{sum(counts.values())} filas** de <@{target_id}>.\n\n"
                 "**Es irreversible.** Su cuenta de Discord no se toca, solo sus datos en el bot.\n\n"
-                f"Para confirmar tendrás que escribir su ID: `{usuario.id}`"
+                f"Para confirmar tendrás que escribir su ID (`{target_id}`) y cuántos choskris tiene ahora mismo (100 si no tiene perfil de economía)."
             ),
             color=discord.Color.dark_red(),
         )
         embed.add_field(name="Tablas afectadas", value="\n".join(f"`{table}`: {count}" for table, count in counts.items()), inline=False)
-        await interaction.followup.send(embed=embed, view=EraseUserView(self.bot, interaction.user.id, usuario), ephemeral=True)
+        await interaction.followup.send(embed=embed, view=EraseUserView(self.bot, interaction.user.id, target_id), ephemeral=True)
 
     @utility_group.command(name="error")
     async def causeerror(self, interaction: discord.Interaction):

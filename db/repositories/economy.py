@@ -51,6 +51,11 @@ class EconomyRepository(BaseRepository):
         async with self._db.execute("SELECT balance FROM economy_users WHERE user_id = ?", (user_id,)) as c:
             return (await c.fetchone())[0]
 
+    async def peek_balance(self, user_id: int, default: int = 100) -> int:
+        async with self._db.execute("SELECT balance FROM economy_users WHERE user_id = ?", (user_id,)) as c:
+            row = await c.fetchone()
+        return int(row[0]) if row else default
+
     async def update_balance(self, user_id: int, amount: int) -> None:
         await self.ensure_user(user_id)
         await self._db.execute("UPDATE economy_users SET balance = MAX(0, balance + ?) WHERE user_id = ?", (int(amount), user_id))
