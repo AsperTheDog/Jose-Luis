@@ -10,20 +10,20 @@ from main import JoseLuisBot
 
 
 class EraseConfirmModal(discord.ui.Modal):
-    def __init__(self, bot: JoseLuisBot, target_id: int):
+    def __init__(self, bot: JoseLuisBot, target_id: int, balance: int):
         super().__init__(title="Confirmar borrado")
         self.bot = bot
         self.target_id = target_id
         self.user_id_input = discord.ui.TextInput(
-            label=f"Escribe el ID {target_id} para confirmar",
-            placeholder=str(target_id),
+            label="ID del usuario",
+            placeholder=f"Escribe {target_id}",
             min_length=1,
             max_length=32,
         )
         self.add_item(self.user_id_input)
         self.balance_input = discord.ui.TextInput(
-            label="¿Cuántos choskris tiene? (100 si no tiene perfil)",
-            placeholder="Mira su saldo con /choskris",
+            label="Cantidad de choskris",
+            placeholder=f"Escribe {balance}",
             min_length=1,
             max_length=32,
         )
@@ -78,7 +78,7 @@ class EraseUserView(discord.ui.View):
 
     @discord.ui.button(label="Borrar todo", style=discord.ButtonStyle.danger, emoji="🗑️")
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(EraseConfirmModal(self.bot, self.target_id))
+        await interaction.response.send_modal(EraseConfirmModal(self.bot, self.target_id, await self.bot.db.economy.peek_balance(self.target_id)))
 
     @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -276,12 +276,13 @@ class UtilityCog(commands.Cog):
             )
             return
 
+        balance = await self.bot.db.economy.peek_balance(target_id)
         embed = discord.Embed(
             title="🗑️ Borrar datos de usuario",
             description=(
                 f"Se borrarán **{sum(counts.values())} filas** de <@{target_id}>.\n\n"
                 "**Es irreversible.** Su cuenta de Discord no se toca, solo sus datos en el bot.\n\n"
-                f"Para confirmar tendrás que escribir su ID (`{target_id}`) y cuántos choskris tiene ahora mismo (100 si no tiene perfil de economía)."
+                f"Para confirmar tendrás que escribir su ID (`{target_id}`) y su cantidad de choskris (`{balance}`)."
             ),
             color=discord.Color.dark_red(),
         )
