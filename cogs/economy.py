@@ -9,6 +9,7 @@ from typing import Optional
 
 from db import BotDatabase
 from main import JoseLuisBot
+from number_format import format_number
 from stats import StatsTracker
 
 
@@ -231,7 +232,7 @@ class EconomyCog(commands.Cog):
 
         embed = discord.Embed(title=f"💳 Perfil Económico de {target_user.display_name}", color=0xe74c3c if in_jail else 0x2ecc71)
         embed.set_thumbnail(url=target_user.display_avatar.url)
-        embed.add_field(name="💰 Finanzas", value=f"**Saldo:** `{user_data['balance']:,}` choskris", inline=False)
+        embed.add_field(name="💰 Finanzas", value=f"**Saldo:** `{format_number(user_data['balance'])}` choskris", inline=False)
         embed.add_field(name="💼 Carrera Profesional", value=trabajo_val, inline=True)
         embed.add_field(name="⚖️ Situación Legal", value=estado_legal, inline=True)
         embed.add_field(name="🔥 Rachas Activas", value=f"📆 *Paga Diaria:* {user_data['daily_streak']} días\n🥷 *Racha Criminal:* {user_data['crime_streak']} éxitos", inline=False)
@@ -514,7 +515,7 @@ class EconomyCog(commands.Cog):
 
         user_data = await self.bot.db.economy.get_user_data(interaction.user.id)
         if user_data['balance'] < cantidad:
-            await interaction.followup.send(embed=discord.Embed(title="💸 Transferencia", description=f"{phrase}Saldo insuficiente. Tienes **{user_data['balance']:,}** choskris y quieres enviar **{cantidad:,}**.", color=discord.Color.red()))
+            await interaction.followup.send(embed=discord.Embed(title="💸 Transferencia", description=f"{phrase}Saldo insuficiente. Tienes **{format_number(user_data['balance'])}** choskris y quieres enviar **{format_number(cantidad)}**.", color=discord.Color.red()))
             return
 
         await self.bot.db.economy.transfer_balance(interaction.user.id, destinatario.id, cantidad)
@@ -522,7 +523,7 @@ class EconomyCog(commands.Cog):
         await self.bot.global_stats.register_money_gift_receive(destinatario.id, cantidad)
 
         phrase = await self.bot.db.phrases.get_random_phrase("pay_success")
-        msg = f"{phrase}¡{interaction.user.mention} le ha enviado **{cantidad:,}** choskris a {destinatario.mention}!"
+        msg = f"{phrase}¡{interaction.user.mention} le ha enviado **{format_number(cantidad)}** choskris a {destinatario.mention}!"
 
         current_balance = await self.bot.db.economy.get_balance(interaction.user.id)
         msg += f"\n💰 Saldo actual: **{current_balance}**"
@@ -552,7 +553,7 @@ class EconomyCog(commands.Cog):
 
         await interaction.followup.send(
             content=destinatario.mention,
-            embed=discord.Embed(title="💸 Generación Estampónea", description=f"✅ Has generado **{cantidad:,}** choskris para {destinatario.mention}.", color=discord.Color.green())
+            embed=discord.Embed(title="💸 Generación Estampónea", description=f"✅ Has generado **{format_number(cantidad)}** choskris para {destinatario.mention}.", color=discord.Color.green())
         )
 
     @economy_group.command(name="interes", description="Reclama los intereses generados por tus ahorros")
@@ -572,7 +573,7 @@ class EconomyCog(commands.Cog):
 
         await self.bot.global_stats.register_interest_payout(user_id, claimed_amount)
         phrase = await self.bot.db.phrases.get_random_phrase("interest_success")
-        message = f"{phrase}Has reclamado **+{claimed_amount:,}** choskris acumulados de intereses."
+        message = f"{phrase}Has reclamado **+{format_number(claimed_amount)}** choskris acumulados de intereses."
 
         current_balance = await self.bot.db.economy.get_balance(interaction.user.id)
         message += f"\n💰 Saldo actual: **{current_balance}**"
@@ -603,7 +604,7 @@ class EconomyCog(commands.Cog):
             except (ValueError, TypeError):
                 when = ts
             lines.append(
-                f"{emoji} {sign}{delta:,} choskris · {e['prev_balance']:,} → {e['new_balance']:,} · {when}"
+                f"{emoji} {sign}{format_number(delta)} choskris · {format_number(e['prev_balance'])} → {format_number(e['new_balance'])} · {when}"
             )
 
         await interaction.followup.send(embed=discord.Embed(title="📜 Historial de Transacciones", description="\n".join(lines), color=discord.Color.blue()))

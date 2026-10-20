@@ -2,6 +2,7 @@ import json
 from typing import Any, Optional
 
 from db.repositories.base import BaseRepository
+from dungeon_engine import VALUE_CAP, clamp_value
 
 USER_FIELDS = {
     "floor",
@@ -40,6 +41,12 @@ def _dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
+def _bounded(value: Any) -> Any:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return clamp_value(value)
+    return value
+
+
 def _loads(value: Any, fallback: Any) -> Any:
     if isinstance(value, (dict, list)):
         return value
@@ -64,7 +71,7 @@ class DungeonRepository(BaseRepository):
 
     async def update_user(self, user_id: int, **fields) -> None:
         await self.ensure_user(user_id)
-        updates = {name: value for name, value in fields.items() if name in USER_FIELDS}
+        updates = {name: _bounded(value) for name, value in fields.items() if name in USER_FIELDS}
         if not updates:
             return
         assignments = ", ".join(f"{name} = ?" for name in updates)
@@ -73,7 +80,7 @@ class DungeonRepository(BaseRepository):
 
     async def add_gold(self, user_id: int, amount: int) -> int:
         await self.ensure_user(user_id)
-        await self._db.execute("UPDATE dungeon_users SET gold = MAX(0, gold + ?), updated_at = CURRENT_TIMESTAMP WHERE user_id = ?", (int(amount), user_id))
+        await self._db.execute("UPDATE dungeon_users SET gold = MIN(?, MAX(0, gold + ?)), updated_at = CURRENT_TIMESTAMP WHERE user_id = ?", (VALUE_CAP, clamp_value(amount), user_id))
         await self._db.commit()
         return await self.get_gold(user_id)
 
@@ -83,6 +90,8 @@ class DungeonRepository(BaseRepository):
         return int(row[0]) if row else 0
 
     async def spend_gold(self, user_id: int, amount: int) -> bool:
+        if int(amount) >= VALUE_CAP:
+            return False
         await self.ensure_user(user_id)
         cursor = await self._db.execute("UPDATE dungeon_users SET gold = gold - ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND gold >= ?", (int(amount), user_id, int(amount)))
         await self._db.commit()
@@ -90,15 +99,17 @@ class DungeonRepository(BaseRepository):
 
     async def add_dust(self, user_id: int, amount: int) -> None:
         await self.ensure_user(user_id)
-        await self._db.execute("UPDATE dungeon_users SET dust = MAX(0, dust + ?), updated_at = CURRENT_TIMESTAMP WHERE user_id = ?", (int(amount), user_id))
+        await self._db.execute("UPDATE dungeon_users SET dust = MIN(?, MAX(0, dust + ?)), updated_at = CURRENT_TIMESTAMP WHERE user_id = ?", (VALUE_CAP, clamp_value(amount), user_id))
         await self._db.commit()
 
     async def add_boss_coins(self, user_id: int, amount: int) -> None:
         await self.ensure_user(user_id)
-        await self._db.execute("UPDATE dungeon_users SET boss_coins = MAX(0, boss_coins + ?), updated_at = CURRENT_TIMESTAMP WHERE user_id = ?", (int(amount), user_id))
+        await self._db.execute("UPDATE dungeon_users SET boss_coins = MIN(?, MAX(0, boss_coins + ?)), updated_at = CURRENT_TIMESTAMP WHERE user_id = ?", (VALUE_CAP, clamp_value(amount), user_id))
         await self._db.commit()
 
     async def spend_boss_coins(self, user_id: int, amount: int) -> bool:
+        if int(amount) >= VALUE_CAP:
+            return False
         await self.ensure_user(user_id)
         cursor = await self._db.execute("UPDATE dungeon_users SET boss_coins = boss_coins - ?, updated_at = CURRENT_TIMESTAMP " "WHERE user_id = ? AND boss_coins >= ?", (int(amount), user_id, int(amount)))
         await self._db.commit()

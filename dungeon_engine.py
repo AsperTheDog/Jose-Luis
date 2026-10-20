@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import json
+import math
 import random
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Optional
+
+from number_format import format_integer
 
 DATA_PATH = "dungeon_data.json"
 
 OFFENSIVE_TAGS = {"BURN", "BLEED", "POISON", "STUN", "CHILL", "WEAKEN", "VULNERABLE", "MARK", "CURSE"}
 DEFENSIVE_TAGS = {"RAGE", "FORTIFY", "REGEN", "HASTE", "THORNS"}
 DEFEND_KEY = "defend"
+VALUE_CAP = 2**63 - 1
 
 
 def load_data(path: str = DATA_PATH) -> dict:
@@ -26,7 +30,17 @@ def progress_bar(current: int, maximum: int, size: int = 10, fill: str = "█", 
 
 
 def fmt_int(value: int) -> str:
-    return f"{int(value):,}".replace(",", ".")
+    return format_integer(value)
+
+
+def clamp_value(value: float) -> int:
+    if math.isnan(value):
+        return 0
+    if value >= VALUE_CAP:
+        return VALUE_CAP
+    if value <= -VALUE_CAP:
+        return -VALUE_CAP
+    return int(value)
 
 
 def grow(base: float, exponent: float, cap: float = 1e300) -> float:
@@ -268,17 +282,30 @@ class DungeonEngine:
             adjective = self.pluralize_adjective(adjective)
         return f"{base.get('name', '')} {adjective}".strip()
 
+    def floor_growth(self, base: float, floor: float) -> float:
+        knee = float(self.cfg.get("growth_knee_floor", 0))
+        if knee <= 0 or floor <= knee:
+            return grow(base, floor)
+        exponent = knee * math.log(float(base))
+        return grow(base, knee) * (floor / knee) ** exponent
+
+    def _enemy_raw(self, stat: str, floor: int) -> float:
+        return self.cfg[f"enemy_{stat}_base"] * self.floor_growth(self.cfg[f"enemy_{stat}_growth"], floor)
+
+    def floor_capped(self, floor: int) -> bool:
+        return any(self._enemy_raw(stat, floor) >= VALUE_CAP for stat in ("hp", "dmg", "def"))
+
     def enemy_max_hp(self, floor: int) -> int:
-        return max(1, int(self.cfg["enemy_hp_base"] * grow(self.cfg["enemy_hp_growth"], floor)))
+        return max(1, clamp_value(self._enemy_raw("hp", floor)))
 
     def enemy_attack(self, floor: int) -> int:
-        return max(1, int(self.cfg["enemy_dmg_base"] * grow(self.cfg["enemy_dmg_growth"], floor)))
+        return max(1, clamp_value(self._enemy_raw("dmg", floor)))
 
     def enemy_defense(self, floor: int) -> int:
-        return max(0, int(self.cfg["enemy_def_base"] * grow(self.cfg["enemy_def_growth"], floor)))
+        return max(0, clamp_value(self._enemy_raw("def", floor)))
 
     def level_xp_needed(self, level: int) -> int:
-        return max(1, int(self.cfg["level_xp_base"] * level ** self.cfg["level_xp_exponent"]))
+        return max(1, clamp_value(self.cfg["level_xp_base"] * float(level) ** self.cfg["level_xp_exponent"]))
 
     def xp_multiplier(self, level: int, floor: int) -> float:
         delta = level - floor
@@ -293,17 +320,17 @@ class DungeonEngine:
         return 1.0 + float(self.cfg.get("prestige_catchup_xp_bonus", 0.0)) * taper
 
     def xp_reward(self, floor: int, level: int, anchor: int = 0) -> int:
-        base = self.cfg["xp_base"] * grow(self.cfg["xp_growth"], floor)
+        base = self.cfg["xp_base"] * self.floor_growth(self.cfg["xp_growth"], floor)
         penalized = min(level, floor) if 0 < floor < anchor else level
-        return max(1, int(base * self.xp_multiplier(penalized, floor) * self.catchup_multiplier(floor, anchor)))
+        return max(1, clamp_value(base * self.xp_multiplier(penalized, floor) * self.catchup_multiplier(floor, anchor)))
 
     def gold_reward(self, floor: int) -> int:
-        return max(1, int(self.cfg["gold_base"] * grow(self.cfg["gold_growth"], floor)))
+        return max(1, clamp_value(self.cfg["gold_base"] * self.floor_growth(self.cfg["gold_growth"], floor)))
 
     def dust_for(self, floor: int) -> int:
         if floor <= 0:
             return 0
-        return int((floor / self.cfg["dust_divisor"]) ** self.cfg["dust_exponent"])
+        return clamp_value((floor / self.cfg["dust_divisor"]) ** self.cfg["dust_exponent"])
 
     def conversion_allowance(self, tier: int) -> int:
         base = float(self.cfg.get("conversion_daily_base", 0.0))
@@ -318,14 +345,14 @@ class DungeonEngine:
         return taken, taken * rate
 
     def potion_price(self, level: int) -> int:
-        return int(self.cfg["potion_price_base"] * grow(self.cfg["potion_price_growth"], max(0, level - 1)))
+        return clamp_value(self.cfg["potion_price_base"] * grow(self.cfg["potion_price_growth"], max(0, level - 1)))
 
     def upgrade_cost(self, key: str, current_level: int) -> int:
         spec = self.data["upgrades"][key]
-        return int(spec["cost"] * spec["growth"] ** current_level)
+        return clamp_value(spec["cost"] * grow(spec["growth"], current_level))
 
     def gain_xp(self, level: int, xp: int, amount: int) -> tuple[int, int, int]:
-        xp += max(0, int(amount))
+        xp = min(VALUE_CAP, xp + max(0, int(amount)))
         gained = 0
         while xp >= self.level_xp_needed(level):
             xp -= self.level_xp_needed(level)
@@ -422,10 +449,10 @@ class DungeonEngine:
         mult = 0.75 + 0.25 * float(rarity_spec["stat_mult"])
 
         stats = {
-            "attack": int(self.cfg["gear_attack_base"] * weights.get("attack", 0.0) * mult * grow(self.cfg["gear_attack_growth"], floor)),
-            "defense": int(self.cfg["gear_defense_base"] * weights.get("defense", 0.0) * mult * grow(self.cfg["gear_defense_growth"], floor)),
-            "max_hp": int(self.cfg["gear_hp_base"] * weights.get("max_hp", 0.0) * mult * grow(self.cfg["gear_hp_growth"], floor)),
-            "max_energy": int(self.cfg["gear_energy_base"] * weights.get("max_energy", 0.0) * mult * grow(self.cfg["gear_energy_growth"], floor)),
+            "attack": clamp_value(self.cfg["gear_attack_base"] * weights.get("attack", 0.0) * mult * self.floor_growth(self.cfg["gear_attack_growth"], floor)),
+            "defense": clamp_value(self.cfg["gear_defense_base"] * weights.get("defense", 0.0) * mult * self.floor_growth(self.cfg["gear_defense_growth"], floor)),
+            "max_hp": clamp_value(self.cfg["gear_hp_base"] * weights.get("max_hp", 0.0) * mult * self.floor_growth(self.cfg["gear_hp_growth"], floor)),
+            "max_energy": clamp_value(self.cfg["gear_energy_base"] * weights.get("max_energy", 0.0) * mult * self.floor_growth(self.cfg["gear_energy_growth"], floor)),
             "crit": round(self.cfg["gear_crit_mult"] * weights.get("crit", 0.0) * mult, 4),
         }
         stats = {key: value for key, value in stats.items() if value}
@@ -553,7 +580,7 @@ class DungeonEngine:
         if unit == "kill_gold":
             return float(effect.get("value", 0) or 0) / max(1.0, float(self.gold_reward(floor)))
         if unit == "kill_xp":
-            base = self.cfg["xp_base"] * grow(self.cfg["xp_growth"], floor)
+            base = self.cfg["xp_base"] * self.floor_growth(self.cfg["xp_growth"], floor)
             return float(effect.get("value", 0) or 0) / max(1.0, float(base))
         if unit == "status_total":
             return max(1, int(effect.get("stacks", 1))) * max(1, int(effect.get("turns", 1))) * self.status_weight(effect.get("tag", ""))
@@ -589,7 +616,7 @@ class DungeonEngine:
             cap = int(ceiling * self.gold_reward(floor))
             effect["value"] = max(1, min(int(effect.get("value", 0) or 0), max(1, cap)))
         elif unit == "kill_xp":
-            cap = int(ceiling * self.cfg["xp_base"] * grow(self.cfg["xp_growth"], floor))
+            cap = int(ceiling * self.cfg["xp_base"] * self.floor_growth(self.cfg["xp_growth"], floor))
             effect["value"] = max(1, min(int(effect.get("value", 0) or 0), max(1, cap)))
         elif unit == "status_total":
             weight = max(0.05, self.status_weight(effect.get("tag", "")))
@@ -661,10 +688,10 @@ class DungeonEngine:
         if etype == "CLEANSE":
             return {"type": etype, "target": "self", "value": rng.randint(template["value_min"], template["value_max"])}
         if etype == "GAIN_GOLD":
-            value = int(rng.randint(template["value_min"], template["value_max"]) * grow(self.cfg["gold_growth"], floor * float(template.get("floor_scale", 0.5))))
+            value = int(rng.randint(template["value_min"], template["value_max"]) * self.floor_growth(self.cfg["gold_growth"], floor * float(template.get("floor_scale", 0.5))))
             return {"type": etype, "target": "self", "value": value}
         if etype == "GRANT_XP":
-            return {"type": etype, "target": "self", "value": int(rng.randint(template["value_min"], template["value_max"]) * grow(self.cfg["xp_growth"], floor * float(template.get("floor_scale", 0.5))))}
+            return {"type": etype, "target": "self", "value": int(rng.randint(template["value_min"], template["value_max"]) * self.floor_growth(self.cfg["xp_growth"], floor * float(template.get("floor_scale", 0.5))))}
         if etype == "EXECUTE":
             return {"type": etype, "target": "foe", "pct": round(rng.uniform(template["pct_min"], template["pct_max"]), 2)}
         if etype == "REFLECT":
@@ -755,13 +782,15 @@ class DungeonEngine:
         max_energy = base_energy + gear_energy
         crit += self.echo_flat(echoes, "crit")
 
+        raw = {"attack": attack, "defense": defense, "max_hp": max_hp, "max_energy": max_energy}
         return {
-            "attack": int(attack),
-            "defense": int(defense),
-            "max_hp": int(max_hp),
-            "max_energy": int(max_energy),
+            "attack": clamp_value(attack),
+            "defense": clamp_value(defense),
+            "max_hp": clamp_value(max_hp),
+            "max_energy": clamp_value(max_energy),
             "crit": float(min(cfg["crit_cap"], crit)),
             "mods": mods,
+            "capped": [name for name, value in raw.items() if value >= VALUE_CAP],
         }
 
     def make_player(self, user: dict, items: list[dict], mutations: dict, shift_effects: dict, echoes: Optional[dict] = None) -> Combatant:
@@ -788,14 +817,14 @@ class DungeonEngine:
         if not candidates:
             candidates = self.data["enemy_archetypes"]
         archetype = rng.choices(candidates, weights=[a.get("weight", 10) for a in candidates], k=1)[0]
-        max_hp = max(1, int(self.enemy_max_hp(floor) * archetype["hp"]))
+        max_hp = max(1, clamp_value(self.enemy_max_hp(floor) * archetype["hp"]))
         enemy = Combatant(
             name=archetype["name"],
             emoji=archetype["emoji"],
             max_hp=max_hp,
             hp=max_hp,
-            attack=max(1, int(self.enemy_attack(floor) * archetype["dmg"])),
-            defense=int(self.enemy_defense(floor) * archetype.get("def", 1.0)),
+            attack=max(1, clamp_value(self.enemy_attack(floor) * archetype["dmg"])),
+            defense=clamp_value(self.enemy_defense(floor) * archetype.get("def", 1.0)),
             crit=0.05,
             dodge=0.02,
             archetype=archetype["id"],
@@ -810,14 +839,14 @@ class DungeonEngine:
         floor = tier * self.cfg["boss_interval"]
         bosses = self.data["bosses"]
         spec = bosses[(tier - 1) % len(bosses)]
-        hp = int(self.enemy_max_hp(floor) * spec["hp_mult"] * (1 + self.cfg["boss_hp_tier_growth"] * (tier - 1)))
+        hp = clamp_value(self.enemy_max_hp(floor) * spec["hp_mult"] * (1 + self.cfg["boss_hp_tier_growth"] * (tier - 1)))
         boss = Combatant(
             name=spec["name"],
             emoji=spec["emoji"],
             max_hp=max(1, hp),
             hp=max(1, hp),
-            attack=max(1, int(self.enemy_attack(floor) * spec["dmg_mult"])),
-            defense=int(self.enemy_defense(floor) * 1.2),
+            attack=max(1, clamp_value(self.enemy_attack(floor) * spec["dmg_mult"])),
+            defense=clamp_value(self.enemy_defense(floor) * 1.2),
             crit=0.08,
             dodge=0.0,
             is_boss=True,
@@ -1268,7 +1297,7 @@ class DungeonEngine:
 
         gold += state.bonus_gold
         xp += state.bonus_xp
-        state.rewards = {"gold": max(0, int(gold)), "xp": max(0, int(xp)), "item": item, "coins": int(coins), "dust": int(dust), "floor": floor}
+        state.rewards = {"gold": max(0, clamp_value(gold)), "xp": max(0, clamp_value(xp)), "item": item, "coins": clamp_value(coins), "dust": clamp_value(dust), "floor": floor}
 
     def basic_attack(self, rt: Runtime, actor: Combatant) -> None:
         state = rt.state
@@ -1429,8 +1458,8 @@ class DungeonEngine:
             state.player.energy = min(state.player.max_energy, state.player.energy + self.energy_regen(state.player))
 
     def auto_sim_rewards(self, floor: int, level: int, ratio: float, rng: random.Random, anchor: int = 0) -> dict:
-        gold = int(self.gold_reward(floor) * ratio)
-        xp = int(self.xp_reward(floor, level, anchor) * ratio)
+        gold = clamp_value(self.gold_reward(floor) * ratio)
+        xp = clamp_value(self.xp_reward(floor, level, anchor) * ratio)
         chance = float(self.cfg.get("auto_sim_drop_chance", 0.15)) * ratio
         item = self.generate_item(rng, floor) if rng.random() < chance else None
         return {"gold": max(0, gold), "xp": max(0, xp), "item": item}

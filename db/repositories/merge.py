@@ -48,11 +48,15 @@ IDENTITY_COLUMNS: dict[str, tuple[str, ...]] = {
     "dungeon_active_fight": ("user_id",),
     "dungeon_last_battle": ("user_id",),
     "dungeon_automation": ("user_id",),
+    "user_settings": ("user_id",),
 }
 
 
+SQLITE_MAX_INTEGER = 2**63 - 1
+
+
 def _sum(table: str, column: str) -> str:
-    return f"COALESCE({table}.{column}, 0) + COALESCE(excluded.{column}, 0)"
+    return f"MIN({SQLITE_MAX_INTEGER}, COALESCE({table}.{column}, 0) + COALESCE(excluded.{column}, 0))"
 
 
 def _maximum(table: str, column: str) -> str:
@@ -328,6 +332,16 @@ class MergeRepository(BaseRepository):
             conflict_keys=("user_id",),
             insert_columns=("user_id", "reason"),
             select=("?", "reason"),
+            updates={},
+            params=(primary_id, secondary_id),
+            where="user_id = ?",
+        )
+        await self._upsert(
+            connection,
+            table="user_settings",
+            conflict_keys=("user_id",),
+            insert_columns=("user_id", "scientific_notation"),
+            select=("?", "scientific_notation"),
             updates={},
             params=(primary_id, secondary_id),
             where="user_id = ?",

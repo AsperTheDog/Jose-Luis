@@ -3,6 +3,9 @@ from typing import Any, Optional
 from db.repositories.base import BaseRepository
 
 
+COUNTER_CAP = 2**63 - 1
+
+
 class GlobalStatsRepository(BaseRepository):
     _SUM_COLUMNS = (
         "roulette_money_gained", "roulette_money_lost", "roulette_bets_won", "roulette_bets_lost",
@@ -51,8 +54,10 @@ class GlobalStatsRepository(BaseRepository):
             return dict(row) if row else None
 
     async def increment(self, user_id: int, column_name: str, amount: int | float = 1) -> None:
+        if isinstance(amount, int):
+            amount = max(-COUNTER_CAP, min(COUNTER_CAP, amount))
         query = f"""INSERT INTO user_global_stats (user_id, {column_name})
-                    VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET {column_name} = {column_name} + excluded.{column_name}; """
+                    VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET {column_name} = MIN({COUNTER_CAP}, {column_name} + excluded.{column_name}); """
         await self._db.execute(query, (user_id, amount))
         await self._db.commit()
 

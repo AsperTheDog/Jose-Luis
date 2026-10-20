@@ -9,6 +9,7 @@ from discord.ext import commands
 
 from db.repositories.merge import MergeReport
 from main import JoseLuisBot
+from number_format import format_number
 
 MERGE_GROUPS = (
     ("Economía", ("economy_", "horse_bets", "hacking_daily")),
@@ -55,7 +56,7 @@ def merge_embed(report: MergeReport, principal: discord.User, secundaria: discor
     if report.highlights:
         embed.add_field(
             name="Saldos absorbidos",
-            value="\n".join(f"**{HIGHLIGHT_LABELS.get(key, key)}:** {value:,}" for key, value in report.highlights.items()),
+            value="\n".join(f"**{HIGHLIGHT_LABELS.get(key, key)}:** {format_number(value)}" for key, value in report.highlights.items()),
             inline=False,
         )
     embed.add_field(name="Filas absorbidas", value=merge_summary(report.absorbed), inline=False)

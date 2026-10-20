@@ -7,6 +7,11 @@ class TwitchRepository(BaseRepository):
             rows = await cursor.fetchall()
             return [row[0] for row in rows]
 
+    async def get_tracked_guild_ids(self) -> list[int]:
+        async with self._db.execute("SELECT DISTINCT guild_id FROM tracked_streamers") as cursor:
+            rows = await cursor.fetchall()
+            return [row[0] for row in rows]
+
     async def get_streamer_destinations(self, twitch_user: str) -> list[tuple[int, str | None, int]]:
         async with self._db.execute("SELECT channel_id, kick_username, everyone FROM tracked_streamers WHERE twitch_username = ?", (twitch_user,)) as cursor:
             return await cursor.fetchall()

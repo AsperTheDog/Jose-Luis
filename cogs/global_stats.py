@@ -5,6 +5,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from main import JoseLuisBot
+from number_format import format_number
 
 
 class GlobalStatsCog(commands.Cog):
@@ -45,10 +46,10 @@ class GlobalStatsCog(commands.Cog):
             name="🔴 Ruleta",
             value=(
                 f"**Vi/De:** {r_win} / {r_loss}\n"
-                f"**Obtenido:** ${r_gained:,}\n"
-                f"**Perdido:** ${r_lost:,}\n"
-                f"**Beneficios:** ${(r_gained - r_lost):,}\n"
-                f"**Mayor Apuesta:** ${r_max:,}"
+                f"**Obtenido:** ${format_number(r_gained)}\n"
+                f"**Perdido:** ${format_number(r_lost)}\n"
+                f"**Beneficios:** ${format_number((r_gained - r_lost))}\n"
+                f"**Mayor Apuesta:** ${format_number(r_max)}"
             ),
             inline=True,
         )
@@ -62,10 +63,10 @@ class GlobalStatsCog(commands.Cog):
             name="🎲 Dados",
             value=(
                 f"**Vi/De:** {d_win} / {d_loss}\n"
-                f"**Obtenido:** ${d_gained:,}\n"
-                f"**Perdido:** ${d_lost:,}\n"
-                f"**Beneficios:** ${(d_gained - d_lost):,}\n"
-                f"**Mayor Apuesta:** ${d_max:,}"
+                f"**Obtenido:** ${format_number(d_gained)}\n"
+                f"**Perdido:** ${format_number(d_lost)}\n"
+                f"**Beneficios:** ${format_number((d_gained - d_lost))}\n"
+                f"**Mayor Apuesta:** ${format_number(d_max)}"
             ),
             inline=True,
         )
@@ -79,10 +80,10 @@ class GlobalStatsCog(commands.Cog):
             name="🎰 Tragaperras",
             value=(
                 f"**Vi/De:** {s_win} / {s_loss}\n"
-                f"**Obtenido:** ${s_gained:,}\n"
-                f"**Perdido:** ${s_lost:,}\n"
-                f"**Beneficios:** ${(s_gained - s_lost):,}\n"
-                f"**Mayor Apuesta:** ${s_max:,}"
+                f"**Obtenido:** ${format_number(s_gained)}\n"
+                f"**Perdido:** ${format_number(s_lost)}\n"
+                f"**Beneficios:** ${format_number((s_gained - s_lost))}\n"
+                f"**Mayor Apuesta:** ${format_number(s_max)}"
             ),
             inline=True,
         )
@@ -96,10 +97,10 @@ class GlobalStatsCog(commands.Cog):
             name="🃏 Cartas",
             value=(
                 f"**Vi/De:** {c_win} / {c_loss}\n"
-                f"**Obtenido:** ${c_gained:,}\n"
-                f"**Perdido:** ${c_lost:,}\n"
-                f"**Beneficios:** ${(c_gained - c_lost):,}\n"
-                f"**Mayor Apuesta:** ${c_max:,}"
+                f"**Obtenido:** ${format_number(c_gained)}\n"
+                f"**Perdido:** ${format_number(c_lost)}\n"
+                f"**Beneficios:** ${format_number((c_gained - c_lost))}\n"
+                f"**Mayor Apuesta:** ${format_number(c_max)}"
             ),
             inline=True,
         )
@@ -115,10 +116,10 @@ class GlobalStatsCog(commands.Cog):
             name="🂡 Blackjack",
             value=(
                 f"**Vi/De/Emp:** {bj_win} / {bj_loss} / {bj_push}\n"
-                f"**Obtenido:** ${bj_gained:,}\n"
-                f"**Perdido:** ${bj_lost:,}\n"
-                f"**Beneficios:** ${(bj_gained - bj_lost):,}\n"
-                f"**Mayor Apuesta:** ${bj_max:,}\n"
+                f"**Obtenido:** ${format_number(bj_gained)}\n"
+                f"**Perdido:** ${format_number(bj_lost)}\n"
+                f"**Beneficios:** ${format_number((bj_gained - bj_lost))}\n"
+                f"**Mayor Apuesta:** ${format_number(bj_max)}\n"
                 f"**Naturales:** {bj_naturals}"
             ),
             inline=True,
@@ -143,10 +144,10 @@ class GlobalStatsCog(commands.Cog):
         embed.add_field(
             name="🏦 Resumen y Capital",
             value=(
-                f"**Total Ganado:** ${gained:,}\n"
-                f"**Total Gastado:** ${spent:,}\n"
-                f"**Máximo Acumulado:** ${peak:,}\n"
-                f"**Interés Obtenido:** ${interest:,}"
+                f"**Total Ganado:** ${format_number(gained)}\n"
+                f"**Total Gastado:** ${format_number(spent)}\n"
+                f"**Máximo Acumulado:** ${format_number(peak)}\n"
+                f"**Interés Obtenido:** ${format_number(interest)}"
             ),
             inline=False,
         )
@@ -162,11 +163,11 @@ class GlobalStatsCog(commands.Cog):
         embed.add_field(
             name="💼 Trabajo y Actividades",
             value=(
-                f"**Trabajos Hechos:** {work_count} jornadas (${work_cash:,})\n"
+                f"**Trabajos Hechos:** {work_count} jornadas (${format_number(work_cash)})\n"
                 f"**Cambios de Empleo:** {job_switches}\n"
-                f"**Pagas Reclamadas:** {allowance_count} veces (${allowance_cash:,})\n"
+                f"**Pagas Reclamadas:** {allowance_count} veces (${format_number(allowance_cash)})\n"
                 f"**Racha Máxima de Pagas:** {allowance_streak} días\n"
-                f"**Drops Reclamados:** {drops} (${drop_cash:,})"
+                f"**Drops Reclamados:** {drops} (${format_number(drop_cash)})"
             ),
             inline=True,
         )
@@ -177,9 +178,9 @@ class GlobalStatsCog(commands.Cog):
         embed.add_field(
             name="🤝 Transferencias",
             value=(
-                f"**Dinero Regalado:** ${given:,}\n"
-                f"**Dinero Recibido:** ${received:,}\n"
-                f"**Mayor Regalo Enviado:** ${max_gift:,}"
+                f"**Dinero Regalado:** ${format_number(given)}\n"
+                f"**Dinero Recibido:** ${format_number(received)}\n"
+                f"**Mayor Regalo Enviado:** ${format_number(max_gift)}"
             ),
             inline=True,
         )
@@ -191,9 +192,9 @@ class GlobalStatsCog(commands.Cog):
         embed.add_field(
             name="🚨 Crímen",
             value=(
-                f"**Crímenes Exitosos:** {crimes} (${crime_cash:,})\n"
+                f"**Crímenes Exitosos:** {crimes} (${format_number(crime_cash)})\n"
                 f"**Veces en la Cárcel:** {jail_time}\n"
-                f"**Dinero Multado:** ${fines:,}"
+                f"**Dinero Multado:** ${format_number(fines)}"
             ),
             inline=False,
         )
@@ -218,10 +219,10 @@ class GlobalStatsCog(commands.Cog):
         embed.add_field(
             name="⛏️ Trabajo en la Mina",
             value=(
-                f"**Veces en la Mina:** {mined:,}\n"
-                f"**Energía gastada:** {energy:,}\n"
-                f"**Materiales Extraídos:** {mats:,}\n"
-                f"**Bebidas consumidas:** {drank:,} (${drink_cash:,})"
+                f"**Veces en la Mina:** {format_number(mined)}\n"
+                f"**Energía gastada:** {format_number(energy)}\n"
+                f"**Materiales Extraídos:** {format_number(mats)}\n"
+                f"**Bebidas consumidas:** {format_number(drank)} (${format_number(drink_cash)})"
             ),
             inline=True,
         )
@@ -234,7 +235,7 @@ class GlobalStatsCog(commands.Cog):
             value=(
                 f"**Picos Básicos Reclamados:** {picks_claimed}\n"
                 f"**Picos Rotos:** {picks_broken}\n"
-                f"**Objetos Forjados:** {crafted:,}"
+                f"**Objetos Forjados:** {format_number(crafted)}"
             ),
             inline=True,
         )
@@ -244,8 +245,8 @@ class GlobalStatsCog(commands.Cog):
         embed.add_field(
             name="⚖️ Mercado",
             value=(
-                f"**Objetos Vendidos:** {sold:,}\n"
-                f"**Ganancias:** ${sales_cash:,}"
+                f"**Objetos Vendidos:** {format_number(sold)}\n"
+                f"**Ganancias:** ${format_number(sales_cash)}"
             ),
             inline=False,
         )
@@ -271,11 +272,11 @@ class GlobalStatsCog(commands.Cog):
         embed.add_field(
             name="✅ Éxitos",
             value=(
-                f"**Fácil:** {easy:,}\n"
-                f"**Normal:** {normal:,}\n"
-                f"**Difícil:** {hard:,}\n"
-                f"**Muy Difícil:** {veryhard:,}\n"
-                f"**Total:** {total_success:,}"
+                f"**Fácil:** {format_number(easy)}\n"
+                f"**Normal:** {format_number(normal)}\n"
+                f"**Difícil:** {format_number(hard)}\n"
+                f"**Muy Difícil:** {format_number(veryhard)}\n"
+                f"**Total:** {format_number(total_success)}"
             ),
             inline=True,
         )
@@ -288,10 +289,10 @@ class GlobalStatsCog(commands.Cog):
         embed.add_field(
             name="❌ Fallos",
             value=(
-                f"**Tiempo Agotado:** {timeout:,}\n"
-                f"**Bloqueo Firewall:** {firewall:,}\n"
-                f"**Fallo del objetivo:** {lost:,}\n"
-                f"**Total:** {total_failed:,}"
+                f"**Tiempo Agotado:** {format_number(timeout)}\n"
+                f"**Bloqueo Firewall:** {format_number(firewall)}\n"
+                f"**Fallo del objetivo:** {format_number(lost)}\n"
+                f"**Total:** {format_number(total_failed)}"
             ),
             inline=True,
         )
@@ -304,8 +305,8 @@ class GlobalStatsCog(commands.Cog):
         embed.add_field(
             name="📊 Balance General",
             value=(
-                f"**Ganancias Totales:** ${money_gained:,}\n"
-                f"**Ataques Totales:** {total_attempts:,}\n"
+                f"**Ganancias Totales:** ${format_number(money_gained)}\n"
+                f"**Ataques Totales:** {format_number(total_attempts)}\n"
                 f"**Tasa de Éxito:** {win_rate:.1f}%\n"
                 f"**Tiempo jugado:** {time_elapsed:.1f}s"
             ),
@@ -329,8 +330,8 @@ class GlobalStatsCog(commands.Cog):
         embed.add_field(
             name="🎲 Tiradas",
             value=(
-                f"**Total:** {throws:,}\n"
-                f"**Potenciadas:** {boosted:,}\n"
+                f"**Total:** {format_number(throws)}\n"
+                f"**Potenciadas:** {format_number(boosted)}\n"
             ),
             inline=True,
         )
@@ -342,10 +343,10 @@ class GlobalStatsCog(commands.Cog):
         embed.add_field(
             name="🧩 Fragmentos Obtenidos",
             value=(
-                f"**2★:** {s2:,}\n"
-                f"**3★:** {s3:,}\n"
-                f"**4★:** {s4:,}\n"
-                f"**5★:** {s5:,}"
+                f"**2★:** {format_number(s2)}\n"
+                f"**3★:** {format_number(s3)}\n"
+                f"**4★:** {format_number(s4)}\n"
+                f"**5★:** {format_number(s5)}"
             ),
             inline=True,
         )
@@ -357,10 +358,10 @@ class GlobalStatsCog(commands.Cog):
         embed.add_field(
             name="💨 Forja y Polvo Gacha",
             value=(
-                f"**Unidades Creadas:** {crafted:,}\n"
-                f"**Fragmentos Destruidos:** {destroyed:,}\n"
-                f"**Polvo Obtenido:** {dust_obtained:,}\n"
-                f"**Polvo Gastado:** {dust_spent:,}"
+                f"**Unidades Creadas:** {format_number(crafted)}\n"
+                f"**Fragmentos Destruidos:** {format_number(destroyed)}\n"
+                f"**Polvo Obtenido:** {format_number(dust_obtained)}\n"
+                f"**Polvo Gastado:** {format_number(dust_spent)}"
             ),
             inline=False,
         )
@@ -390,11 +391,11 @@ class GlobalStatsCog(commands.Cog):
             name="🐎 Apuestas",
             value=(
                 f"**Vi/De/Pend:** {b_win} / {b_loss} / {pending}\n"
-                f"**Obtenido:** ${b_gained:,}\n"
-                f"**Apostado:** ${b_lost:,}\n"
-                f"**Beneficios:** ${(b_gained - b_lost):,}\n"
-                f"**Mayor Apuesta:** ${b_max_bet:,}\n"
-                f"**Mayor Premio:** ${b_max_win:,}"
+                f"**Obtenido:** ${format_number(b_gained)}\n"
+                f"**Apostado:** ${format_number(b_lost)}\n"
+                f"**Beneficios:** ${format_number((b_gained - b_lost))}\n"
+                f"**Mayor Apuesta:** ${format_number(b_max_bet)}\n"
+                f"**Mayor Premio:** ${format_number(b_max_win)}"
             ),
             inline=False,
         )
@@ -414,50 +415,50 @@ class GlobalStatsCog(commands.Cog):
         embed.add_field(
             name="🗺️ Progreso",
             value=(
-                f"**Pisos superados:** {data.get('dungeon_floors_cleared', 0):,}\n"
-                f"**Enemigos derrotados:** {data.get('dungeon_enemies_defeated', 0):,}\n"
-                f"**Piso máximo:** {data.get('dungeon_highest_floor', 0):,}\n"
-                f"**Jefes derrotados:** {data.get('dungeon_bosses_defeated', 0):,}\n"
-                f"**Anomalías cerradas:** {data.get('dungeon_anomalies_cleared', 0):,}"
+                f"**Pisos superados:** {format_number(data.get('dungeon_floors_cleared', 0))}\n"
+                f"**Enemigos derrotados:** {format_number(data.get('dungeon_enemies_defeated', 0))}\n"
+                f"**Piso máximo:** {format_number(data.get('dungeon_highest_floor', 0))}\n"
+                f"**Jefes derrotados:** {format_number(data.get('dungeon_bosses_defeated', 0))}\n"
+                f"**Anomalías cerradas:** {format_number(data.get('dungeon_anomalies_cleared', 0))}"
             ),
             inline=True,
         )
         embed.add_field(
             name="⚔️ Combate",
             value=(
-                f"**Daño infligido:** {data.get('dungeon_damage_dealt', 0):,}\n"
-                f"**Daño recibido:** {data.get('dungeon_damage_taken', 0):,}\n"
-                f"**Muertes:** {data.get('dungeon_deaths', 0):,}\n"
-                f"**Simulacros:** {data.get('dungeon_training_sessions', 0):,}"
+                f"**Daño infligido:** {format_number(data.get('dungeon_damage_dealt', 0))}\n"
+                f"**Daño recibido:** {format_number(data.get('dungeon_damage_taken', 0))}\n"
+                f"**Muertes:** {format_number(data.get('dungeon_deaths', 0))}\n"
+                f"**Simulacros:** {format_number(data.get('dungeon_training_sessions', 0))}"
             ),
             inline=True,
         )
         embed.add_field(
             name="💰 Botín y Economía",
             value=(
-                f"**Fragmentos:** {data.get('dungeon_gold_earned', 0):,}\n"
-                f"**Objetos hallados:** {data.get('dungeon_items_found', 0):,}\n"
-                f"**Núcleos:** {data.get('dungeon_boss_coins_earned', 0):,}\n"
-                f"**Choskris convertidos:** {data.get('dungeon_money_converted', 0):,}"
+                f"**Fragmentos:** {format_number(data.get('dungeon_gold_earned', 0))}\n"
+                f"**Objetos hallados:** {format_number(data.get('dungeon_items_found', 0))}\n"
+                f"**Núcleos:** {format_number(data.get('dungeon_boss_coins_earned', 0))}\n"
+                f"**Choskris convertidos:** {format_number(data.get('dungeon_money_converted', 0))}"
             ),
             inline=True,
         )
         embed.add_field(
             name="✨ Meta-progreso",
             value=(
-                f"**Prestigios:** {data.get('dungeon_prestiges', 0):,}\n"
-                f"**Polvo obtenido:** {data.get('dungeon_dust_earned', 0):,}\n"
-                f"**Mutaciones compradas:** {data.get('dungeon_mutations', 0):,}\n"
-                f"**XP pasiva:** {data.get('dungeon_passive_xp', 0):,}\n"
-                f"**Ecos despertados:** {data.get('dungeon_echoes', 0):,}"
+                f"**Prestigios:** {format_number(data.get('dungeon_prestiges', 0))}\n"
+                f"**Polvo obtenido:** {format_number(data.get('dungeon_dust_earned', 0))}\n"
+                f"**Mutaciones compradas:** {format_number(data.get('dungeon_mutations', 0))}\n"
+                f"**XP pasiva:** {format_number(data.get('dungeon_passive_xp', 0))}\n"
+                f"**Ecos despertados:** {format_number(data.get('dungeon_echoes', 0))}"
             ),
             inline=True,
         )
         embed.add_field(
             name="🏃 Retiradas",
             value=(
-                f"**Retiradas:** {data.get('dungeon_retreats', 0):,}\n"
-                f"**Simulaciones:** {data.get('dungeon_auto_sims', 0):,}"
+                f"**Retiradas:** {format_number(data.get('dungeon_retreats', 0))}\n"
+                f"**Simulaciones:** {format_number(data.get('dungeon_auto_sims', 0))}"
             ),
             inline=True,
         )

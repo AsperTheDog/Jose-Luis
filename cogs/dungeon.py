@@ -7,10 +7,11 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from dungeon_engine import DEFEND_KEY, BattleState, DungeonEngine, fmt_int, progress_bar
+from dungeon_engine import DEFEND_KEY, VALUE_CAP, BattleState, DungeonEngine, fmt_int, progress_bar
 from main import JoseLuisBot
 
 RARITY_VALUE = {"comun": 1, "raro": 2, "epico": 4, "legendario": 8, "mitico": 16}
+STAT_LABELS = {"attack": "ataque", "defense": "defensa", "max_hp": "vida máxima", "max_energy": "energía máxima"}
 DEFAULT_ACCENT = discord.Color.from_str("#2C3E50")
 
 
@@ -961,6 +962,35 @@ class DungeonCog(commands.Cog):
         await self.repo.add_item(user_id, item)
         return ""
 
+    async def capped_stats(self, user_id: int) -> list[str]:
+        user = await self.repo.get_user(user_id)
+        items = await self.repo.get_inventory(user_id)
+        mutations = await self.repo.get_mutations(user_id)
+        echoes = await self.repo.get_echoes(user_id)
+        return self.engine.player_stats(user, items, mutations, echoes)["capped"]
+
+    @staticmethod
+    def stat_cap_text(capped: list[str]) -> str:
+        names = ", ".join(STAT_LABELS[name] for name in capped)
+        return f"🔒 Has alcanzado el límite de {names}: ya no puedes subir de nivel ni comprar mejoras."
+
+    @staticmethod
+    def depth_lock_text(floor: int) -> str:
+        return f"🔒 Los enemigos del piso **{floor}** han alcanzado el límite de poder del juego: no se puede descender más. Sigue farmeando con `/mazmorra explorar piso:N`."
+
+    @staticmethod
+    def currency_cap_note(label: str, before: int, gained: int) -> Optional[str]:
+        if before + gained < VALUE_CAP:
+            return None
+        return f"🔒 Has alcanzado el límite de **{label}**: no puedes acumular más."
+
+    async def gain_levels(self, user_id: int, user: dict, amount: int) -> tuple[int, int, int, Optional[str]]:
+        capped = await self.capped_stats(user_id)
+        if capped:
+            return int(user["level"]), int(user["xp"]), 0, self.stat_cap_text(capped)
+        level, xp, gained = self.engine.gain_xp(int(user["level"]), int(user["xp"]), amount)
+        return level, xp, gained, None
+
     def regen_rate(self, recovering: bool) -> float:
         key = "hp_regen_recovery_pct_per_minute" if recovering else "hp_regen_pct_per_minute"
         return max(0.0, float(self.engine.cfg.get(key, 0.0)))
@@ -1237,12 +1267,13 @@ class DungeonCog(commands.Cog):
         rewards = state.rewards
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         updates: dict = {"potions": state.potions, "runs": int(user["runs"]) + 1}
-        loot = [f"{self.coin_emoji} **+{fmt_int(rewards['gold'])}** {self.coin}", f"⭐ **+{fmt_int(rewards['xp'])}** XP"]
+        loot = [f"{self.coin_emoji} **+{fmt_int(rewards['gold'])}** {self.coin}"]
         progress: list[str] = []
 
-        level, xp, gained = self.engine.gain_xp(user["level"], user["xp"], rewards["xp"])
+        level, xp, gained, xp_block = await self.gain_levels(user_id, user, rewards["xp"])
         updates["level"] = level
         updates["xp"] = xp
+        loot.append(xp_block or f"⭐ **+{fmt_int(rewards['xp'])}** XP")
         if gained:
             loot.append(f"⬆️ ¡Subes al nivel **{level}**!")
 
@@ -1259,18 +1290,31 @@ class DungeonCog(commands.Cog):
         if rewards.get("coins"):
             await self.repo.add_boss_coins(user_id, rewards["coins"])
             loot.append(f"{self.boss_coin_emoji} **+{fmt_int(rewards['coins'])}** {self.boss_coin}")
+            cap_note = self.currency_cap_note(self.boss_coin, int(user["boss_coins"]), rewards["coins"])
+            if cap_note:
+                loot.append(cap_note)
 
         if rewards.get("dust"):
             await self.repo.add_dust(user_id, rewards["dust"])
             loot.append(f"✨ **+{fmt_int(rewards['dust'])}** Polvo")
+            cap_note = self.currency_cap_note("Polvo", int(user["dust"]), rewards["dust"])
+            if cap_note:
+                loot.append(cap_note)
 
         if rewards.get("gold"):
             await self.repo.add_gold(user_id, rewards["gold"])
+            cap_note = self.currency_cap_note(self.coin, int(user["gold"]), rewards["gold"])
+            if cap_note:
+                loot.append(cap_note)
+
+        depth_locked = self.engine.floor_capped(state.floor)
 
         if state.is_boss:
             tier = self.engine.boss_tier_for_floor(state.floor)
             highest = max(int(user["highest_floor"]), state.floor)
-            updates.update(floor=state.floor + 1, floor_kills=0, highest_floor=highest, boss_tier=tier, last_boss_at=now, last_boss_floor=state.floor)
+            updates.update(floor=state.floor if depth_locked else state.floor + 1, floor_kills=0, highest_floor=highest, boss_tier=tier, last_boss_at=now, last_boss_floor=state.floor)
+            if depth_locked:
+                progress.append(self.depth_lock_text(state.floor))
             await self.bot.global_stats.register_dungeon_depth(user_id, highest)
             await self.bot.global_stats.register_dungeon_floor_cleared(user_id)
             await self.bot.global_stats.register_dungeon_boss(user_id, tier, rewards["coins"])
@@ -1292,7 +1336,10 @@ class DungeonCog(commands.Cog):
                     updates["highest_floor"] = highest
                     await self.bot.global_stats.register_dungeon_depth(user_id, highest)
                     await self.bot.global_stats.register_dungeon_floor_cleared(user_id)
-                    if bool(user["auto_advance"]):
+                    if depth_locked:
+                        updates["floor_kills"] = needed
+                        progress.append(f"🚪 ¡Piso **{state.floor}** despejado! {self.depth_lock_text(state.floor)}")
+                    elif bool(user["auto_advance"]):
                         updates.update(floor=state.floor + 1, floor_kills=0)
                         progress.append(f"🚪 ¡Piso **{state.floor}** despejado! Desciendes al piso **{state.floor + 1}**.")
                         await self.repo.add_log(user_id, "floor", f"Despejaste el piso {state.floor}.")
@@ -1498,6 +1545,9 @@ class DungeonCog(commands.Cog):
         user = await self.repo.get_user(user_id)
         floor = int(user["floor"])
         needed = max(1, int(self.engine.cfg["enemies_per_floor"]))
+        if self.engine.floor_capped(floor):
+            await interaction.response.send_message(embed=discord.Embed(description=self.depth_lock_text(floor), color=discord.Color.orange()), ephemeral=True)
+            return
         if self.engine.is_gate_floor(floor):
             await interaction.response.send_message(embed=discord.Embed(description="⚠️ Este piso está bloqueado por un Jefe: resuélvelo con `/mazmorra jefe`.", color=discord.Color.orange()), ephemeral=True)
             return
@@ -1792,6 +1842,10 @@ class DungeonCog(commands.Cog):
             upgrade_key = key.split(":", 1)[1]
             upgrades = _json_dict(user.get("upgrades"))
             current = int(upgrades.get(upgrade_key, 0))
+            capped = await self.capped_stats(user_id)
+            if capped:
+                await interaction.response.send_message(embed=discord.Embed(description=self.stat_cap_text(capped), color=discord.Color.orange()), ephemeral=True)
+                return
             max_level = int(self.engine.cfg["upgrade_max_level"])
             amount = min(amount, max_level - current)
             if amount <= 0:
@@ -2189,7 +2243,9 @@ class DungeonCog(commands.Cog):
         hours, xp = self.passive_training_pending(user, mutation_level)
         if xp <= 0:
             return "🎓 Todavía no hay XP que recoger."
-        level, remaining, gained = self.engine.gain_xp(int(user["level"]), int(user["xp"]), xp)
+        level, remaining, gained, xp_block = await self.gain_levels(user_id, user, xp)
+        if xp_block:
+            return xp_block
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         await self.repo.update_user(user_id, level=level, xp=remaining, training_since=now)
         await self.sync_vitals(user_id)
@@ -2642,7 +2698,9 @@ class DungeonCog(commands.Cog):
             xp += reward["xp"]
             if reward["item"]:
                 items.append(reward["item"])
-        level, remaining_xp, gained = self.engine.gain_xp(int(user["level"]), int(user["xp"]), xp)
+        level, remaining_xp, gained, xp_block = await self.gain_levels(user_id, user, xp)
+        if xp_block:
+            xp = 0
         await self.repo.update_user(user_id, level=level, xp=remaining_xp)
         await self.repo.add_gold(user_id, gold)
         kept = lost = 0

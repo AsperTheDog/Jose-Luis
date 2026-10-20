@@ -8,6 +8,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from main import JoseLuisBot
+from number_format import format_number
 
 DIFFICULTIES = {
     "easy": {
@@ -370,7 +371,7 @@ class CyberHackCog(commands.Cog):
                 f"2. Llegar al Núcleo (`{TARGET}`)\n"
                 f"3. Evitar los Firewalls (`{WALL}`)\n\n"
                 f"⏳ **Tiempo Restante:** {timer_display}\n"
-                f"💰 **Recompensa Base:** `${engine.base_payout:,}` choskris\n\n"
+                f"💰 **Recompensa Base:** `${format_number(engine.base_payout)}` choskris\n\n"
                 f"👉 **Escribe tu secuencia de movimiento abajo como un mensaje** (`n, e, s, o`):"
             )
 
@@ -426,7 +427,7 @@ class CyberHackCog(commands.Cog):
                             f"**¡Acceso al sistema concedido!**\n\n"
                             f"⏱️ **Tiempo tardado:** `{elapsed_time:.1f}s`" + (f" / `{engine.time_limit}s`\n" if mode_val == "timed" else "\n") +
                             f"🐾 **Pasos usados:** `{player_steps}` (Óptimo: `{engine.optimal_steps}`)\n"
-                            f"💰 **Recompensa:** **${payout:,}** choskris{daily_deduct_msg}"
+                            f"💰 **Recompensa:** **${format_number(payout)}** choskris{daily_deduct_msg}"
                     )
 
                     await self.bot.db.economy.update_balance(user_id, payout)

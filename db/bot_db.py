@@ -15,6 +15,7 @@ from db.repositories import (
     PhraseRepository,
     QuarantineRepository,
     ReminderRepository,
+    SettingsRepository,
     TwitchRepository,
     WaifuRepository,
 )
@@ -39,6 +40,7 @@ class BotDatabase:
         self.activity = ActivityRepository(self.db)
         self.quarantine = QuarantineRepository(self.db)
         self.merger = MergeRepository(self.db)
+        self.settings = SettingsRepository(self.db)
 
     async def start(self) -> None:
         await self.db.connect()

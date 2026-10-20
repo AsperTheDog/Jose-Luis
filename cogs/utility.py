@@ -22,6 +22,17 @@ class UtilityCog(commands.Cog):
     async def ping(self, interaction: discord.Interaction):
         await interaction.response.send_message(f"Pong! *{round(self.bot.latency * 1000)}ms*")
 
+    @utility_group.command(name="notacioncientifica", description="Muestra los números a partir de un millón en notación científica")
+    @app_commands.describe(activar="Activar o desactivar la notación científica")
+    async def scientific_notation(self, interaction: discord.Interaction, activar: bool):
+        await self.bot.db.settings.set_scientific_notation(interaction.user.id, activar)
+        if activar:
+            self.bot.scientific_users.add(interaction.user.id)
+        else:
+            self.bot.scientific_users.discard(interaction.user.id)
+        message = "✅ Los números desde un millón se mostrarán en notación científica." if activar else "✅ Los números se mostrarán de forma normal."
+        await interaction.response.send_message(embed=discord.Embed(description=message, color=discord.Color.green()), ephemeral=True)
+
     @utility_group.command(name="apagar", description="Apagar el bot (se va a reiniciar)")
     async def shutdown(self, interaction: discord.Interaction):
         if await self.bot.filter_owner(interaction): return

@@ -1,6 +1,7 @@
 {
   "config": {
     "boss_interval": 10,
+    "growth_knee_floor": 50,
     "enemies_per_floor": 5,
     "enemy_hp_base": 60,
     "enemy_hp_growth": 1.18,

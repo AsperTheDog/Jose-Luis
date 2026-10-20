@@ -5,6 +5,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from main import JoseLuisBot
+from number_format import format_number
 
 EMOJI_REGEX = re.compile(r"<a?:[a-zA-Z0-9_]+:[0-9]+>|[\U00010000-\U0010ffff]")
 
@@ -70,16 +71,16 @@ class StatsCog(commands.Cog):
 
         embed.add_field(
             name=f"Nivel {level}",
-            value=f"`[{bar}]` {current_level_xp}/{next_level_xp} XP (Total: {xp:,})",
+            value=f"`[{bar}]` {current_level_xp}/{next_level_xp} XP (Total: {format_number(xp)})",
             inline=False,
         )
 
-        embed.add_field(name="Mensajes", value=f"`{messages:,}`", inline=True)
-        embed.add_field(name="Palabras", value=f"`{words:,}`", inline=True)
-        embed.add_field(name="Caracteres", value=f"`{chars:,}`", inline=True)
+        embed.add_field(name="Mensajes", value=f"`{format_number(messages)}`", inline=True)
+        embed.add_field(name="Palabras", value=f"`{format_number(words)}`", inline=True)
+        embed.add_field(name="Caracteres", value=f"`{format_number(chars)}`", inline=True)
 
-        embed.add_field(name="Archivos / Img", value=f"`{attachments:,}`", inline=True)
-        embed.add_field(name="Emojis Usados", value=f"`{emojis:,}`", inline=True)
+        embed.add_field(name="Archivos / Img", value=f"`{format_number(attachments)}`", inline=True)
+        embed.add_field(name="Emojis Usados", value=f"`{format_number(emojis)}`", inline=True)
 
         avg_words = round(words / messages, 1) if messages > 0 else 0
         embed.add_field(name="Media Palabras/Msg", value=f"`{avg_words}`", inline=True)
@@ -137,9 +138,9 @@ class StatsCog(commands.Cog):
 
             if category == "xp":
                 level, _, _ = self.calculate_level_and_progress(total_xp)
-                description += f"{icon} {user_name} - **Nivel {level}** ({total_xp:,} XP)\n"
+                description += f"{icon} {user_name} - **Nivel {level}** ({format_number(total_xp)} XP)\n"
             else:
-                description += f"{icon} {user_name} - **{value:,}** {category}\n"
+                description += f"{icon} {user_name} - **{format_number(value)}** {category}\n"
 
         embed.description = description
         await interaction.response.send_message(embed=embed)

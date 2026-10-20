@@ -7,7 +7,17 @@ from discord import app_commands
 from discord.ext import commands
 from typing import Optional
 
+from error_reporting import describe_arguments
 from main import JoseLuisBot
+
+
+class TwitchAPIError(Exception):
+    def __init__(self, action: str, status: Optional[int], body: str):
+        self.action = action
+        self.status = status
+        self.body = body
+        status_text = f"HTTP {status}" if status is not None else "sin respuesta"
+        super().__init__(f"Fallo al {action} ({status_text}): {body}")
 
 
 class StreamerNotifierCog(commands.Cog):
@@ -29,6 +39,7 @@ class StreamerNotifierCog(commands.Cog):
         self.session: Optional[aiohttp.ClientSession] = None
         self.ws_task: Optional[asyncio.Task] = None
         self.active_session_id: Optional[str] = None
+        self.last_reported_error: Optional[str] = None
 
     async def cog_load(self):
         self.session = aiohttp.ClientSession()
@@ -40,18 +51,48 @@ class StreamerNotifierCog(commands.Cog):
         if self.session and not self.session.closed:
             await self.session.close()
 
+    async def _report_background_error(self, error: BaseException, task_name: str) -> None:
+        key = f"{type(error).__name__}: {error}"
+        if key == self.last_reported_error:
+            return
+        self.last_reported_error = key
+
+        guild_ids = await self.bot.db.twitch.get_tracked_guild_ids()
+        reported = False
+        for guild_id in guild_ids:
+            guild = self.bot.get_guild(guild_id)
+            if guild is None:
+                continue
+            await self.bot.report_exception(
+                error,
+                source="tarea en segundo plano",
+                command_name=task_name,
+                guild=guild,
+                user=None,
+                channel=None,
+            )
+            reported = True
+
+        if not reported:
+            await self.bot.report_exception(
+                error,
+                source="tarea en segundo plano",
+                command_name=task_name,
+                guild=None,
+                user=None,
+                channel=None,
+            )
+
     async def _get_user_access_token(self) -> str:
         if not os.path.exists(self.tokens_file):
-            print(f"Falta {self.tokens_file}")
-            return ""
+            raise TwitchAPIError("leer los tokens de Twitch", None, f"Falta {self.tokens_file}")
 
         with open(self.tokens_file, "r") as f:
             token_data = json.load(f)
 
         refresh_token = token_data.get("refresh_token")
         if not refresh_token:
-            print("No se encontró refresh_token en twitch_tokens.json")
-            return ""
+            raise TwitchAPIError("leer los tokens de Twitch", None, "No se encontró refresh_token en twitch_tokens.json")
 
         url = "https://id.twitch.tv/oauth2/token"
         payload = {
@@ -72,15 +113,15 @@ class StreamerNotifierCog(commands.Cog):
                     json.dump(new_tokens, f, indent=2)
 
                 self.access_token = new_tokens["access_token"]
-                # print("Twitch User Access Token renovado con éxito.")
-                return self.access_token
-            else:
-                body = await resp.text()
-                print(f"Fallo al renovar User Access Token ({resp.status}): {body}")
-                self.access_token = token_data.get("access_token", "")
+                print("Twitch User Access Token renovado con éxito.")
                 return self.access_token
 
-    async def _get_broadcaster_id(self, username: str) -> Optional[str]:
+            body = await resp.text()
+            self.access_token = token_data.get("access_token", "")
+            await self._report_background_error(TwitchAPIError("renovar el User Access Token", resp.status, body), "twitch renovar token")
+            return self.access_token
+
+    async def _get_broadcaster_id(self, username: str, retried: bool = False) -> Optional[str]:
         if not self.access_token:
             await self._get_user_access_token()
 
@@ -90,25 +131,23 @@ class StreamerNotifierCog(commands.Cog):
         }
         url = f"https://api.twitch.tv/helix/users?login={username}"
         async with self.session.get(url, headers=headers) as resp:
-            if resp.status == 401:
+            if resp.status == 401 and not retried:
                 await self._get_user_access_token()
-                return await self._get_broadcaster_id(username)
+                return await self._get_broadcaster_id(username, retried=True)
+
+            if resp.status != 200:
+                raise TwitchAPIError(f"buscar al usuario {username}", resp.status, await resp.text())
 
             data = await resp.json()
             if data.get("data"):
                 return data["data"][0]["id"]
             return None
 
-    async def _subscribe_to_streamer(self, broadcaster_id: str, session_id: str) -> bool:
+    async def _subscribe_to_streamer(self, broadcaster_id: str, session_id: str) -> None:
         if not self.access_token:
             await self._get_user_access_token()
 
         url = "https://api.twitch.tv/helix/eventsub/subscriptions"
-        headers = {
-            "Client-ID": self.client_id,
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json",
-        }
         payload = {
             "type": "stream.online",
             "version": "1",
@@ -119,40 +158,41 @@ class StreamerNotifierCog(commands.Cog):
             },
         }
 
-        async with self.session.post(url, headers=headers, json=payload) as resp:
-            if resp.status == 401:
-                print("Token no autorizado (401) en EventSub. Renovando token...")
-                await self._get_user_access_token()
-                headers["Authorization"] = f"Bearer {self.access_token}"
+        for attempt in range(2):
+            headers = {
+                "Client-ID": self.client_id,
+                "Authorization": f"Bearer {self.access_token}",
+                "Content-Type": "application/json",
+            }
+            async with self.session.post(url, headers=headers, json=payload) as resp:
+                if resp.status in (200, 202):
+                    print(f"Suscrito exitosamente al broadcaster ID {broadcaster_id}")
+                    return
 
-                async with self.session.post(url, headers=headers, json=payload) as retry_resp:
-                    if retry_resp.status in (200, 202):
-                        print(f"Suscrito exitosamente al broadcaster ID {broadcaster_id} (tras reintento)")
-                        return True
-                    else:
-                        body = await retry_resp.text()
-                        print(f"Fallo de suscripción EventSub tras reintento para ID {broadcaster_id}: {retry_resp.status} - {body}")
-                        return False
+                body = await resp.text()
+                if resp.status == 401 and attempt == 0:
+                    await self._get_user_access_token()
+                    continue
 
-            body = await resp.text()
-            if resp.status in (200, 202):
-                print(f"Suscrito exitosamente al broadcaster ID {broadcaster_id}")
-                return True
-            else:
-                print(f"Fallo de suscripción EventSub para ID {broadcaster_id}: {resp.status} - {body}")
-                return False
+                raise TwitchAPIError(f"suscribirse al broadcaster ID {broadcaster_id}", resp.status, body)
 
-    async def sync_all_subscriptions(self, session_id: str):
+    async def sync_all_subscriptions(self, session_id: str) -> None:
         self.active_session_id = session_id
 
         streamers = await self.bot.db.twitch.get_tracked_streamers()
 
-        for row in streamers:
-            twitch_user = row[0] if isinstance(row, (tuple, list)) else row
+        failed = False
+        for twitch_user in streamers:
+            try:
+                broadcaster_id = await self._get_broadcaster_id(twitch_user)
+                if broadcaster_id:
+                    await self._subscribe_to_streamer(broadcaster_id, session_id)
+            except TwitchAPIError as error:
+                failed = True
+                await self._report_background_error(error, f"twitch sincronizar {twitch_user}")
 
-            broadcaster_id = await self._get_broadcaster_id(twitch_user)
-            if broadcaster_id:
-                await self._subscribe_to_streamer(broadcaster_id, session_id)
+        if not failed:
+            self.last_reported_error = None
 
     async def _eventsub_listener_loop(self):
         await self.bot.wait_until_ready()
@@ -201,16 +241,15 @@ class StreamerNotifierCog(commands.Cog):
                             break
 
             except aiohttp.WSServerHandshakeError as e:
-                print(f"Error Handshake EventSub (HTTP {e.status}): {e.message}")
                 if e.status == 429:
-                    print("Twitch rate limit (429). Aumentando tiempo de espera...")
                     current_delay = min(current_delay * 2, 120)
 
                 ws_url = self.EVENTSUB_WS_URL
+                await self._report_background_error(e, "twitch eventsub handshake")
 
             except Exception as e:
-                print(f"Error general en Twitch EventSub: {e}")
                 ws_url = self.EVENTSUB_WS_URL
+                await self._report_background_error(e, "twitch eventsub")
 
             print(f"Reconectando a Twitch en {current_delay} segundos...")
             await asyncio.sleep(current_delay)
@@ -259,25 +298,39 @@ class StreamerNotifierCog(commands.Cog):
         twitch_user = twitch.strip().lower()
         kick_user = kick.strip().lower() if kick else None
 
+        await interaction.response.defer(ephemeral=True)
+
         broadcaster_id = await self._get_broadcaster_id(twitch_user)
         if not broadcaster_id:
-            await interaction.response.send_message(f"No se pudo encontrar al usuario `{twitch_user}` en Twitch.", ephemeral=True)
+            await interaction.followup.send(f"No se pudo encontrar al usuario `{twitch_user}` en Twitch.", ephemeral=True)
             return
 
         await self.bot.db.twitch.add_or_update_tracked_streamer(interaction.guild_id, target_channel.id, twitch_user, kick_user, at_everyone)
 
-        sub_success = True
+        subscription_error: Optional[TwitchAPIError] = None
         if self.active_session_id:
-            sub_success = await self._subscribe_to_streamer(broadcaster_id, self.active_session_id)
+            try:
+                await self._subscribe_to_streamer(broadcaster_id, self.active_session_id)
+            except TwitchAPIError as error:
+                subscription_error = error
+                await self.bot.report_exception(
+                    error,
+                    source="slash",
+                    command_name="streams agregar",
+                    guild=interaction.guild,
+                    user=interaction.user,
+                    channel=interaction.channel,
+                    arguments=describe_arguments(interaction),
+                )
 
-        if sub_success:
+        if subscription_error is None:
             msg = f"Notificaciones activadas para **{twitch_user}** en {target_channel.mention}."
             if kick_user:
                 msg += f" (Enlace de Kick: https://kick.com/{kick_user})"
         else:
-            msg = f"⚠️ Guardado **{twitch_user}**, pero falló la suscripción EventSub. Se reintentará al reconectar."
+            msg = f"⚠️ Guardado **{twitch_user}**, pero falló la suscripción EventSub (HTTP {subscription_error.status}). El error se ha enviado al canal de depuración."
 
-        await interaction.response.send_message(msg, ephemeral=True)
+        await interaction.followup.send(msg, ephemeral=True)
 
     @streamer_group.command(name="quitar", description="Elimina un streamer de las notificaciones")
     async def remove_streamer(self, interaction: discord.Interaction, twitch: str):

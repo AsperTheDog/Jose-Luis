@@ -4,6 +4,7 @@ from discord import app_commands
 from typing import Optional
 
 from main import JoseLuisBot
+from number_format import format_number
 
 
 GIFTS_CATALOG = {
@@ -255,7 +256,7 @@ class WaifuCog(commands.Cog):
         if balance < cost:
             await interaction.response.send_message(
                 f"No tienes suficientes Choskris para liberarte.\n"
-                f"💰 **Coste de liberación:** {cost:,} Choskris | **Tu saldo:** {balance:,} Choskris.",
+                f"💰 **Coste de liberación:** {format_number(cost)} Choskris | **Tu saldo:** {format_number(balance)} Choskris.",
                 ephemeral=True
             )
             return
@@ -268,7 +269,7 @@ class WaifuCog(commands.Cog):
 
         msg = (
             f"🔓 **¡Te has liberado exitosamente!**\n"
-            f"- Has pagado **{cost:,} Choskris** para desmarcarte de **{owner_name}**.\n"
+            f"- Has pagado **{format_number(cost)} Choskris** para desmarcarte de **{owner_name}**.\n"
             f"- **{owner_name}** ha sido bloqueado/a automáticamente y no podrá volver a reclamarte hasta que lo/a desbloquees con `/waifu desbloquear`."
         )
 
@@ -315,7 +316,7 @@ class WaifuCog(commands.Cog):
         for g_id, g_data in GIFTS_CATALOG.items():
             embed.add_field(
                 name=f"{g_data['emoji']} {g_data['name']}",
-                value=f"Coste: **{g_data['value']:,}** Choskris",
+                value=f"Coste: **{format_number(g_data['value'])}** Choskris",
                 inline=False,
             )
 
@@ -381,8 +382,8 @@ class WaifuCog(commands.Cog):
         affinity_tag = " 🔥 **[Afinidad Activa 2x]**" if is_affinity else ""
         embed.add_field(name="📊 Estado de Mercado",
             value=(
-                f"🏷️ *Valor Base:* `{base_value:,}` Choskris\n"
-                f"💎 *Valor de Reclamo:* `{effective_value:,}` Choskris{affinity_tag}\n"
+                f"🏷️ *Valor Base:* `{format_number(base_value)}` Choskris\n"
+                f"💎 *Valor de Reclamo:* `{format_number(effective_value)}` Choskris{affinity_tag}\n"
             ), inline=False)
 
         embed.add_field(name="💍 Relaciones",
@@ -422,7 +423,7 @@ class WaifuCog(commands.Cog):
             pronoun_emoji = "🌸" if u_data["pronoun"] == "waifu" else "🕺"
             affinity_tag = " 🔥" if u_data["is_affinity"] else ""
 
-            value_formatted = f"{u_data['effective_value']:,}".replace(",", ".")
+            value_formatted = f"{format_number(u_data['effective_value'])}".replace(",", ".")
 
             line = f"{medal} {pronoun_emoji} **{user_name}** - **{value_formatted}** Choskris{affinity_tag}"
             ranking_lines.append(line)

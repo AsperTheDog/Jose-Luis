@@ -11,6 +11,7 @@ from db.repositories.mining import MiningRepository
 from db.repositories.phrases import PhraseRepository
 from db.repositories.quarantine import QuarantineRepository
 from db.repositories.reminders import ReminderRepository
+from db.repositories.settings import SettingsRepository
 from db.repositories.twitch import TwitchRepository
 from db.repositories.waifu import WaifuRepository
 
@@ -28,6 +29,7 @@ __all__ = [
     "PhraseRepository",
     "QuarantineRepository",
     "ReminderRepository",
+    "SettingsRepository",
     "TwitchRepository",
     "WaifuRepository",
 ]

@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 
 from db import BotDatabase
 from error_reporting import build_error_payload, describe_arguments, format_exception
+from number_format import scientific_notation
 from stats import StatsTracker
 
 load_dotenv()
@@ -44,7 +45,17 @@ class JoseLuisBot(commands.Bot):
 
         self.global_stats = StatsTracker(self.db.stats)
 
+        self.scientific_users: set[int] = set()
+        self._parse_interaction_create = self._connection.parsers["INTERACTION_CREATE"]
+        self._connection.parsers["INTERACTION_CREATE"] = self._parse_interaction_with_number_format
+
+    def _parse_interaction_with_number_format(self, data: dict) -> None:
+        user = data.get("user") or (data.get("member") or {}).get("user") or {}
+        scientific_notation.set(int(user.get("id", 0)) in self.scientific_users)
+        self._parse_interaction_create(data)
+
     async def setup_hook(self) -> None:
+        self.scientific_users = await self.db.settings.scientific_notation_users()
         self.tree.on_error = self.on_app_command_error
 
         for filename in os.listdir("./cogs"):

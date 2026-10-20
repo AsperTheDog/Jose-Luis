@@ -7,6 +7,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from main import JoseLuisBot
+from number_format import format_number
 
 SYMBOLS = {
     "🍒": {"weight": 45, "payout_3": 3.0, "payout_2": 0.5},
@@ -130,7 +131,7 @@ class MayorMenorView(discord.ui.View):
 
         if self.streak >= 2:
             self.stop_game.disabled = False
-            self.stop_game.label = f"💰 Retirarse ({self.current_win:,} choskris)"
+            self.stop_game.label = f"💰 Retirarse ({format_number(self.current_win)} choskris)"
         else:
             self.stop_game.disabled = True
             self.stop_game.label = f"🔒 Retirarse (Racha: {self.streak}/2)"
@@ -143,7 +144,7 @@ class MayorMenorView(discord.ui.View):
             description=f"Carta actual: **[{self.get_card_name(self.current_card)}]**",
             color=discord.Color.gold()
         )
-        embed.add_field(name="💰 Acumulado", value=f"`{self.current_win:,}` choskris", inline=True)
+        embed.add_field(name="💰 Acumulado", value=f"`{format_number(self.current_win)}` choskris", inline=True)
         embed.add_field(name="🔥 Racha", value=f"`{self.streak}` aciertos", inline=True)
         embed.set_footer(text=result_msg)
 
@@ -212,7 +213,7 @@ class MayorMenorView(discord.ui.View):
         if won:
             await self.bot.global_stats.register_cards_win(self.user.id, self.current_win, self.bet)
             await self.bot.db.economy.update_balance(self.user.id, self.current_win)
-            msg = f"🏆 **{self.user.display_name}** se retira con **{self.current_win:,}** choskris tras {self.streak} aciertos."
+            msg = f"🏆 **{self.user.display_name}** se retira con **{format_number(self.current_win)}** choskris tras {self.streak} aciertos."
             embed_color = discord.Color.green()
             title = "¡Victoria!"
         else:
@@ -394,8 +395,8 @@ class PokerTableControl(discord.ui.View):
 
         comm_cards_visual = self.format_cards(self.game.community_cards)
         embed.description = (
-            f"### 💰 Bote Total: `{total_pot:,}` choskris\n"
-            f"**Apuesta a igualar:** 🪙 `{self.game.current_bet:,}`\n\n"
+            f"### 💰 Bote Total: `{format_number(total_pot)}` choskris\n"
+            f"**Apuesta a igualar:** 🪙 `{format_number(self.game.current_bet)}`\n\n"
             f"**Cartas Comunitarias:**\n{comm_cards_visual}\n"
             f"──────────────────────────────"
         )
@@ -404,9 +405,9 @@ class PokerTableControl(discord.ui.View):
             if p.folded:
                 status = "❌ *Se ha retirado*"
             elif p.all_in:
-                status = f"🔥 **ALL-IN** (Total invertido: `{p.total_invested:,}`)"
+                status = f"🔥 **ALL-IN** (Total invertido: `{format_number(p.total_invested)}`)"
             else:
-                status = f"🪙 Stack: `{p.stack:,}` | 💵 Apuesta ronda: `{p.bet:,}`"
+                status = f"🪙 Stack: `{format_number(p.stack)}` | 💵 Apuesta ronda: `{format_number(p.bet)}`"
 
             is_turn = p.user.id == self.game.current_player().user.id and not p.folded and self.game.phase < 4
             turn_indicator = "🔴 **[ES SU TURNO]**" if is_turn else ""
@@ -467,14 +468,14 @@ class PokerTableControl(discord.ui.View):
 
             if p.stack == 0:
                 p.all_in = True
-                msg = f"🔥 **{interaction.user.display_name}** va **ALL-IN** con `{p.bet:,}` choskris."
+                msg = f"🔥 **{interaction.user.display_name}** va **ALL-IN** con `{format_number(p.bet)}` choskris."
             else:
-                msg = f"🪙 **{interaction.user.display_name}** iguala la apuesta (`{pay_amount:,}`)."
+                msg = f"🪙 **{interaction.user.display_name}** iguala la apuesta (`{format_number(pay_amount)}`)."
 
         else:
             if p.stack == 0:
                 p.all_in = True
-                msg = f"🔥 **{interaction.user.display_name}** está **ALL-IN** (`{p.bet:,}`)."
+                msg = f"🔥 **{interaction.user.display_name}** está **ALL-IN** (`{format_number(p.bet)}`)."
             else:
                 msg = f"✅ **{interaction.user.display_name}** pasa la mano (Check)."
 
@@ -521,7 +522,7 @@ class PokerTableControl(discord.ui.View):
 
         if len(active) == 1:
             winner = active[0]
-            embed.description = f"🎉 {winner.user.mention} gana el bote de 💰 **`{self.game.pot:,}`** choskris por abandono."
+            embed.description = f"🎉 {winner.user.mention} gana el bote de 💰 **`{format_number(self.game.pot)}`** choskris por abandono."
             winner.stack += self.game.pot
         else:
             best_score = None
@@ -545,7 +546,7 @@ class PokerTableControl(discord.ui.View):
 
             win_amount = self.game.pot // len(winners)
             win_mentions = " y ".join(w.user.mention for w in winners)
-            embed.description = f"### 🎉 ¡Ganador: {win_mentions}!\nSe lleva(n) 💰 **`{win_amount:,}`** choskris con **{format_score_name(best_score[0])}**."
+            embed.description = f"### 🎉 ¡Ganador: {win_mentions}!\nSe lleva(n) 💰 **`{format_number(win_amount)}`** choskris con **{format_score_name(best_score[0])}**."
 
             for w in winners:
                 w.stack += win_amount
@@ -556,7 +557,7 @@ class PokerTableControl(discord.ui.View):
                 await self.bot.db.economy.poker_add_balance(p.user.id, p.stack)
                 net_change = p.stack - self.game.buy_in
                 sign = "+" if net_change >= 0 else ""
-                refunds_text.append(f"• **{p.user.display_name}**: Devueltos `{p.stack:,}` ({sign}{net_change})")
+                refunds_text.append(f"• **{p.user.display_name}**: Devueltos `{format_number(p.stack)}` ({sign}{net_change})")
 
         embed.add_field(name="Resumen de Stacks Devueltos", value="\n".join(refunds_text), inline=False)
 
@@ -588,7 +589,7 @@ class PokerLobbyView(discord.ui.View):
         balance = await self.bot.db.economy.poker_get_balance(interaction.user.id)
         if balance < self.game.buy_in:
             await interaction.response.send_message(
-                f"No tienes choskris suficientes (**{self.game.buy_in:,}** requeridos).", ephemeral=True)
+                f"No tienes choskris suficientes (**{format_number(self.game.buy_in)}** requeridos).", ephemeral=True)
             return
 
         success = await self.bot.db.economy.poker_remove_balance(interaction.user.id, self.game.buy_in)
@@ -627,7 +628,7 @@ class PokerLobbyView(discord.ui.View):
         refunds_text = []
         for p in self.game.players:
             await self.bot.db.economy.poker_add_balance(p.user.id, self.game.buy_in)
-            refunds_text.append(f"• {p.user.mention}: Devueltos `{p.game.buy_in:,}` choskris")
+            refunds_text.append(f"• {p.user.mention}: Devueltos `{format_number(p.game.buy_in)}` choskris")
 
         embed = discord.Embed(
             title="⏳ Sala Cancelada por Inactividad",
@@ -718,7 +719,7 @@ class BlackjackView(discord.ui.View):
 
     async def update_board(self, interaction: discord.Interaction, title: str = "🃏 Blackjack (21)", color: discord.Color = discord.Color.blue()):
         embed = discord.Embed(title=title, color=color)
-        embed.description = f"💰 **Apuesta en mesa:** `{self.total_bet:,}` choskris\n──────────────────────────────"
+        embed.description = f"💰 **Apuesta en mesa:** `{format_number(self.total_bet)}` choskris\n──────────────────────────────"
         embed.add_field(name="👤 Tu Mano", value=self.format_hand(self.player_hand), inline=False)
         embed.add_field(name="🎰 Mano del Crupier", value=self.format_hand(self.dealer_hand, hide_second=True), inline=False)
 
@@ -797,7 +798,7 @@ class BlackjackView(discord.ui.View):
         if result_type == "natural_bj":
             payout = int(self.total_bet * 2.5)
             title = "🎉 ¡BLACKJACK NATURAL!"
-            description = f"¡Obtuviste un Blackjack natural! Cobras **`{payout:,}`** choskris (pago 3:2)."
+            description = f"¡Obtuviste un Blackjack natural! Cobras **`{format_number(payout)}`** choskris (pago 3:2)."
             color = discord.Color.gold()
             await self.bot.global_stats.register_cards_win(self.user.id, payout, self.total_bet)
             await self.bot.global_stats.register_blackjack_win(self.user.id, payout, self.total_bet, natural=True)
@@ -805,7 +806,7 @@ class BlackjackView(discord.ui.View):
         elif result_type == "dealer_bust":
             payout = self.total_bet * 2
             title = "🏆 ¡VICTORIA!"
-            description = f"El crupier se ha pasado de 21 (**{d_score}**). ¡Ganas **`{payout:,}`** choskris!"
+            description = f"El crupier se ha pasado de 21 (**{d_score}**). ¡Ganas **`{format_number(payout)}`** choskris!"
             color = discord.Color.green()
             await self.bot.global_stats.register_cards_win(self.user.id, payout, self.total_bet)
             await self.bot.global_stats.register_blackjack_win(self.user.id, payout, self.total_bet)
@@ -813,7 +814,7 @@ class BlackjackView(discord.ui.View):
         elif result_type == "win":
             payout = self.total_bet * 2
             title = "🏆 ¡VICTORIA!"
-            description = f"Tu mano (**{p_score}**) supera a la del crupier (**{d_score}**). ¡Ganas **`{payout:,}`** choskris!"
+            description = f"Tu mano (**{p_score}**) supera a la del crupier (**{d_score}**). ¡Ganas **`{format_number(payout)}`** choskris!"
             color = discord.Color.green()
             await self.bot.global_stats.register_cards_win(self.user.id, payout, self.total_bet)
             await self.bot.global_stats.register_blackjack_win(self.user.id, payout, self.total_bet)
@@ -821,20 +822,20 @@ class BlackjackView(discord.ui.View):
         elif result_type == "push":
             payout = self.total_bet
             title = "🤝 EMPATE (PUSH)"
-            description = f"Ambos tienen **{p_score}**. Se te devuelven tus **`{payout:,}`** choskris."
+            description = f"Ambos tienen **{p_score}**. Se te devuelven tus **`{format_number(payout)}`** choskris."
             color = discord.Color.gold()
             await self.bot.global_stats.register_blackjack_push(self.user.id, self.total_bet)
 
         elif result_type == "bust":
             title = "💥 TE HAS PASADO"
-            description = f"Te has pasado de 21 (**{p_score}**). Pierdes tu apuesta de **`{self.total_bet:,}`** choskris."
+            description = f"Te has pasado de 21 (**{p_score}**). Pierdes tu apuesta de **`{format_number(self.total_bet)}`** choskris."
             color = discord.Color.red()
             await self.bot.global_stats.register_cards_loss(self.user.id, self.total_bet)
             await self.bot.global_stats.register_blackjack_loss(self.user.id, self.total_bet)
 
         else:
             title = "❌ DERROTA"
-            description = f"La mano del crupier (**{d_score}**) supera a la tuya (**{p_score}**). Pierdes **`{self.total_bet:,}`** choskris."
+            description = f"La mano del crupier (**{d_score}**) supera a la tuya (**{p_score}**). Pierdes **`{format_number(self.total_bet)}`** choskris."
             color = discord.Color.red()
             await self.bot.global_stats.register_cards_loss(self.user.id, self.total_bet)
             await self.bot.global_stats.register_blackjack_loss(self.user.id, self.total_bet)
@@ -843,7 +844,7 @@ class BlackjackView(discord.ui.View):
             await self.bot.db.economy.update_balance(self.user.id, payout)
 
         current_balance = await self.bot.db.economy.get_balance(self.user.id)
-        description += f"\n\n💰 Saldo actual: **`{current_balance:,}`** choskris\n──────────────────────────────"
+        description += f"\n\n💰 Saldo actual: **`{format_number(current_balance)}`** choskris\n──────────────────────────────"
 
         embed = discord.Embed(title=title, description=description, color=color)
         embed.add_field(name="👤 Tu Mano", value=self.format_hand(self.player_hand), inline=False)
@@ -1137,7 +1138,7 @@ class CasinoCog(commands.Cog):
             description=f"Carta actual: **{view.get_card_name(view.current_card)}**",
             color=discord.Color.blue()
         )
-        embed.add_field(name="Apuesta acumulada", value=f"`{cantidad:,}` choskris")
+        embed.add_field(name="Apuesta acumulada", value=f"`{format_number(cantidad)}` choskris")
 
         await interaction.followup.send(embed=embed, view=view)
 
@@ -1152,7 +1153,7 @@ class CasinoCog(commands.Cog):
 
         balance = await self.bot.db.economy.poker_get_balance(interaction.user.id)
         if balance < buy_in:
-            await interaction.followup.send(f"No tienes fondos suficientes (**{buy_in:,}** requeridos). Tienes **{balance:,}**.")
+            await interaction.followup.send(f"No tienes fondos suficientes (**{format_number(buy_in)}** requeridos). Tienes **{format_number(balance)}**.")
             return
 
         await self.bot.db.economy.poker_remove_balance(interaction.user.id, buy_in)
@@ -1164,7 +1165,7 @@ class CasinoCog(commands.Cog):
             description=f"{interaction.user.mention} ha abierto una mesa. ¡Únete antes de que empiece!",
             color=discord.Color.gold()
         )
-        embed.add_field(name="Buy-in (Entrada)", value=f"💰 **{buy_in:,}** choskris", inline=False)
+        embed.add_field(name="Buy-in (Entrada)", value=f"💰 **{format_number(buy_in)}** choskris", inline=False)
         embed.add_field(name="Jugadores (1/6)", value=f"• {interaction.user.mention}", inline=False)
 
         view = PokerLobbyView(game, self.bot)
@@ -1206,7 +1207,7 @@ class CasinoCog(commands.Cog):
             return
 
         embed = discord.Embed(title="🃏 Blackjack (21)", color=discord.Color.blue())
-        embed.description = f"💰 **Apuesta en mesa:** `{apuesta:,}` choskris\n──────────────────────────────"
+        embed.description = f"💰 **Apuesta en mesa:** `{format_number(apuesta)}` choskris\n──────────────────────────────"
         embed.add_field(name="👤 Tu Mano", value=view.format_hand(view.player_hand), inline=False)
         embed.add_field(name="🎰 Mano del Crupier", value=view.format_hand(view.dealer_hand, hide_second=True), inline=False)
 

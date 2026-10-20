@@ -11,6 +11,7 @@ from discord.ext import commands
 from PIL import Image
 
 from main import JoseLuisBot
+from number_format import format_number
 
 CONFIG_PATH = "gacha.json"
 UNITS_FOLDER = "gacha_units"
@@ -576,7 +577,7 @@ class GachaCog(commands.Cog):
             balance = await self.bot.db.economy.get_balance(user_id)
             if balance < cost:
                 await interaction.response.send_message(
-                    embed=discord.Embed(description=f"⚠️ No tienes suficientes choskris. Necesitas **{cost:,}** y tienes **{balance:,}**.", color=discord.Color.red()),
+                    embed=discord.Embed(description=f"⚠️ No tienes suficientes choskris. Necesitas **{format_number(cost)}** y tienes **{format_number(balance)}**.", color=discord.Color.red()),
                     ephemeral=True
                 )
                 return
@@ -587,7 +588,7 @@ class GachaCog(commands.Cog):
                 dust = await self.bot.db.gacha.get_dust(user_id)
                 if dust < boost_total_cost:
                     await interaction.response.send_message(
-                        embed=discord.Embed(description=f"⚠️ No tienes suficiente polvo gacha para potenciar. Necesitas **{boost_total_cost:,}** y tienes **{dust:,}**.", color=discord.Color.red()),
+                        embed=discord.Embed(description=f"⚠️ No tienes suficiente polvo gacha para potenciar. Necesitas **{format_number(boost_total_cost)}** y tienes **{format_number(dust)}**.", color=discord.Color.red()),
                         ephemeral=True
                     )
                     return
@@ -693,7 +694,7 @@ class GachaCog(commands.Cog):
         await self.bot.global_stats.register_gacha_shard_destroyed(interaction.user.id, cantidad, dust_gained)
 
         embed = discord.Embed(
-            description=f"💨 Has destruido **{cantidad}x** fragmento(s) de {data['emoji']} **{data['name']}** y obtenido **{dust_gained:,}** de polvo gacha.",
+            description=f"💨 Has destruido **{cantidad}x** fragmento(s) de {data['emoji']} **{data['name']}** y obtenido **{format_number(dust_gained)}** de polvo gacha.",
             color=discord.Color.green()
         )
         await interaction.response.send_message(embed=embed)
@@ -784,7 +785,7 @@ class GachaCog(commands.Cog):
         msg = f"💨 Has destruido masivamente **{total_shards_destroyed}x** fragmento(s)"
         if target_rarity:
             msg += f" de {self.registry.rarity_names[target_rarity]}"
-        msg += f" y obtenido **{total_dust_gained:,}** de polvo gacha."
+        msg += f" y obtenido **{format_number(total_dust_gained)}** de polvo gacha."
 
         await interaction.followup.send(embed=discord.Embed(description=msg, color=discord.Color.green()))
 
@@ -943,7 +944,7 @@ class GachaCog(commands.Cog):
 
         if not shards:
             embed = discord.Embed(title=f"🧩 Fragmentos de {target.display_name}", color=discord.Color.blurple())
-            embed.add_field(name="💨 Polvo Gacha", value=f"{dust:,}", inline=False)
+            embed.add_field(name="💨 Polvo Gacha", value=f"{format_number(dust)}", inline=False)
             embed.add_field(name="Fragmentos", value="*No tienes fragmentos todavía.*", inline=False)
             await interaction.response.send_message(embed=embed)
             return
@@ -971,7 +972,7 @@ class GachaCog(commands.Cog):
             interaction.user.id,
             title=f"🧩 Fragmentos de {target.display_name}",
             pages=paginator.pages,
-            footer_extra=f"💨 {dust:,} polvo gacha"
+            footer_extra=f"💨 {format_number(dust)} polvo gacha"
         )
         if len(view.pages) > 1:
             await interaction.response.send_message(embed=view.build_embed(), view=view)
@@ -1006,7 +1007,7 @@ class GachaCog(commands.Cog):
             scored.sort(key=lambda x: (-x[1], -x[2]))
 
             title = "🏆 Ranking - Nivel Gacha"
-            rows_display = [(user_id, f"**Nivel {level}** ({score:,} puntos)") for user_id, level, score in scored[:10]]
+            rows_display = [(user_id, f"**Nivel {level}** ({format_number(score)} puntos)") for user_id, level, score in scored[:10]]
         else:
             total_units = len(all_units)
             counted = [(user_id, len(units)) for user_id, units in per_user.items()]
