@@ -133,6 +133,24 @@ class MergeRepository(BaseRepository):
                 counts[table] = int(row[0])
         return counts
 
+    async def erase(self, user_id: int) -> dict[str, int]:
+        async with self._lock:
+            connection = await aiosqlite.connect(self._db.path, timeout=30.0)
+            connection.row_factory = aiosqlite.Row
+            try:
+                await connection.execute("PRAGMA busy_timeout = 30000;")
+                await connection.execute("BEGIN IMMEDIATE;")
+                counts = await self._counts(connection, user_id)
+                await connection.execute("UPDATE waifu_users SET claim = NULL WHERE claim = ?", (user_id,))
+                await self._sweep(connection, user_id)
+                await connection.commit()
+            except Exception:
+                await connection.rollback()
+                raise
+            finally:
+                await connection.close()
+        return counts
+
     async def merge(self, primary_id: int, secondary_id: int) -> MergeReport:
         if primary_id == secondary_id:
             raise ValueError("Primary and secondary accounts must be different.")

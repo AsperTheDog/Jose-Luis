@@ -1,12 +1,78 @@
 import os
 
-from typing import Any
+from typing import Any, Optional
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from main import JoseLuisBot
+
+
+class EraseConfirmModal(discord.ui.Modal):
+    def __init__(self, bot: JoseLuisBot, target: discord.User):
+        super().__init__(title="Confirmar borrado")
+        self.bot = bot
+        self.target = target
+        self.user_id_input = discord.ui.TextInput(
+            label=f"Escribe el ID {target.id} para confirmar",
+            placeholder=str(target.id),
+            min_length=1,
+            max_length=32,
+        )
+        self.add_item(self.user_id_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if self.user_id_input.value.strip() != str(self.target.id):
+            await interaction.response.send_message(
+                embed=discord.Embed(description="❌ El ID no coincide. No se ha borrado nada.", color=discord.Color.red()),
+                ephemeral=True,
+            )
+            return
+        await interaction.response.edit_message(
+            embed=discord.Embed(description="⏳ Borrando datos...", color=discord.Color.orange()),
+            view=None,
+        )
+        counts = await self.bot.db.merger.erase(self.target.id)
+        self.bot.scientific_users.discard(self.target.id)
+        await interaction.edit_original_response(
+            embed=discord.Embed(
+                title="🗑️ Datos borrados",
+                description=f"Se han borrado **{sum(counts.values())} filas** de {self.target.mention}.",
+                color=discord.Color.dark_green(),
+            ),
+            view=None,
+        )
+
+
+class EraseUserView(discord.ui.View):
+    def __init__(self, bot: JoseLuisBot, author_id: int, target: discord.User):
+        super().__init__(timeout=120)
+        self.bot = bot
+        self.author_id = author_id
+        self.target = target
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message(
+                embed=discord.Embed(description="❌ Solo quien ejecutó el comando puede confirmar esto.", color=discord.Color.red()),
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="Borrar todo", style=discord.ButtonStyle.danger, emoji="🗑️")
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(EraseConfirmModal(self.bot, self.target))
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(
+            embed=discord.Embed(description="❌ Borrado cancelado. No se ha modificado nada.", color=discord.Color.greyple()),
+            view=self,
+        )
 
 
 class UtilityCog(commands.Cog):
@@ -169,6 +235,34 @@ class UtilityCog(commands.Cog):
             await interaction.followup.send("Script SQL ejecutado correctamente.", ephemeral=True)
         except Exception as e:
             await interaction.followup.send(f"Error al ejecutar el script SQL:\n```py\n{e}\n```", ephemeral=True)
+
+    @utility_group.command(name="borrardatos", description="Borra todos tus datos en el bot (el dueño puede borrar los de cualquiera)")
+    @app_commands.describe(usuario="Usuario cuyos datos se van a borrar (EH TU, QUITA DE AQUI SI NO ERES ASPER)")
+    async def erase_user_data(self, interaction: discord.Interaction, usuario: Optional[discord.User] = None):
+        usuario = usuario or interaction.user
+        if usuario.id != interaction.user.id and await self.bot.filter_owner(interaction): return
+
+        await interaction.response.defer(ephemeral=True)
+        counts = await self.bot.db.merger.preview(usuario.id)
+
+        if not counts:
+            await interaction.followup.send(
+                embed=discord.Embed(description=f"❌ {usuario.mention} no tiene ningún dato registrado.", color=discord.Color.red()),
+                ephemeral=True,
+            )
+            return
+
+        embed = discord.Embed(
+            title="🗑️ Borrar datos de usuario",
+            description=(
+                f"Se borrarán **{sum(counts.values())} filas** de {usuario.mention}.\n\n"
+                "**Es irreversible.** Su cuenta de Discord no se toca, solo sus datos en el bot.\n\n"
+                f"Para confirmar tendrás que escribir su ID: `{usuario.id}`"
+            ),
+            color=discord.Color.dark_red(),
+        )
+        embed.add_field(name="Tablas afectadas", value="\n".join(f"`{table}`: {count}" for table, count in counts.items()), inline=False)
+        await interaction.followup.send(embed=embed, view=EraseUserView(self.bot, interaction.user.id, usuario), ephemeral=True)
 
     @utility_group.command(name="error")
     async def causeerror(self, interaction: discord.Interaction):
