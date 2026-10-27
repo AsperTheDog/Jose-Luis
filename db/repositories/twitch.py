@@ -12,8 +12,8 @@ class TwitchRepository(BaseRepository):
             rows = await cursor.fetchall()
             return [row[0] for row in rows]
 
-    async def get_streamer_destinations(self, twitch_user: str) -> list[tuple[int, str | None, int]]:
-        async with self._db.execute("SELECT channel_id, kick_username, everyone FROM tracked_streamers WHERE twitch_username = ?", (twitch_user,)) as cursor:
+    async def get_streamer_destinations(self, twitch_user: str) -> list[tuple[int, int, str | None, int]]:
+        async with self._db.execute("SELECT guild_id, channel_id, kick_username, everyone FROM tracked_streamers WHERE twitch_username = ?", (twitch_user,)) as cursor:
             return await cursor.fetchall()
 
     async def add_or_update_tracked_streamer(self, guild_id: int, channel_id: int, twitch_user: str, kick_user: str | None, at_everyone: int) -> None:
