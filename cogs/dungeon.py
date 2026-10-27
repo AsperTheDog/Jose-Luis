@@ -912,7 +912,7 @@ class DungeonCog(commands.Cog):
             return [
                 (f"{self.coin_emoji} {self.coin}", f"{data['terms']['currency']['desc']} Se gana matando ({fmt_int(cfg['gold_base'])} × {cfg['gold_growth']:g} por piso) y con efectos de {self.coin}."),
                 ("⭐ Mejoras", mejoras),
-                ("🧪 Pociones", f"Cuestan **{fmt_int(cfg['potion_price_base'])} × {cfg['potion_price_growth']:g}** por nivel y curan {_pct(cfg['potion_heal_ratio'])} de tu vida máxima."),
+                ("🧪 Pociones", f"Cuestan **{cfg['potion_price_gold_ratio']:g}×** lo que te da un enemigo de tu piso más alto (mínimo {fmt_int(cfg['potion_price_base'])}) y curan {_pct(cfg['potion_heal_ratio'])} de tu vida máxima."),
                 (f"{self.boss_coin_emoji} {self.boss_coin}", f"{data['terms']['boss_currency']['desc']} Cada jefe superado da **{cfg['boss_coin_per_tier']}** por su nivel, y se gastan en `/mazmorra trofeos`: insignias, acentos y enclaves."),
                 ("💱 Canjear", f"1 {self.boss_coin_emoji} = **{cfg['conversion_rate']}** Choskris. Cada día tienes un **tope de {fmt_int(cfg['conversion_daily_base'])} Choskris**, que crece ×{cfg['conversion_daily_growth']:g} por cada jefe superado hasta un máximo de {fmt_int(cfg['conversion_daily_max'])}: `/mazmorra canjear` convierte todo lo que quepa y el resto de {self.boss_coin} se queda para `/mazmorra trofeos`.\n```\ntier:  " + "  ".join(f"{t}:{fmt_int(self.engine.conversion_allowance(t))}" for t in (1, 2, 3, 4, 5, 6)) + "\n```" + ("" if cfg.get("conversion_enabled", True) else " *Ahora mismo está en mantenimiento.*")),
                 ("✨ Polvo", "Se gana al renacer (`/mazmorra prestigio`) y se gasta en mutaciones y Ecos."),
@@ -1792,12 +1792,11 @@ class DungeonCog(commands.Cog):
     async def market(self, interaction: discord.Interaction) -> None:
         user_id = interaction.user.id
         user = await self.repo.get_user(user_id)
-        level = int(user["level"])
         upgrades = _json_dict(user.get("upgrades"))
         potion_spec = self.engine.data["market"]["potions"]
         options = [
             discord.SelectOption(
-                label=f"{potion_spec['name']} ({fmt_int(self.engine.potion_price(level))} {self.coin})"[:100],
+                label=f"{potion_spec['name']} ({fmt_int(self.engine.potion_price(int(user['highest_floor'])))} {self.coin})"[:100],
                 value="potions",
                 description=potion_spec["desc"][:100],
                 emoji=potion_spec["emoji"],
@@ -1826,7 +1825,7 @@ class DungeonCog(commands.Cog):
         user_id = interaction.user.id
         user = await self.repo.get_user(user_id)
         if key == "potions":
-            unit = self.engine.potion_price(int(user["level"]))
+            unit = self.engine.potion_price(int(user["highest_floor"]))
             cost = unit * amount
             if not await self.repo.spend_gold(user_id, cost):
                 await interaction.response.send_message(

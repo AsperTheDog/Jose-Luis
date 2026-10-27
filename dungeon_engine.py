@@ -344,8 +344,10 @@ class DungeonEngine:
         taken = min(max(0, int(coins)), room // rate)
         return taken, taken * rate
 
-    def potion_price(self, level: int) -> int:
-        return clamp_value(self.cfg["potion_price_base"] * grow(self.cfg["potion_price_growth"], max(0, level - 1)))
+    def potion_price(self, highest_floor: int) -> int:
+        income_price = clamp_value(self.cfg["potion_price_gold_ratio"] * self.gold_reward(max(1, highest_floor)))
+        ceiling = int(VALUE_CAP * float(self.cfg["potion_price_max_gold_ratio"]))
+        return min(ceiling, max(int(self.cfg["potion_price_base"]), income_price))
 
     def upgrade_cost(self, key: str, current_level: int) -> int:
         spec = self.data["upgrades"][key]
@@ -1225,16 +1227,16 @@ class DungeonEngine:
                 rt.log(f"{'🔪' if source is rt.state.player else '💥'} **{source.name}** golpea a **{target.name}** por **{fmt_int(dealt)}** ({damage_type}){crit_tag}{resist_tag}.")
 
             if dealt > 0:
-                if is_crit:
-                    self.fire(rt, "ON_CRIT", source.mods, source)
-                self.fire(rt, "ON_HIT_TAKEN", target.mods, target)
-                if target.hp / max(1, target.max_hp) < 0.3:
-                    self.fire(rt, "ON_LOW_HP", target.mods, target)
                 reflect = self.reflect_ratio(target)
                 if reflect > 0 and source.hp > 0:
                     reflected = max(1, int(dealt * reflect))
                     source.hp -= reflected
                     rt.log(f"🌵 **{target.name}** refleja **{fmt_int(reflected)}** de daño.")
+                if is_crit:
+                    self.fire(rt, "ON_CRIT", source.mods, source)
+                self.fire(rt, "ON_HIT_TAKEN", target.mods, target)
+                if target.hp / max(1, target.max_hp) < 0.3:
+                    self.fire(rt, "ON_LOW_HP", target.mods, target)
 
             self.check_death(rt)
         finally:
